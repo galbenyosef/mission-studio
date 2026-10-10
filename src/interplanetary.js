@@ -490,6 +490,12 @@ function doDirectEntry(M, cfg, SC, P, ship, nodes, lam, iLeg, tE, rT, vT, body, 
   const chuteT = ent.samples.find(s => s.chute >= 1)?.t; if (chuteT) ship.setConfig(chuteT, body === 'mars' ? 'sc' : 'capsule', body === 'mars' ? { key: 'sc', sc: SC.model, parts: ['aeroshell'], chute: 1 } : { key: 'capsule', sc: SC.model, chutes: 1 });
   const pdT = ent.samples.find(s => s.phase === 'powered descent')?.t; if (pdT && body === 'mars') ship.setConfig(pdT, 'sc', { key: 'sc', sc: SC.model, parts: ['lander'], powered: true });
   if (body === 'mars' && SC.prop.lander) P.tankOf(SC.prop.lander).propLeft -= ent.propUsed;
+  if (SC.usesUpperStage && ent.propUsed > 0) { // Starship lands on the propellant in its own tanks: book the landing burn
+    const lb = ent.events.find(e => e.name === 'Landing burn'), tI = lb ? lb.t : ent.t - 30, eng = P.engineOf('upper');
+    const m0 = ent.m + ent.propUsed, isp = body === 'earth' ? 327 : 330;
+    P.upper.propLeft = Math.max(0, P.upper.propLeft - ent.propUsed);
+    M.burn({ name: 'Landing burn', t: tI, dur: ent.t - tI, dv: isp * G0 * Math.log(m0 / ent.m), engine: eng.name, isp, prop: ent.propUsed, m0, obj: 'ship', propType: eng.prop });
+  }
   const miss = missF(ent);
   const landName = body === 'mars' ? (cfg.landName || 'Touchdown') : (leg.landName || 'Landing');
   M.ev(ent.t, 'ship', landName, `${body === 'mars' ? 'Touchdown on Mars' : 'Landing on Earth'} at ${ent.ll[0].toFixed(2)}°, ${ent.ll[1].toFixed(2)}° — ${miss.toFixed(1)} km from the target (${site.name}). ${body === 'mars' ? `One-way radio delay to Earth: ${(vnorm(vsub(bodyPos('mars', ent.t), bodyPos('earth', ent.t))) / C_KMS / 60).toFixed(1)} min — the landing was over before Earth heard about entry.` : ''}`, 'landing');
@@ -708,7 +714,7 @@ function surfaceStayAndReturn(M, cfg, SC, P, ship, nodes, lam, iLeg, ent, mLande
     if (tl) tLiftNom = tl; plane = { n: hO, az: 0 };
   }
   // surface stay segment (ISRU for Starship)
-  const mProd = cfg.isru ? cfg.isru.to : 0;
+  const mProd = cfg.isru ? Math.max(0, cfg.isru.to - (SC.usesUpperStage ? P.upper.propLeft : 0)) : 0; // tops the tanks up to the target
   if (cfg.isru) { M.ev(ent.t + 3 * D, 'ship', 'ISRU propellant plant starts', `Solar-powered Sabatier reactors turn Martian CO₂ and water ice into methane and oxygen: CO₂ + 4H₂ → CH₄ + 2H₂O. Target: ${(cfg.isru.to / 1000).toFixed(0)} t of propellant before the return window.`, 'isru'); }
   const surf = new SurfaceSeg('mars', ent.t, tLiftNom, site.lat, site.lon, site.elev, mLanded, { extra: { phase: cfg.isru ? 'surface stay — making propellant' : 'surface operations' } });
   if (cfg.isru) { surf.m0 = mLanded; surf.m1 = mLanded + mProd; }

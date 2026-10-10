@@ -55,6 +55,7 @@ const LAUNCHERS = {
     ],
     jettison: [{ name: 'S-II aft interstage', mass: 5200, afterStage: 0, delay: 30 }, { name: 'Launch Escape System', mass: 4170, afterStage: 0, delay: 35, part: 'LES' }],
     payloadFairing: null, ascent: { hp: 185, ha: 190, vert: 12, kickGuess: 1.5 },
+    roll: { padAz: 90, t: [13.2, 31.1] }, // roll program: from the pad azimuth (90°) to the flight azimuth, T+13.2 s to T+31.1 s (Apollo 11)
   },
   sls1: {
     name: 'SLS Block 1', org: 'NASA (USA)', years: '2022–', height: 98.1, diameter: 8.4, crewRated: true,

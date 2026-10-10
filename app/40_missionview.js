@@ -61,7 +61,7 @@ function craftState(c, t) {
 function cfgAt(c, t) { const x = c.o.configAt(t); if (x) return x.label; return c.o.configs.length ? c.o.configs[0].label : null; }
 
 // ---------------- crafts ----------------
-const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
 function basisQuat(nose, upRef, q) {
   const Y = new THREE.Vector3(nose[0], nose[1], nose[2]).normalize();
   let U = new THREE.Vector3(upRef[0], upRef[1], upRef[2]);
@@ -99,17 +99,47 @@ function noseDirection(c, s, t, cfgL, act) {
   const vAir = rot ? vsub(vD, vcross(bodyOmegaEcl(body, t), rD)) : vD;
   const alt = body === 'sun' ? 1e9 : vnorm(rD) - surfaceRadius(body);
   if (MV.md && MV.md.shPrep !== null && isShuttle(MV.md)) { const sh = shuttleAttitude(c, s, t, cfgL); if (sh) return sh; }
-  if (s.surface || s.pad || (cfgL && cfgL.landed) || ex.phase === 'landed' || ex.phase === 'touchdown' || ex.phase === 'recovery') return { nose: up, roll: s.hdg || vperp(up) };
-  if (s.T > 0 && s.dir && vnorm(s.dir) > 0.5) { const flip = act[0] && act[0].flip; return { nose: flip ? vscale(s.dir, -1) : s.dir, roll: up }; }
+  // near the ground the roll comes from the ground frame (41_attitude.js), handing over to the flight reference as a craft climbs away
+  const G = groundFrame(c, t), upR = flightSign(c, t) < 0 ? vscale(up, -1) : up;
+  const att = (nose, ref) => {
+    if (!G) return { nose, roll: ref };
+    const g = G.z ? G.P : vcross(G.P, nose);
+    return G.w >= 1 ? { nose, roll: g } : { nose, roll: g, roll2: ref, w2: 1 - G.w };
+  };
+  if (s.surface || s.pad || (cfgL && cfgL.landed) || ex.phase === 'landed' || ex.phase === 'touchdown' || ex.phase === 'recovery') return s.rover && s.hdg ? { nose: up, roll: s.hdg } : att(up, s.hdg || vperp(up));
+  // Starship lights its engines for landing while still lying belly-first and pitches up onto them over a few seconds
+  const belly = H => { const va = vnorm(vAir) > 1e-9 ? vunit(vAir) : vscale(up, -1), e = Math.max(0, 60 * DEG - Math.asin(clamp(-vdot(va, up), -1, 1))); return { va, nose: vadd(vscale(H, Math.cos(e)), vscale(up, Math.sin(e))) }; };
+  if (s.T > 0 && s.dir && vnorm(s.dir) > 0.5) {
+    const flip = act[0] && act[0].flip; let n = flip ? vscale(s.dir, -1) : s.dir;
+    const ti = G && G.ep.tIgn; if (ti != null && t >= ti && t < ti + ATT.flip) n = pitchToward(belly(vunit(vcross(G.P, up))).nose, n, G.P, smoothstep((t - ti) / ATT.flip));
+    return att(n, upR);
+  }
   if (cfgL && (cfgL.key === 'capsule' || (cfgL.parts && cfgL.parts.includes('aeroshell')))) {
-    if (cfgL.chutes || cfgL.chute || ex.chute) return { nose: up, roll: vperp(up) };
-    const vv = alt < 200 ? vAir : vD; return { nose: vscale(vunit(vv), -1), roll: up };
+    if (cfgL.chutes || cfgL.chute || ex.chute) return att(up, vperp(up));
+    const vv = alt < 200 ? vAir : vD; return att(vscale(vunit(vv), -1), upR);
   }
   if (c.o.model === 'starshipPayload' && alt < 160 && (body === 'earth' || body === 'mars') && cfgL && cfgL.key !== 'launch') {
-    const hz = vsub(vAir, vscale(up, vdot(vAir, up))); return { nose: vnorm(hz) > 1e-6 ? vunit(hz) : vperp(up), roll: vscale(vunit(vAir), -1) };
+    // belly first into the airflow, the heat-shield tiles (−X) facing it: nose about 60° above the flight path at hypersonic
+    // speed, level once the ship falls more steeply than that (the belly-flop). Heading: along the ground track until it
+    // falls steeply toward the landing site, then the heading it will land with
+    const hz = vsub(vAir, vscale(up, vdot(vAir, up)));
+    const { va, nose } = belly(G ? vunit(vcross(G.P, up)) : (vnorm(hz) > 1e-7 ? vunit(hz) : vperp(up)));
+    return att(nose, vcross(nose, va));
   }
-  if (cfgL && cfgL.key === 'launch' && t < MV.md.M.t0 + 1) return { nose: up, roll: vperp(up) };
-  const v = vnorm(vD) > 1e-6 ? vD : up; return { nose: vunit(v), roll: up };
+  if (cfgL && cfgL.key === 'launch' && t < MV.md.M.t0 + 1) return att(up, vperp(up));
+  const v = vnorm(vD) > 1e-6 ? vD : up; return att(vunit(v), upR);
+}
+// the attitude a craft is turning toward at t (the drawn one eases into it), into quaternion q
+function craftAttitude(c, s, t, cfgL, act, q) {
+  const nd = noseDirection(c, s, t, cfgL, act);
+  basisQuat(nd.nose, nd.roll, q);
+  if (nd.roll2 && nd.w2 > 0) { basisQuat(nd.nose, nd.roll2, _q3); q.slerp(_q3, nd.w2); } // handing over between two roll references
+  applyShuttleSpin(nd, q);
+  if (!s.surface && !s.pad && (c.o.kind === 'debris' || (c.o.kind === 'stage' && !(s.T > 0)))) { // slow tumble after separation (not once it rests on a surface, e.g. the LM descent stage left on the Moon)
+    const age = c.o.id === 'et' ? Math.max(0, t - c.o.t0 - 90) : t - c.o.t0; // the Shuttle's tank drifts clear before it starts to tumble
+    const ax = new THREE.Vector3(0.3, 0.2, 1).normalize(); _q2.setFromAxisAngle(ax, age * 0.035); q.multiply(_q2);
+  }
+  return q;
 }
 function computeCraft(c, t) {
   const s = craftState(c, t); c.s = s; if (!s) { c.P = null; return; }
@@ -138,12 +168,7 @@ function updateCraft(c, t, camPos) {
   }
   const model = c.cur;
   const act = activeMounts(c, s, t, cfgL, model);
-  const nd = noseDirection(c, s, t, cfgL, act);
-  basisQuat(nd.nose, nd.roll, _q1); applyShuttleSpin(nd, _q1);
-  if (!s.surface && !s.pad && (c.o.kind === 'debris' || (c.o.kind === 'stage' && !(s.T > 0)))) { // slow tumble after separation (not once it rests on a surface, e.g. the LM descent stage left on the Moon)
-    const age = c.o.id === 'et' ? Math.max(0, t - c.o.t0 - 90) : t - c.o.t0; // the Shuttle's tank drifts clear before it starts to tumble
-    const ax = new THREE.Vector3(0.3, 0.2, 1).normalize(); _q2.setFromAxisAngle(ax, age * 0.035); _q1.multiply(_q2);
-  }
+  craftAttitude(c, s, t, cfgL, act, _q1);
   const realDt = MV.realDt || 0.016; const jump = Math.abs(t - (c.lastT ?? t)) > Math.max(30, (MV.rate || 1) * 0.5) || !c.qInit;
   if (jump) c.q.copy(_q1); else c.q.slerp(_q1, 1 - Math.exp(-realDt * 5));
   c.qInit = true; c.lastT = t;

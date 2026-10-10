@@ -92,7 +92,8 @@ function simulateAscent(opt) {
   const kick = (opt.kick ?? 2) * DEG, vert = opt.vert ?? 10, kickDur = 8;
   const samples = record ? [] : null, events = [];
   const ev = (name, desc, extra) => events.push({ t: t, name, desc, ...(extra || {}) });
-  let t = t0, phase = 'vertical', closedLoop = false, lastDir = vcopy(lf0.up), stageIdx = 0;
+  let t = t0, phase = 'vertical', closedLoop = false, lastDir = vcopy(lf0.up), stageIdx = 0, prevDir = null;
+  const maxTurn = (opt.maxRate ?? 6) * DEG * dt; // attitude control turns the vehicle at most this far per step
   let maxQ = 0, maxQt = t0, maxQlogged = false, maxG = 0, coastUntil = -Infinity, firstStaging = false;
   // ignite first stage(s)
   const st = stack.stages;
@@ -233,6 +234,13 @@ function simulateAscent(opt) {
         lastDir = dir;
       } else dir = lastDir;
     } else lastDir = dir || lastDir;
+    // the vehicle swings round at a finite rate: a new steering command (closed-loop guidance taking over after staging)
+    // is reached over several seconds, not in one step
+    if (prevDir && dir && tf > vert) {
+      const th = Math.acos(clamp(vdot(prevDir, dir), -1, 1));
+      if (th > maxTurn && th < Math.PI - 1e-3) { const sn = Math.sin(th); dir = vunit(vadd(vscale(prevDir, Math.sin(th - maxTurn) / sn), vscale(dir, Math.sin(maxTurn) / sn))); lastDir = dir; }
+    }
+    if (dir) prevDir = dir;
     thrDir = dir;
     // --- record
     if (q > maxQ) { maxQ = q; maxQt = t; } else if (!maxQlogged && maxQ > 1000 && q < 0.9 * maxQ && body === 'earth') { maxQlogged = true; events.push({ t: maxQt, name: 'Max-Q', desc: `Maximum dynamic pressure ≈ ${(maxQ / 1000).toFixed(1)} kPa — peak aerodynamic stress on the vehicle.`, kind: 'maxq' }); }
@@ -375,6 +383,22 @@ function simulateEntry(opt) {
   const edl = opt.edl || null, land = opt.land || null;
   let poweredT0 = 0, powered = false, sky = false;
   const evt = (name, desc, kind) => events.push({ t, name, desc, kind });
+  // propulsive landing (Starship): a retro-burn against the airflow at full thrust, lit as late as it can be — once a burn
+  // begun now would only just bring the speed down to vHover a few hundred metres above the site — then the hover-down
+  // guidance below. The fixed light-up altitude is the latest it may wait (thin Martian air cannot slow the ship enough).
+  const PL = opt.propulsiveLanding, vHover = PL ? PL.vHover ?? 0.06 : 0;
+  let retro = false, nextCheck = -Infinity;
+  const retroEndAlt = (r0, v0, m0) => { // km above the site where a full-thrust retro-burn from this state is down to vHover (−1: it hits first)
+    let rr = vcopy(r0), vv = vcopy(v0), mm = m0;
+    for (let k = 0; k < 2400; k++) {
+      const n = vnorm(rr), a = n - R - elev; if (a <= 0) return -1;
+      const vr_ = vsub(vv, vcross(omega, rr)), sp = vnorm(vr_); if (sp < vHover) return a;
+      const D = 0.5 * atmosOf(body, n - R).rho * (sp * 1000) ** 2 * (PL.bellyCdA || CdA);
+      vv = vaddScaled(vv, vadd(vscale(rr, -mu / (n * n * n)), vscale(vr_, -(land.Tmax + D) / mm / 1000 / sp)), 0.5); rr = vaddScaled(rr, vv, 0.5);
+      mm = Math.max(mm - land.Tmax / (land.isp * G0) * 0.5, m0 * 0.3);
+    }
+    return 0;
+  };
   for (let step = 0; step < 200000; step++) {
     const rn = vnorm(r), up = vunit(r), alt = rn - R - elev;
     const atm = atmosOf(body, rn - R);
@@ -397,7 +421,14 @@ function simulateEntry(opt) {
       if (chuteState === 1 && !opt._hsSep && mach < edl.heatshieldSepMach) { opt._hsSep = true; m -= opt.heatshieldMass || 0; evt('Heat shield separation', 'The heat shield drops away; radar and cameras see the ground (terrain-relative navigation).', 'jettison'); }
       if (chuteState === 1 && alt < edl.backshellSepAlt) { chuteState = 3; m -= opt.backshellMass || 0; powered = true; poweredT0 = t; evt('Backshell separation · powered descent', 'The descent stage drops free of the backshell and parachute and lights its engines.', 'powered'); }
     }
-    if (opt.propulsiveLanding && !powered && alt < opt.propulsiveLanding.ignAlt) { powered = true; poweredT0 = t; evt('Landing burn', 'Engines relight; the vehicle flips upright and decelerates for touchdown.', 'powered'); }
+    if (PL && land && !powered) {
+      let go = alt < PL.ignAlt;
+      if (!go && alt < 90 && vdot(vrel, up) < 0 && t >= nextCheck) { nextCheck = t + 1; go = retroEndAlt(r, v, m) < (PL.stopAlt ?? 0.6); }
+      if (go) {
+        powered = true; poweredT0 = t; retro = vrn > 2.5 * vHover;
+        evt('Landing burn', retro ? `Engines relight ${alt.toFixed(1)} km up at ${vms.toFixed(0)} m/s: the ship turns tail-first into its direction of travel and brakes against the airflow at full thrust (supersonic retropropulsion).` : 'Engines relight; the vehicle flips upright and decelerates for touchdown.', 'powered');
+      }
+    }
     // chute drag area
     let CdAnow = CdA;
     if (chuteState === 1) {
@@ -428,11 +459,13 @@ function simulateEntry(opt) {
     const aAero = aeroAt(r, v);
     const g = vscale(r, -mu / (rn * rn * rn));
     let aT = [0, 0, 0]; thrust = 0;
-    if (powered && land) {
+    if (powered && land && retro && vrn < vHover) { retro = false; evt('Landing flip', 'Down to hover speed: the ship swings upright on its engines for the vertical descent to touchdown.', 'powered'); }
+    if (powered && land && retro) { thrDir = vscale(vrel, -1 / vrn); aT = vscale(thrDir, land.Tmax / m / 1000); thrust = land.Tmax; }
+    else if (powered && land) {
       const vr = vdot(vrel, up), hz = vsub(vrel, vscale(up, vr));
       const vdesTarget = alt > 0.06 ? -Math.max(0.002, Math.min(0.09, Math.sqrt(2 * 0.0018 * Math.max(alt - 0.02, 0)))) : -0.00075;
       const gmag = mu / (rn * rn);
-      const aUp = gmag + (vdesTarget - vr) / 2.0;
+      const aUp = Math.max(0.1 * gmag, gmag + (vdesTarget - vr) / 2.0); // engines push, never pull: falling slower than planned means minimum throttle, not thrust toward the ground
       const aHz = vscale(hz, -1 / 3.0);
       let ac = vadd(vscale(up, aUp), aHz);
       ac = vsub(ac, aAero);
@@ -465,8 +498,9 @@ function simulateEntry(opt) {
     if (thrust > 0 && land) { const dm = thrust / (land.isp * G0) * h; m -= dm; propUsed += dm; }
     t += h;
   }
-  const ll = subPointLL(body, r, t);
-  return { landed, t, r, v, m, samples, events, maxG, maxHeat, maxQ, tPeakG, tPeakHeat, ll, propUsed };
+  const ll = subPointLL(body, r, t), vTD = vnorm(vsub(v, vcross(omega, r))) * 1000; // m/s at the ground
+  if (PL && vTD > 30) landed = false; // a propulsive landing that reaches the ground fast has crashed
+  return { landed, t, r, v, m, samples, events, maxG, maxHeat, maxQ, tPeakG, tPeakHeat, ll, propUsed, vTD };
 }
 // great-circle angular distance between lat/lon (deg) → rad
 function gcAngle(lat1, lon1, lat2, lon2) {

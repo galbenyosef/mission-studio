@@ -231,5 +231,5 @@ function boot() {
   const last = lsGet('mstudio-last', 'apollo11'); selectScenario(scenarioById(last) ? last : 'apollo11');
   requestAnimationFrame(frame);
 }
-window.__ms = { STATE, CAM, DIR, MM, MV, R, setTime, setTarget, setMode, applyLens, SETUP, Planner, renderFrame, autoWarp, crossEvents, computeCraft, helioReset: () => { R.helio = {}; }, capHitLocal, eclToMesh, roverPose, meshDir, SND, setSound, THREE };
+window.__ms = { STATE, CAM, DIR, MM, MV, R, setTime, setTarget, setMode, applyLens, SETUP, Planner, renderFrame, autoWarp, crossEvents, computeCraft, craftAttitude, cfgAt, activeMounts, modelForConfig, attEpisodes, groundFrame, helioReset: () => { R.helio = {}; }, capHitLocal, eclToMesh, roverPose, meshDir, SND, setSound, THREE };
 try { boot(); } catch (err) { document.body.insertAdjacentHTML('beforeend', `<pre style="position:fixed;left:16px;top:16px;right:16px;color:#ff6767;background:#000;padding:12px;z-index:99;white-space:pre-wrap">Startup error: ${esc(err && err.stack || err)}</pre>`); throw err; }
