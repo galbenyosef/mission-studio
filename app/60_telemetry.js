@@ -4,7 +4,7 @@
 const PHASE_TEXT = [
   [/ignition/i, 'Ignition: the engines light seconds before liftoff and build up to full thrust while hold-down clamps keep the rocket on the pad. The computers check every engine and can still shut everything down safely; only then do the clamps let go. Water pours onto the pad to absorb heat and sound — the white clouds are mostly steam.'],
   [/on the pad/i, 'Final countdown. The tanks are topped off and the vehicle stands on the pad, held down by clamps until the engines reach full thrust.'],
-  [/^vertical/i, EXPLAIN.vertical], [/gravity turn/i, EXPLAIN.gravityTurn],
+  [/^vertical/i, EXPLAIN.vertical], [/pitch-?over/i, 'Pitch-over: clear of the tower, the rocket tips a few degrees toward its launch azimuth. From here on it flies nose into the airflow and gravity bends the path toward horizontal.'], [/gravity turn/i, EXPLAIN.gravityTurn],
   [/closed-loop/i, 'Closed-loop guidance: above the dense atmosphere the flight computer steers to hit the target orbit exactly — altitude, speed and flight-path angle.'],
   [/stranded|shortfall|drift/i, 'The vehicle did not have enough propellant for this burn, so it stays on the trajectory it reached. Choose a more capable rocket or a lighter payload in the setup.'],
   [/parking|low Earth orbit|Earth orbits/i, EXPLAIN.parking], [/high Earth orbit/i, 'High Earth orbit: an elongated orbit reaching tens of thousands of kilometres, used to check out the spacecraft before committing to the Moon.'],
@@ -24,12 +24,40 @@ const PHASE_TEXT = [
   [/flyby|gravity assist/i, EXPLAIN.flyby], [/cruise|heliocentric|solar orbit|interplanetary/i, EXPLAIN.cruise], [/departure hyperbola/i, 'Departure hyperbola: the craft is escaping Earth. Its speed relative to Earth tends toward v∞, the hyperbolic excess speed.'],
   [/spent|stage/i, 'A spent stage: empty tanks and engines, discarded to save mass.'], [/recovery/i, 'Recovery: ships and helicopters reach the capsule within the hour.'],
 ];
+// Space Shuttle flights: checked before the general texts (their phase names overlap: entry, approach, docking)
+const SHUTTLE_TEXT = [
+  [/coasting with the tank/i, 'Main engine cutoff. The empty External Tank is still attached; eighteen seconds later it is released and the orbiter moves clear with its small reaction-control jets.'],
+  [/External Tank — falling/i, 'The External Tank on its own: 26 tonnes of empty aluminium. Its orbit dips into the atmosphere, so half an orbit later it breaks up and falls into a remote stretch of ocean — the only part of the Shuttle not reused.'],
+  [/climbing to apogee|MECO — coasting/i, 'Coasting up to the high point of the orbit. The low point is still inside the atmosphere; at the top the OMS engines will fire to lift it out (OMS-2).'],
+  [/\bOMS-\d|orbit insertion|circularis/i, 'Orbital Maneuvering System: two 27 kN engines in the pods beside the tail. Their propellants — monomethylhydrazine and nitrogen tetroxide — ignite on contact, so the engines start reliably every time.'],
+  [/NC-\d|catching up|closing in/i, 'Phasing: the orbiter starts thousands of kilometres behind the station. A lower orbit is a faster one, so each burn adjusts the height to close the gap at just the right rate — arriving half an orbit after terminal initiation.'],
+  [/terminal initiation|TI —|closing on the station/i, 'Terminal initiation: the burn that commits to the rendezvous. Half an orbit later the orbiter arrives 600 m below the station; the crew flies the last part by hand, watching radar and laser range-finder data.'],
+  [/R-bar approach/i, 'R-bar approach: the orbiter closes in from directly below the station, along the line to Earth’s centre. Orbital mechanics help: anything below the station tends to drift up toward it, so the approach is gentle.'],
+  [/R-bar pitch/i, 'R-bar pitch maneuver: a slow 360° back-flip, 183 m below the station. For nine minutes the belly faces the station crew, who photograph every heat-shield tile — a check added after Columbia was lost in 2003.'],
+  [/moving to the V-bar/i, 'Swinging to the V-bar: a quarter circle up and in front of the station, to its line of flight. The orbiter pitches nose-up so its docking port faces the station.'],
+  [/docked to the ISS/i, 'Docked: orbiter and station fly as one 500-tonne spacecraft. The station’s robot arm moves cargo between them, and the orbiter can even draw power from the station to stay longer.'],
+  [/backing away/i, 'Undocking: springs push the spacecraft apart; the orbiter backs away slowly along the V-bar with its small jets, careful not to blast the station’s solar arrays.'],
+  [/flyaround/i, 'Flyaround: a last lap around the station at about 180 m, so the crew can photograph every side of it for engineers on the ground.'],
+  [/V-bar approach|docking/i, 'Final approach along the V-bar at a few centimetres per second. The docking mechanism’s capture ring latches on, then retracts to pull the two spacecraft together and seal the hatches.'],
+  [/deploy/i, 'Payload deploy: the 15 m Canadarm, flown from the aft flight-deck windows, lifts the payload out of the bay, holds it while its systems come alive, and lets go.'],
+  [/hubble in orbit/i, 'Free flying: the Hubble Space Telescope on its own, 615 km up, its two solar array wings unrolled.'],
+  [/deorbit preparations|deorbit burn/i, 'Deorbit: about an hour before landing, half a world away from the runway, the orbiter fires both OMS engines against its direction of flight. The orbit’s far side drops into the atmosphere — there is no turning back.'],
+  [/falling toward the atmosphere/i, 'Falling toward the atmosphere. The orbiter has turned around to fly nose-first with its nose 40° up, so the black heat-shield tiles on its belly will take the heat.'],
+  [/entry/i, 'Entry: the orbiter meets the air at 7.8 km/s and a 40° angle of attack. It is a glider: it steers by banking, and each roll reversal swings its path back toward the runway. The tiles on its belly reach 1,260 °C, the wing leading edges 1,500 °C.'],
+  [/TAEM/i, 'Terminal area energy management: below 25 km and Mach 2.5 the orbiter is a supersonic glider. The computers manage its energy — speed and height — so it arrives at the runway with just enough to land.'],
+  [/heading alignment/i, 'Heading alignment cone: a turn around an imaginary cylinder to line up with the runway. Wider for more energy, tighter for less: this is the last big correction.'],
+  [/outer glideslope/i, 'Outer glideslope: a 19° dive at about 290 knots — seven times steeper than an airliner’s. The split rudder opens as a speed brake to hold the airspeed.'],
+  [/flare|inner glideslope/i, 'Preflare and flare: the commander pulls the nose up to flatten the dive onto a 1.5° glideslope, the landing gear comes down, and the orbiter floats toward the runway, slowing to about 200 knots.'],
+  [/rollout/i, 'Rollout: main gear first at about 200 knots (370 km/h), then the nose comes down; the drag chute and the brakes stop the 100-tonne glider within about 2.7 km.'],
+  [/wheel stop|on the runway/i, '“Wheel stop.” Ground crews in protective suits approach first, checking for toxic propellant vapours; purge and cooling air is connected to the orbiter before the crew can leave, about an hour later.'],
+  [/^in orbit|flight tests|in orbit —/i, 'In orbit: one lap every 90 minutes at about 28,000 km/h, sixteen sunrises and sunsets a day. The payload bay doors stay open: their inner faces are the radiators that keep the orbiter cool.'],
+];
 const MARS_TEXT = [
   [/parachute/i, 'Supersonic parachute: a 21.5 m disk-gap-band canopy opens at about Mach 1.7. The air is only 1 % as dense as Earth’s, so the parachute slows the craft to about 100 m/s — not enough to land.'],
   [/powered|sky crane|terminal|approach/i, 'Powered descent in thin Martian air: the final ~100 m/s must be removed by rocket engines. The radar measures altitude and terrain-relative navigation picks a safe spot.'],
   [/entry|plasma/i, EXPLAIN.edl],
 ];
-function explainPhase(...names) { const s = names.filter(Boolean).join(' | '); if (/\[mars\]/.test(s)) for (const [re, txt] of MARS_TEXT) if (re.test(s)) return txt; for (const [re, txt] of PHASE_TEXT) if (re.test(s)) return txt; return ''; }
+function explainPhase(...names) { const s = names.filter(Boolean).join(' | '); if (MV.md && isShuttle(MV.md)) for (const [re, txt] of SHUTTLE_TEXT) if (re.test(s)) return txt; if (/\[mars\]/.test(s)) for (const [re, txt] of MARS_TEXT) if (re.test(s)) return txt; for (const [re, txt] of PHASE_TEXT) if (re.test(s)) return txt; return ''; }
 function computeTele(c, t) {
   if (!c || !c.s || !c.P) return null;
   const md = MV.md, s = c.s, P = c.P; const ref = c.dom || s.ref; const rD = c.rD || s.r, vD = c.vD || s.v;
@@ -89,6 +117,11 @@ function propStatus(T, t) {
   if (s.surface) return { k: 'rest', l: 'ON THE SURFACE', d: `${BODIES[s.ref].name} · ${nxt}` };
   const ex = s.extra || {};
   if (ex.chute) return { k: 'aero', l: 'ENGINES OFF', d: `under parachutes, descending at ${fSpeed(Math.abs(Math.min(T.vVert, 0)))}` };
+  if (isShuttle(md) && c.o.id === 'ship') { // the orbiter after entry: a glider, then a vehicle rolling on its wheels
+    const ph = ex.phase || '';
+    if (/rollout/.test(ph)) return { k: 'aero', l: 'ROLLOUT', d: `on the runway at ${fx(T.vSurf * 1000 / 0.5144, 0)} knots — ${T.cfg && T.cfg.dragChute ? 'drag chute and brakes' : 'brakes and air drag'} slowing the orbiter` };
+    if (/TAEM|alignment|glideslope|flare/.test(ph)) return { k: 'aero', l: 'GLIDING', d: `engines off, trading height for speed — ${fx(T.vSurf * 1000 / 0.5144, 0)} knots, sinking ${fx(Math.max(0, -T.vVert * 1000), 0)} m/s` };
+  }
   if (T.dragAcc > 0.05 || ex.q > 50) return { k: 'aero', l: 'ENGINES OFF', d: `atmospheric entry — air drag is braking the craft (${fx(T.dragAcc / G0, 1)} g)` };
   const ph = md.phaseAt(t); const fly = ph && /flyby|gravity assist/i.test(ph.name);
   const who = !fly ? '' : /lunar|moon/i.test(ph.name) ? 'the Moon’s' : /mars/i.test(ph.name) ? 'Mars’s' : /earth/i.test(ph.name) ? 'Earth’s' : /venus/i.test(ph.name) ? 'Venus’s' : /jupiter/i.test(ph.name) ? 'Jupiter’s' : 'the planet’s';
@@ -118,7 +151,7 @@ function buildTelePanel() {
       h('div', { class: 'note-s', style: 'margin:8px 0 4px' }, 'Gravitational pull here (log scale)'), h('div', { class: 'bars', id: 'tv-bars' })),
     sec('Orbit', '', h('div', { class: 'kv' }, ...kv('pa', 'Periapsis × apoapsis'), ...kv('ae', 'Semi-major axis · eccentricity'), ...kv('inc', 'Inclination'), ...kv('per', 'Period'), ...kv('c3', 'Specific energy · C3'), ...kv('vesc', 'Escape speed here'))),
     sec('Vehicle', '', h('div', { class: 'kv' }, ...kv('cfg', 'Configuration'), ...kv('mass', 'Mass'), ...kv('eng', 'Engine'), ...kv('prop', 'Propellant'), ...kv('thrN', 'Thrust · Isp'), ...kv('mdot', 'Propellant flow'), ...kv('tw', 'Thrust-to-weight'), ...kv('burn', 'Burn'), ...kv('dv', 'Δv spent so far')), h('div', { id: 'tv-tanks' })),
-    h('div', { class: 'sec', id: 'tv-atmoSec' }, h('h4', null, 'Atmosphere'), h('div', { class: 'kv' }, ...kv('q', 'Dynamic pressure q'), ...kv('mach', 'Mach'), ...kv('heat', 'Heat flux (stagnation)'), ...kv('bo', 'Radio blackout'), ...kv('chute', 'Parachutes'), ...kv('bank', 'Bank angle'))),
+    h('div', { class: 'sec', id: 'tv-atmoSec' }, h('h4', null, 'Atmosphere'), h('div', { class: 'kv' }, ...kv('q', 'Dynamic pressure q'), ...kv('mach', 'Mach'), ...kv('heat', 'Heat flux (stagnation)'), ...kv('bo', 'Radio blackout'), ...kv('chute', 'Parachutes'), ...kv('bank', 'Bank angle'), ...kv('alpha', 'Angle of attack'))),
   );
   TELE.els = {}; for (const e of root.querySelectorAll('[id^="tv-"]')) TELE.els[e.id.slice(3)] = e;
 }
@@ -134,6 +167,7 @@ function drawTele(T, t) {
   E.phase.textContent = label; E.chip.style.background = ph ? ph.color : '#666';
   const b = T.burn; const ex = explainPhase(b && b.name, exPh, ph && ph.name, T.ref === 'mars' && T.alt < 200 ? '[mars]' : ''); if (E.explain.textContent !== ex) E.explain.textContent = ex;
   const RB = { earth: 'Earth', moon: 'Moon', mars: 'Mars', sun: 'Sun' };
+  if (T.ref === 'earth' && (s.surface || s.pad)) T.alt = Math.max(T.alt, 0); // the drawn ground sits a fraction of a metre under the datum
   setv('alt', T.ref === 'sun' ? '—' : (T.alt < -0.0005 ? '−' + fDist(-T.alt) + ' (below datum)' : fDist(Math.max(T.alt, 0))) + ' · ' + RB[T.ref]);
   setv('vin', fSpeed(T.vIn)); setv('vsurf', T.ref === 'sun' || T.alt > 1500 ? '—' : fSpeed(T.vSurf)); setv('vvert', Math.abs(T.vVert) < 5e-4 ? '0 m/s' : (T.vVert >= 0 ? '+' : '−') + fSpeed(Math.abs(T.vVert)));
   setv('ll', T.ll ? `${fLat(T.ll[0])} ${fLon(T.ll[1])}` : 'heliocentric');
@@ -163,7 +197,9 @@ function drawTele(T, t) {
   const cf = T.cfg; let cfgTxt = '—';
   const L = md.L;
   if (cf) {
-    if (cf.key === 'launch') cfgTxt = L.stages.filter((st, i) => (st.parallel ? cf.boosters : i >= cf.stFrom)).map(st => st.id).join(' + ') + (cf.fairing ? ' + fairing' : '') + (cf.les ? ' + escape tower' : '');
+    if (cf.key === 'launch') cfgTxt = L.sideMount ? ['Orbiter', 'External Tank', cf.boosters ? '2 boosters' : null].filter(Boolean).join(' + ') : L.stages.filter((st, i) => (st.parallel ? cf.boosters : i >= cf.stFrom)).map(st => st.id).join(' + ') + (cf.fairing ? ' + fairing' : '') + (cf.les ? ' + escape tower' : '');
+    else if (cf.sc === 'shuttle') cfgTxt = ['Orbiter', cf.docked ? 'docked to the ISS' : null, cf.bay === 'open' ? 'payload bay open' : 'bay doors closed', cf.payArm ? 'payload on the arm' : null, cf.gear ? 'gear down' : null, cf.dragChute ? 'drag chute' : null].filter(Boolean).join(' · ');
+    else if (cf.sc === 'iss') cfgTxt = 'International Space Station' + (cf.mplm ? ' + logistics module' : '');
     else if (cf.key === 'stack') cfgTxt = `${L.stages[cf.stage].id} + spacecraft`;
     else if (cf.key === 'stage') cfgTxt = L.stages[cf.stage].name;
     else if (cf.key === 'capsule') cfgTxt = 'Capsule' + (cf.chutes ? ' under parachutes' : '');
@@ -215,6 +251,7 @@ function drawTele(T, t) {
     setv('q', ex2.q != null ? fx(ex2.q / 1000, 2) + ' kPa' : '—'); setv('mach', ex2.mach != null ? fx(ex2.mach, 2) : '—');
     setv('heat', ex2.heat != null ? fx(ex2.heat, 1) + ' W/cm²' : '—', ex2.heat > 50 ? 'bad' : '');
     setv('bo', ex2.blackout ? 'NO SIGNAL' : 'clear', ex2.blackout ? 'bad' : 'ok');
-    setv('chute', ex2.chute ? (ex2.chute >= 2 ? 'main canopies' : 'drogue / supersonic') : '—'); setv('bank', ex2.bank != null ? fx(ex2.bank, 0) + '°' : '—');
+    setv('chute', ex2.chute ? (ex2.chute >= 2 ? 'main canopies' : 'drogue / supersonic') : (cf && cf.dragChute ? 'drag chute' : '—')); setv('bank', ex2.bank != null ? fx(ex2.bank, 0) + '°' : '—');
+    setv('alpha', ex2.alpha != null ? fx(ex2.alpha, 1) + '°' : '—'); E.alpha.parentNode && (E.alpha.style.display = E.alpha.previousSibling.style.display = ex2.alpha != null ? '' : 'none');
   }
 }

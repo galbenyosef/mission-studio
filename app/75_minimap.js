@@ -6,7 +6,7 @@
 // ============================================================================
 const MM = { view: 'auto', drawn: 0, lastT: null, lastKey: '', paths: {}, rmax: {}, orbits: {}, moonOrb: null, moonOrbT: null, hits: [], flybyPts: null, burnPts: {} };
 const PLANET_LIST = ['mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn'];
-const MM_TITLES = { sun: 'Solar System', earth: 'Earth–Moon', mars: 'Mars system' };
+const MM_TITLES = { sun: 'Solar System', earth: 'Earth–Moon', mars: 'Mars system', track: 'Ground track' };
 function initMinimap() {
   $$('#minimap [data-mm]').forEach(b => b.addEventListener('click', () => { MM.view = b.dataset.mm; $$('#minimap [data-mm]').forEach(x => x.classList.toggle('on', x === b)); MM.lastT = null; }));
   $('#mmCollapse').addEventListener('click', () => { const c = !$('#app').classList.contains('mm-collapsed'); $('#app').classList.toggle('mm-collapsed', c); lsSet('mstudio-mm-collapsed', c); MM.lastT = null; setMMH(); });
@@ -20,10 +20,16 @@ function initMinimap() {
   setMMH();
 }
 function setMMH() { const el = $('#minimap'); const vis = el && el.offsetParent !== null && getComputedStyle(el).position === 'absolute'; document.documentElement.style.setProperty('--mmH', vis ? Math.round(el.getBoundingClientRect().height + 8) + 'px' : '0px'); }
-function resetMinimap() { MM.paths = {}; MM.rmax = {}; MM.orbits = {}; MM.moonOrb = null; MM.lastT = null; MM.flybyPts = null; MM.burnPts = {}; }
+function resetMinimap() {
+  MM.paths = {}; MM.rmax = {}; MM.orbits = {}; MM.moonOrb = null; MM.lastT = null; MM.flybyPts = null; MM.burnPts = {};
+  const leo = !!(MV.md && (MV.md.cfg.profile || '').startsWith('leo')); // the ground track for Earth-orbit flights, Mars for the others
+  const bt = $('#minimap [data-mm="track"]'), bm = $('#minimap [data-mm="mars"]'); if (bt) bt.hidden = !leo; if (bm) bm.hidden = leo;
+  if ((leo && MM.view === 'mars') || (!leo && MM.view === 'track')) { MM.view = 'auto'; $$('#minimap [data-mm]').forEach(x => x.classList.toggle('on', x.dataset.mm === 'auto')); }
+}
 function shipTrail() { return MV.trails.find(tr => tr.o.id === 'ship'); }
 function mmViewFor(t) {
   if (MM.view !== 'auto') return MM.view;
+  if ((MV.md.cfg.profile || '').startsWith('leo')) return 'track'; // Earth-orbit flights: where on Earth the craft is
   const c = activeCraft(t) || craftById('ship'); if (!c || !c.P) return 'earth';
   const b = dominantBody(c.P, t); return b === 'sun' ? 'sun' : b === 'mars' ? 'mars' : 'earth';
 }
@@ -88,6 +94,7 @@ function drawMinimap(t, force) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2); const W = cv.clientWidth, Hh = cv.clientHeight; if (!W || !Hh) return;
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(Hh * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); }
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, Hh);
+  if (view === 'track') { drawGroundTrack(g, W, Hh, t, now); return; }
   const cx = W / 2, cy = Hh / 2, Rm = mmRmax(view), k = (Math.min(W, Hh) / 2 - 10) / Rm;
   const center = view === 'sun' ? [0, 0, 0] : helio(view, t).r;
   const X = x => clamp(cx + x * k, -4000, 4000), Y = y => clamp(cy - y * k, -4000, 4000);
@@ -202,4 +209,56 @@ function drawMinimap(t, force) {
     const who = c.o.id === 'ship' ? '' : c.o.name + ': ';
     if (info.textContent !== who + txt) info.textContent = who + txt;
   }
+}
+
+// ---------------- ground track (Earth-orbit flights) ----------------
+// The world map (equirectangular, the planet texture itself) with night shaded, the flight's ground track about an
+// orbit and a half behind and one ahead, the launch site and the landing runway.
+function mmEarthImage() { if (!MM.earthImg) { MM.earthImg = new Image(); MM.earthImg.src = ASSET('earth_day.jpg'); } return MM.earthImg.complete && MM.earthImg.naturalWidth ? MM.earthImg : null; }
+function mmNight(t) { // 180 × 90 night overlay with a soft terminator, recomputed every few minutes of mission time
+  if (MM.night && Math.abs(MM.night.t - t) < 240) return MM.night.cv;
+  const cv = MM.night ? MM.night.cv : document.createElement('canvas'); cv.width = 180; cv.height = 90; const g = cv.getContext('2d'), img = g.createImageData(180, 90);
+  const sun = mvec(mT(bodyFixedToEcl('earth', t)), vunit(vscale(planetHelio('earth', t).r, -1)));
+  for (let j = 0; j < 90; j++) { const la = (89.5 - 2 * j) * DEG; for (let i = 0; i < 180; i++) { const lo = (-179 + 2 * i) * DEG;
+    const c = Math.cos(la) * Math.cos(lo) * sun[0] + Math.cos(la) * Math.sin(lo) * sun[1] + Math.sin(la) * sun[2];
+    const o = 4 * (j * 180 + i); img.data[o] = 4; img.data[o + 1] = 8; img.data[o + 2] = 22; img.data[o + 3] = Math.round(175 * clamp((0.08 - c) / 0.16, 0, 1)); } }
+  g.putImageData(img, 0, 0); MM.night = { t, cv }; return cv;
+}
+function drawGroundTrack(g, W, Hh, t, now) {
+  const md = MV.md, mw = Math.min(W, 2 * Hh), mh = mw / 2, x0 = (W - mw) / 2, y0 = (Hh - mh) / 2;
+  const X = lon => x0 + ((lon + 180) / 360) * mw, Y = lat => y0 + ((90 - lat) / 180) * mh;
+  MM.hits = []; $('#mmTitle').textContent = MM_TITLES.track + (MM.view === 'auto' ? '' : ' · fixed');
+  g.fillStyle = '#05080e'; g.fillRect(0, 0, W, Hh);
+  const img = mmEarthImage(); if (img) { g.globalAlpha = 0.85; g.drawImage(img, x0, y0, mw, mh); g.globalAlpha = 1; } else { g.fillStyle = '#0d2340'; g.fillRect(x0, y0, mw, mh); }
+  g.imageSmoothingEnabled = true; g.drawImage(mmNight(t), x0, y0, mw, mh);
+  g.strokeStyle = 'rgba(200,215,235,.12)'; g.lineWidth = 1; g.beginPath(); for (let lo = -150; lo <= 150; lo += 30) { g.moveTo(X(lo), y0); g.lineTo(X(lo), y0 + mh); } for (let la = -60; la <= 60; la += 30) { g.moveTo(x0, Y(la)); g.lineTo(x0 + mw, Y(la)); } g.stroke();
+  g.font = '10px "IBM Plex Sans Condensed", sans-serif'; g.textBaseline = 'middle';
+  const ship = craftById('ship'), o = ship && ship.o; if (!o) return;
+  const ll = (obj, tt) => { const s = obj.stateAt(tt); return s && s.ref === 'earth' ? subPointLL('earth', s.r, tt) : null; };
+  // ground track: an orbit and a half behind (solid), one ahead (dashed)
+  const P = 5560, ta = Math.max(o.t0, t - 1.5 * P), tb = Math.min(o.t1, t + P), step = 30;
+  const seg = (from, to, past) => {
+    g.beginPath(); let prev = null; const n = Math.max(1, Math.ceil((to - from) / step));
+    for (let i = 0; i <= n; i++) { const tt = from + (to - from) * i / n, p = ll(o, tt); if (!p) { prev = null; continue; } const x = X(p[1]), y = Y(p[0]); if (!prev || Math.abs(p[1] - prev[1]) > 180) g.moveTo(x, y); else g.lineTo(x, y); prev = p; } // break at the date line
+    g.setLineDash(past ? [] : [3, 3]); g.strokeStyle = past ? 'rgba(255,181,71,.95)' : 'rgba(99,199,255,.75)'; g.lineWidth = past ? 1.6 : 1.1; g.stroke(); g.setLineDash([]);
+  };
+  if (t > ta) seg(ta, Math.min(t, tb), true); if (MV.layers.future !== false && tb > t) seg(Math.max(t, ta), tb, false);
+  // sites
+  const site = (lat, lon, col, lab) => { const x = X(lon), y = Y(lat); g.strokeStyle = col; g.lineWidth = 1.4; g.beginPath(); g.arc(x, y, 3.2, 0, TAU); g.stroke(); if (lab && mw >= 220) { g.fillStyle = col; g.fillText(lab, x + 5, y + (lat > 30 ? 7 : -7)); } };
+  const S = LAUNCH_SITES[md.cfg.site]; if (S) site(S.lat, S.lon, '#ffd166', 'KSC');
+  const rw = md.cfg.runway && RUNWAYS[md.cfg.runway]; if (rw && !(S && Math.abs(rw.lat - S.lat) < 1 && Math.abs(rw.lon - S.lon) < 1)) site(rw.lat, rw.lon, '#f15bb5', rw.short.split(' ')[0]);
+  // other craft (station, telescope) and the orbiter
+  for (const c of MV.crafts) { if (c.o.id === 'ship' || c.o.kind !== 'craft' || !c.P || !c.s) continue; const p = ll(c.o, t); if (!p) continue; const x = X(p[1]), y = Y(p[0]); g.fillStyle = '#9fd3ff'; g.beginPath(); g.arc(x, y, 2.6, 0, TAU); g.fill(); if (mw >= 220) g.fillText(c.o.id === 'iss' ? 'ISS' : c.o.name.split(' ')[0], x + 5, y - 7); MM.hits.push({ x, y, id: 'obj:' + c.o.id }); }
+  const p = ship.s && ship.s.ref === 'earth' ? subPointLL('earth', ship.s.r, t) : (t < o.t0 && S ? [S.lat, S.lon] : null);
+  if (p) {
+    const x = X(p[1]), y = Y(p[0]), burning = !!(ship.s && ship.s.T > 0);
+    const pulse = burning ? 6 + 4 * (0.5 + 0.5 * Math.sin(now / 120)) : 5 + 3 * (0.5 + 0.5 * Math.sin(now / 260));
+    g.strokeStyle = burning ? hexA(PCOL.burn, 0.8) : 'rgba(255,181,71,.6)'; g.beginPath(); g.arc(x, y, pulse, 0, TAU); g.stroke();
+    g.fillStyle = burning ? PCOL.burn : '#ffb547'; g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 4, y); g.lineTo(x, y + 4); g.lineTo(x - 4, y); g.closePath(); g.fill();
+    MM.hits.push({ x, y, id: 'obj:ship' });
+  }
+  g.fillStyle = 'rgba(135,148,168,.6)'; g.textAlign = 'right'; g.fillText('night shaded', W - 6, Hh - 9); g.textAlign = 'left';
+  // in words
+  const info = $('#mmInfo'); const s = ship.s;
+  if (s && p) { const alt = vnorm(s.r) - BODIES.earth.R; const txt = s.surface || s.pad ? `On the ground · ${fLat(p[0])} ${fLon(p[1])}` : `${fDist(Math.max(alt, 0))} up over ${fLat(p[0])} ${fLon(p[1])} · ${t < o.t0 + 600 ? 'climbing to orbit' : 'orbit ' + (1 + Math.floor((t - md.M.t0) / P))}`; if (info.textContent !== txt) info.textContent = txt; }
 }

@@ -35,14 +35,14 @@ for (const [n, s] of [['engine', engine], ['app', app]]) if (/<\/script/i.test(s
 
 const css = fs.readFileSync(path.join(ROOT, 'app', 'style.css'), 'utf8');
 const markup = fs.readFileSync(path.join(ROOT, 'app', 'markup.html'), 'utf8');
-const DESC = '3D Moon and Mars mission simulator with real launch vehicles, solved trajectories, live telemetry and storyboard capture.';
+const DESC = '3D mission simulator — Space Shuttle, Moon and Mars — with real launch vehicles, solved trajectories, live telemetry and storyboard capture.';
 const ICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><radialGradient id="g" cx="38%" cy="34%" r="70%"><stop offset="0" stop-color="#ffd9a8"/><stop offset=".55" stop-color="#ff7b2e"/><stop offset="1" stop-color="#7a2a08"/></radialGradient></defs><circle cx="32" cy="32" r="28" fill="url(#g)"/></svg>')}`;
 const page = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Moon &amp; Mars Mission Studio</title>
+<title>Mission Studio — Space Shuttle, Moon &amp; Mars</title>
 <meta name="description" content="${DESC}">
 <link rel="icon" href="${ICON}">
 <link rel="modulepreload" href="./assets/${threeFile}">

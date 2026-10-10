@@ -30,7 +30,7 @@ function stripeTex(fn, w = 256, hh = 512) {
 }
 const TEX = {};
 function patternMat(kind, base) {
-  if (TEX[kind]) return TEX[kind];
+  const key = kind + '|' + base; if (TEX[key]) return TEX[key];
   let tex;
   if (kind === 'sic') tex = stripeTex((g, w, hh) => { g.fillStyle = base; g.fillRect(0, 0, w, hh); g.fillStyle = '#151515'; for (let q = 0; q < 4; q += 2) g.fillRect(q * w / 4, hh * 0.78, w / 4, hh * 0.22); g.fillRect(0, hh * 0.40, w, hh * 0.035); g.fillRect(0, hh * 0.04, w, hh * 0.02); g.fillRect(w / 8, hh * 0.08, w / 8, hh * 0.25); g.fillRect(5 * w / 8, hh * 0.08, w / 8, hh * 0.25); g.fillStyle = '#b22'; g.font = 'bold 34px sans-serif'; g.save(); g.translate(w * 0.62, hh * 0.45); g.rotate(Math.PI / 2); g.fillText('USA', 0, 0); g.restore(); });
   else if (kind === 'sivb') tex = stripeTex((g, w, hh) => { g.fillStyle = base; g.fillRect(0, 0, w, hh); g.fillStyle = '#151515'; g.fillRect(0, hh * 0.7, w / 4, hh * 0.3); g.fillRect(w / 2, hh * 0.7, w / 4, hh * 0.3); g.fillRect(0, hh * 0.0, w, hh * 0.05); });
@@ -41,7 +41,7 @@ function patternMat(kind, base) {
   else if (kind === 'chute') tex = stripeTex((g, w, hh) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#f2efe8' : base; g.fillRect(i * w / 16, 0, w / 16 + 1, hh); } g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(0, 0, w, hh * 0.06); }, 256, 64);
   const kindM = kind === 'tiles' ? 'metal' : 'paint';
   const m = new THREE.MeshStandardMaterial({ map: tex, roughness: kind === 'tiles' ? 0.45 : 0.55, metalness: kind === 'tiles' ? 0.4 : 0.05, side: kind === 'chute' ? THREE.DoubleSide : THREE.FrontSide });
-  TEX[kind] = m; return m;
+  TEX[key] = m; return m;
 }
 function engineLayout(eng) {
   const s = eng.spread || 0, out = [];
@@ -207,6 +207,9 @@ function stackParts(list) { // stack groups vertically (each part built from y=0
   g.userData.len = y; g.userData.mounts = mounts; return g;
 }
 function buildSC(model, parts, flags = {}) {
+  if (model === 'shuttle') return buildOrbiter(flags);
+  if (model === 'iss') return issModel(flags);
+  if (model === 'hubble') return hubbleModel({ arrays: true, door: !!flags.door });
   const P = new Set(parts || []);
   const g = new THREE.Group(); let inner; const mounts = [];
   const has = k => P.has(k);
@@ -339,7 +342,8 @@ function buildStowed(model, rBelow, fl = {}) {
 }
 // full launch stack from launcher config
 function buildLaunchStack(lkey, scModel, c) {
-  const L = LAUNCHERS[lkey]; const g = new THREE.Group(); const mounts = [];
+  const L = LAUNCHERS[lkey]; if (L.sideMount) return buildShuttleStack(L, c);
+  const g = new THREE.Group(); const mounts = [];
   const core = L.stages.map((s, i) => ({ s, i })).filter(o => !o.s.parallel && o.i >= (c.stFrom || 0));
   let y = 0, firstCoreY = null, rCore = 1;
   for (const { s, i } of core) {
@@ -364,8 +368,10 @@ function buildLaunchStack(lkey, scModel, c) {
   g.userData = { len: y, mounts };
   return g;
 }
-function buildStageOnly(lkey, idx, withAdapter) {
-  const L = LAUNCHERS[lkey], s = L.stages[idx]; const st = buildStage(s);
+function buildStageOnly(lkey, idx, withAdapter, variant) {
+  const L = LAUNCHERS[lkey]; let s = L.stages[idx];
+  if (variant === 'sts1' && lkey === 'shuttle' && idx === 1) s = { ...s, geom: s.geom.map(p => [p[0], p[1], p[2], p[3] === '#4a4a4a' ? p[3] : '#e9e7e0', p[4]]) }; // STS-1's painted (white) tank
+  const st = buildStage(s);
   if (s.parallel && s.booster) { // drop all boosters together
     const g = new THREE.Group(); const n = s.booster.count, off = s.booster.offset;
     for (let k = 0; k < n; k++) { const a = n === 2 ? k * Math.PI : k * Math.PI / 2 + Math.PI / 4; const b = k === 0 ? st : buildStage(s); b.group.position.set(Math.cos(a) * off, 0, Math.sin(a) * off); g.add(b.group); }
@@ -377,7 +383,7 @@ function buildStageOnly(lkey, idx, withAdapter) {
 }
 // center a model on its bounding-box centre along Y and record offsets
 function finishModel(g) {
-  const len = g.userData.len || 1; const yc = len * 0.45;
+  const len = g.userData.len || 1; const yc = g.userData.yc0 ?? len * 0.45; // yc0: models whose origin is their reference point (the orbiter's, the ISS's)
   const wrap = new THREE.Group(); g.position.y = -yc; wrap.add(g);
   wrap.userData = { ...g.userData, yc };
   wrap.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(wrap); const sz = new THREE.Vector3(); bb.getSize(sz);
@@ -393,7 +399,7 @@ function modelForConfig(cfgL, objModel) {
   else if (c.key === 'stack') { const L = LAUNCHERS[c.launcher]; const up = buildStageOnly(c.launcher, c.stage, false); const gg = new THREE.Group(); gg.add(up); let y = up.userData.len; const mounts = [{ y: up.userData.mounts[0].y, r: up.userData.mounts[0].r, tag: 'upper', prop: L.stages[c.stage].prop }];
     if (c.launcher !== 'starship') { const st = buildStowed(c.sc, L.stages[c.stage].geom.slice(-1)[0][2], {}); st.position.y = y; gg.add(st); for (const m of st.userData.mounts) mounts.push({ ...m, y: m.y + y }); y += st.userData.len; }
     gg.userData = { len: y, mounts }; g = gg; }
-  else if (c.key === 'stage') g = buildStageOnly(c.launcher, c.stage, c.withAdapter);
+  else if (c.key === 'stage') g = buildStageOnly(c.launcher, c.stage, c.withAdapter, c.variant);
   else if (c.key === 'capsule') g = buildSC(c.sc, ['capsule'], {});
   else g = buildSC(c.sc || objModel, c.parts, c);
   return finishModel(g);

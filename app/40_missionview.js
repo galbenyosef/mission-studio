@@ -14,6 +14,7 @@ function clearMissionView() {
   for (const tr of MV.trails) tr.dispose();
   for (const cp of MV.caps) { cp.parent && cp.parent.remove(cp); cp.geometry.dispose(); }
   if (MV.pad) { R.scene.remove(MV.pad); disposeTree(MV.pad); MV.pad = null; }
+  disposeRunway();
   MV.crafts = []; MV.trails = []; MV.caps = []; MV.capInfo = [];
 }
 function setupMissionView(md) {
@@ -33,6 +34,8 @@ function setupMissionView(md) {
     MV.crafts.push(c);
     if (o.trail !== false && o.segs.length && o.kind !== 'debris') MV.trails.push(new Trail(o, md, isPrim));
   }
+  // Earth-orbit flights circle the planet hundreds of times: draw about two orbits behind and one ahead
+  const leo = (md.cfg.profile || '').startsWith('leo'); TRAIL_U.uWinP.value = leo ? 2 * 5560 : 1e12; TRAIL_U.uWinF.value = leo ? 5560 : 1e12;
   buildSurfaceCaps(md);
   buildTracks(md);
   buildPad(md);
@@ -75,17 +78,18 @@ function activeMounts(c, s, t, cfgL, model) {
     for (const m of mounts) {
       if (!m.tag.startsWith('stage:')) continue; const id = m.tag.slice(6);
       if (id === st) out.push(m);
-      else if (bst && id === bst.id && cfgL.boosters) { const tb = t - MV.md.M.t0; if (tb < 0 && bst.prop === 'solid') continue; const burnT = bst.propMass / (bst.thrustSL / (bst.ispSL * G0)); if (tb < burnT * 1.15) out.push(m); }
+      else if (bst && id === bst.id && cfgL.boosters) { const tb = t - MV.md.M.t0; if (tb < 0 && bst.prop === 'solid') continue; const tEnd = bst.curve ? bst.curve.filter(p => p[1] > 0.1).slice(-1)[0][0] + 1 : 1.15 * bst.propMass / (bst.thrustSL / (bst.ispSL * G0)); if (tb < tEnd) out.push(m); } // a thrust curve tells when the solid motors burn out
     }
     return out;
   }
   const b = MV.md.burnAt(t, c.o.id);
   let tag = null;
   if (b) { const tk = MV.md.tanks.find(k => k.engine === b.engine); tag = tk ? tk.id : null; }
+  if (b && /\bRCS\b/.test(b.engine || '') && !tag) return out; // small reaction-control jets: no main-engine plume
   if (cfgL && cfgL.key === 'stack') tag = 'upper';
-  let m = tag && mounts.find(mm => mm.tag === tag);
-  if (!m) m = mounts.find(mm => mm.tag === 'upper') || mounts[0];
-  if (m) out.push(m);
+  const ms = tag ? mounts.filter(mm => mm.tag === tag) : []; // every engine of that tank (e.g. the orbiter's two OMS engines)
+  if (!ms.length) { const m = mounts.find(mm => mm.tag === 'upper') || mounts[0]; if (m) ms.push(m); }
+  out.push(...ms);
   return out;
 }
 function noseDirection(c, s, t, cfgL, act) {
@@ -94,6 +98,7 @@ function noseDirection(c, s, t, cfgL, act) {
   const rot = body === 'earth' || body === 'mars';
   const vAir = rot ? vsub(vD, vcross(bodyOmegaEcl(body, t), rD)) : vD;
   const alt = body === 'sun' ? 1e9 : vnorm(rD) - surfaceRadius(body);
+  if (MV.md && MV.md.shPrep !== null && isShuttle(MV.md)) { const sh = shuttleAttitude(c, s, t, cfgL); if (sh) return sh; }
   if (s.surface || s.pad || (cfgL && cfgL.landed) || ex.phase === 'landed' || ex.phase === 'touchdown' || ex.phase === 'recovery') return { nose: up, roll: s.hdg || vperp(up) };
   if (s.T > 0 && s.dir && vnorm(s.dir) > 0.5) { const flip = act[0] && act[0].flip; return { nose: flip ? vscale(s.dir, -1) : s.dir, roll: up }; }
   if (cfgL && (cfgL.key === 'capsule' || (cfgL.parts && cfgL.parts.includes('aeroshell')))) {
@@ -109,6 +114,7 @@ function noseDirection(c, s, t, cfgL, act) {
 function computeCraft(c, t) {
   const s = craftState(c, t); c.s = s; if (!s) { c.P = null; return; }
   if (s.surface && !s.pad && MV.md) groundCraft(c, s, t);
+  if (c.o.model === 'shuttle' && MV.md && isShuttle(MV.md)) shuttleGround(c, s, t);
   if (!(s.T > 0) && !s.surface && MV.md) { // a burn the plan applies as an instant Δv: show it firing for its real duration
     const x = MV.md.impAt(t, c.o.id);
     if (x) { const b = x.burn, dur = Math.max(x.t1 - x.t0, 1), m = s.m > 0 ? s.m : (b.m0 || 1000); s.T = m * (b.dv || 0) / dur; s.dir = x.dir || (/insertion|capture|braking|descent|deorbit|retro/i.test(x.name) ? vscale(vunit(s.v), -1) : vunit(s.v)); s.imp = true; }
@@ -133,9 +139,10 @@ function updateCraft(c, t, camPos) {
   const model = c.cur;
   const act = activeMounts(c, s, t, cfgL, model);
   const nd = noseDirection(c, s, t, cfgL, act);
-  basisQuat(nd.nose, nd.roll, _q1);
+  basisQuat(nd.nose, nd.roll, _q1); applyShuttleSpin(nd, _q1);
   if (!s.surface && !s.pad && (c.o.kind === 'debris' || (c.o.kind === 'stage' && !(s.T > 0)))) { // slow tumble after separation (not once it rests on a surface, e.g. the LM descent stage left on the Moon)
-    const age = t - c.o.t0; const ax = new THREE.Vector3(0.3, 0.2, 1).normalize(); _q2.setFromAxisAngle(ax, age * 0.035); _q1.multiply(_q2);
+    const age = c.o.id === 'et' ? Math.max(0, t - c.o.t0 - 90) : t - c.o.t0; // the Shuttle's tank drifts clear before it starts to tumble
+    const ax = new THREE.Vector3(0.3, 0.2, 1).normalize(); _q2.setFromAxisAngle(ax, age * 0.035); _q1.multiply(_q2);
   }
   const realDt = MV.realDt || 0.016; const jump = Math.abs(t - (c.lastT ?? t)) > Math.max(30, (MV.rate || 1) * 0.5) || !c.qInit;
   if (jump) c.q.copy(_q1); else c.q.slerp(_q1, 1 - Math.exp(-realDt * 5));
@@ -149,7 +156,9 @@ function updateCraft(c, t, camPos) {
   // feet on the ground when standing on a surface (and for the whole launch stack, whose state is its base)
   const ud = model.userData; const altK = vnorm(s.r) - surfaceRadius(s.ref);
   const surf = s.surface || s.pad || (cfgL && cfgL.landed) || (cfgL && cfgL.key === 'launch') || (ud.footY != null && altK < 3);
-  if (surf) { let fy = ud.footY; if (fy == null) { const ms = (ud.mounts || []).map(m => m.y); fy = ms.length ? Math.min(...ms) : 0; } model.position.y = ud.yc - (fy + 0) + (cfgL && cfgL.key === 'launch' && s.ref === 'earth' ? PAD_TOP + MOUNT_H : 0); } else model.position.y = 0;
+  model.position.z = 0;
+  if (c.o.model === 'shuttle' && cfgL && cfgL.key === 'sc') { model.position.y = 0; if (s.surface) model.position.z = SH_GEAR_H; } // standing on its wheels
+  else if (surf) { let fy = ud.footY; if (fy == null) { const ms = (ud.mounts || []).map(m => m.y); fy = ms.length ? Math.min(...ms) : 0; } model.position.y = ud.yc - (fy + 0) + (cfgL && cfgL.key === 'launch' && s.ref === 'earth' ? PAD_TOP + MOUNT_H : 0); } else model.position.y = 0;
   c.yOff = model.position.y;
   if (ud.wheels && ud.wheels.length) { const wo = s.rover ? s.rover.wodo : 0; for (const w of ud.wheels) w.rotation.x = -wo / w.userData.wheel; }
   // plumes
@@ -346,10 +355,13 @@ function groundRadius(body, dirEcl, t) {
 function buildSurfaceCaps(md) {
   const cfg = md.cfg; const S = LAUNCH_SITES[cfg.site];
   for (const b of ['earth', 'moon', 'mars']) { const U = R.bodies[b].mat.uniforms; if (U.uCapCos) U.uCapCos.value = [2, 2, 2, 2]; }
+  const rw = cfg.runway && RUNWAYS[cfg.runway];
+  if (rw) addCap('earth', rw.lat, rw.lon, 2.5, rw.elev || 0); // the landing runway first: its elevation (Edwards is 700 m up) shapes the ground
   addCap('earth', S.lat, S.lon, 2.5);
-  if (cfg.landing) addCap('moon', cfg.landing.lat, cfg.landing.lon, 5);
+  if (cfg.landing && typeof cfg.landing === 'object') addCap('moon', cfg.landing.lat, cfg.landing.lon, 5); // (a Shuttle flight's landing is a time)
   for (const l of cfg.legs || []) { if (l.site && l.body === 'mars') addCap('mars', l.site.lat, l.site.lon, 4, l.site.elev || 0); }
   for (const o of md.M.objects) for (const sg of o.segs) if (sg.type === 'surface' && (sg.ref === 'moon' || sg.ref === 'mars' || sg.t0 > md.M.t0 + 3600)) addCap(sg.ref, sg.lat, sg.lon, sg.ref === 'earth' ? 2.5 : sg.ref === 'moon' ? 5 : 4, sg.ref === 'mars' ? (sg.elev || 0) : 0);
+  if (rw) buildRunway(md);
 }
 
 // ---------------- trajectory lines ----------------
@@ -363,11 +375,12 @@ void main(){ vT = aT; vC = aC; gl_Position = projectionMatrix * modelViewMatrix 
 const GLSL_TRAIL_F = `
 #include <common>
 #include <logdepthbuf_pars_fragment>
-uniform float uNow; uniform float uFuture; uniform float uAlpha; varying float vT; varying vec3 vC;
+uniform float uNow; uniform float uFuture; uniform float uAlpha; uniform float uWinP; uniform float uWinF; varying float vT; varying vec3 vC;
 void main(){
   #include <logdepthbuf_fragment>
   float past = step(vT, uNow);
   float a = past > 0.5 ? uAlpha : uFuture * uAlpha;
+  a *= 1.0 - smoothstep(uWinP * 0.6, uWinP, uNow - vT); a *= 1.0 - smoothstep(uWinF * 0.6, uWinF, vT - uNow);
   if (a < 0.01) discard;
   vec3 c = past > 0.5 ? vC : mix(vC, vec3(0.55, 0.62, 0.72), 0.55);
   gl_FragColor = vec4(c, a);
@@ -400,12 +413,13 @@ void main(){
 const GLSL_FAT_F = `
 #include <common>
 #include <logdepthbuf_pars_fragment>
-uniform float uNow; uniform float uFuture; uniform float uAlpha; uniform vec3 uCol; uniform vec3 uCore;
+uniform float uNow; uniform float uFuture; uniform float uAlpha; uniform vec3 uCol; uniform vec3 uCore; uniform float uWinP; uniform float uWinF;
 varying float vT; varying float vSide;
 void main(){
   #include <logdepthbuf_fragment>
   float past = step(vT, uNow); float s = abs(vSide);
   float a = (past > 0.5 ? uAlpha : min(1.0, uFuture * 1.6) * uAlpha) * (1.0 - smoothstep(0.62, 1.0, s));
+  a *= 1.0 - smoothstep(uWinP * 0.6, uWinP, uNow - vT); a *= 1.0 - smoothstep(uWinF * 0.6, uWinF, vT - uNow);
   if (a < 0.01) discard;
   vec3 c = mix(uCol, uCore, (1.0 - smoothstep(0.0, 0.6, s)) * (past > 0.5 ? 0.85 : 0.3));
   if (past < 0.5) c = mix(c, vec3(0.62, 0.56, 0.5), 0.15);
@@ -422,10 +436,11 @@ void main(){ vT = aT; gl_Position = projectionMatrix * modelViewMatrix * vec4(po
 const GLSL_MK_F = `
 #include <common>
 #include <logdepthbuf_pars_fragment>
-uniform float uNow; uniform float uFuture; uniform vec3 uCol; varying float vT;
+uniform float uNow; uniform float uFuture; uniform vec3 uCol; uniform float uWinP; uniform float uWinF; varying float vT;
 void main(){
   #include <logdepthbuf_fragment>
   float r = length(gl_PointCoord - 0.5) * 2.0; if (r > 1.0) discard;
+  if (uNow - vT > uWinP || vT - uNow > uWinF) discard;
   float past = step(vT, uNow);
   float disk = 1.0 - smoothstep(0.72, 1.0, r);
   float ring = smoothstep(0.48, 0.62, r) * (1.0 - smoothstep(0.84, 1.0, r));
@@ -434,7 +449,8 @@ void main(){
   vec3 c = past > 0.5 ? mix(uCol, vec3(1.0, 0.93, 0.82), 1.0 - smoothstep(0.0, 0.42, r)) : uCol;
   gl_FragColor = vec4(c, a);
 }`;
-const TRAIL_U = { uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: 4 }, uMk: { value: 9 } };
+const TRAIL_PAD = 900; // s of path beyond the drawn window kept in the geometry, so it is rebuilt only every few minutes of flight
+const TRAIL_U = { uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: 4 }, uMk: { value: 9 }, uWinP: { value: 1e12 }, uWinF: { value: 1e12 } }; // uWinP/F: seconds of path drawn behind / ahead of now
 const _v2 = new THREE.Vector2();
 // heliocentric points → coordinates in a display frame (planet-centred, Sun-centred or Earth–Moon rotating)
 function toFrameArr(frame, ts, P) {
@@ -451,12 +467,12 @@ function toFrameArr(frame, ts, P) {
 class Trail {
   constructor(o, md, primary) {
     this.o = o; this.md = md; this.primary = primary; this.cache = {};
-    this.mat = new THREE.ShaderMaterial({ vertexShader: GLSL_TRAIL_V, fragmentShader: GLSL_TRAIL_F, uniforms: { uNow: { value: 0 }, uFuture: { value: 0.45 }, uAlpha: { value: primary ? 0.95 : 0.7 } }, transparent: true, depthWrite: false });
+    this.mat = new THREE.ShaderMaterial({ vertexShader: GLSL_TRAIL_V, fragmentShader: GLSL_TRAIL_F, uniforms: { uNow: { value: 0 }, uFuture: { value: 0.45 }, uAlpha: { value: primary ? 0.95 : 0.7 }, uWinP: TRAIL_U.uWinP, uWinF: TRAIL_U.uWinF }, transparent: true, depthWrite: false });
     this.line = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat); this.line.frustumCulled = false; this.line.renderOrder = 3;
     const U = this.mat.uniforms;
-    this.fatMat = new THREE.ShaderMaterial({ vertexShader: GLSL_FAT_V, fragmentShader: GLSL_FAT_F, uniforms: { uNow: U.uNow, uFuture: U.uFuture, uAlpha: { value: primary ? 0.97 : 0.85 }, uRes: TRAIL_U.uRes, uWidth: TRAIL_U.uWidth, uCol: { value: new THREE.Color(PCOL.burn) }, uCore: { value: new THREE.Color(PCOL.burnCore) } }, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    this.fatMat = new THREE.ShaderMaterial({ vertexShader: GLSL_FAT_V, fragmentShader: GLSL_FAT_F, uniforms: { uNow: U.uNow, uFuture: U.uFuture, uAlpha: { value: primary ? 0.97 : 0.85 }, uRes: TRAIL_U.uRes, uWidth: TRAIL_U.uWidth, uCol: { value: new THREE.Color(PCOL.burn) }, uCore: { value: new THREE.Color(PCOL.burnCore) }, uWinP: TRAIL_U.uWinP, uWinF: TRAIL_U.uWinF }, transparent: true, depthWrite: false, side: THREE.DoubleSide });
     this.fat = new THREE.Mesh(new THREE.BufferGeometry(), this.fatMat); this.fat.frustumCulled = false; this.fat.renderOrder = 4; this.fat.visible = false; this.line.add(this.fat);
-    this.mkMat = new THREE.ShaderMaterial({ vertexShader: GLSL_MK_V, fragmentShader: GLSL_MK_F, uniforms: { uNow: U.uNow, uFuture: U.uFuture, uSize: TRAIL_U.uMk, uCol: { value: new THREE.Color(PCOL.burn) } }, transparent: true, depthWrite: false });
+    this.mkMat = new THREE.ShaderMaterial({ vertexShader: GLSL_MK_V, fragmentShader: GLSL_MK_F, uniforms: { uNow: U.uNow, uFuture: U.uFuture, uSize: TRAIL_U.uMk, uCol: { value: new THREE.Color(PCOL.burn) }, uWinP: TRAIL_U.uWinP, uWinF: TRAIL_U.uWinF }, transparent: true, depthWrite: false });
     this.mk = new THREE.Points(new THREE.BufferGeometry(), this.mkMat); this.mk.frustumCulled = false; this.mk.renderOrder = 5; this.mk.visible = false; this.line.add(this.mk);
     R.scene.add(this.line);
     this.sample();
@@ -516,16 +532,22 @@ class Trail {
   }
   frameCoords(frame) { if (!this.cache[frame]) this.cache[frame] = toFrameArr(frame, this.ts, this.P); return this.cache[frame]; }
   markerCoords(frame) { const k = 'mk:' + frame; if (!this.cache[k]) this.cache[k] = toFrameArr(frame, this.mts, this.mP); return this.cache[k]; }
-  build(frame, anchor) {
-    const F = this.frameCoords(frame), n = this.ts.length, pos = new Float32Array(3 * n);
-    for (let i = 0; i < n; i++) { pos[3 * i] = F[3 * i] - anchor[0]; pos[3 * i + 1] = F[3 * i + 1] - anchor[1]; pos[3 * i + 2] = F[3 * i + 2] - anchor[2]; }
+  build(frame, anchor, tNow) {
+    // with a time window (Earth-orbit flights: a few orbits of a two-week flight), only the points inside it go to the GPU
+    const F = this.frameCoords(frame), N = this.ts.length, wP = TRAIL_U.uWinP.value, wF = TRAIL_U.uWinF.value, win = wP < 1e11 && tNow != null;
+    let i0 = 0, i1 = N - 1;
+    if (win) { const lo = tNow - wP - TRAIL_PAD, hi = tNow + wF + TRAIL_PAD; i0 = Math.max(0, bsearch(this.ts, lo)); i1 = Math.min(N - 1, bsearch(this.ts, hi) + 1); }
+    const n = Math.max(0, i1 - i0 + 1), pos = new Float32Array(3 * n);
+    for (let i = 0; i < n; i++) { const k = 3 * (i0 + i); pos[3 * i] = F[k] - anchor[0]; pos[3 * i + 1] = F[k + 1] - anchor[1]; pos[3 * i + 2] = F[k + 2] - anchor[2]; }
     const g = this.line.geometry;
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('aC', new THREE.BufferAttribute(this.col, 3));
-    g.setAttribute('aT', new THREE.BufferAttribute(this.tt, 1));
-    g.setIndex(new THREE.BufferAttribute(this.idx, 1));
+    g.setAttribute('aC', new THREE.BufferAttribute(win ? this.col.subarray(3 * i0, 3 * (i1 + 1)) : this.col, 3));
+    g.setAttribute('aT', new THREE.BufferAttribute(win ? this.tt.subarray(i0, i1 + 1) : this.tt, 1));
+    let idx = this.idx;
+    if (win) { const a = []; for (let i = i0; i < i1; i++) if (!this.brk[i + 1]) a.push(i - i0, i + 1 - i0); idx = n > 65535 ? new Uint32Array(a) : new Uint16Array(a); }
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
     // engine-on ribbon: 4 corners per segment; the far-end corners carry the opposite side sign because their "other" point is behind them
-    const segs = this.pwSegs, m = segs.length;
+    const segs = win ? this.pwSegs.filter(i => i >= i0 && i < i1).map(i => i - i0) : this.pwSegs, m = segs.length, ttW = win ? this.tt.subarray(i0, i1 + 1) : this.tt;
     if (m) {
       const P4 = new Float32Array(12 * m), O4 = new Float32Array(12 * m), S4 = new Float32Array(4 * m), E4 = new Float32Array(4 * m), T4 = new Float32Array(4 * m), I6 = 4 * m > 65535 ? new Uint32Array(6 * m) : new Uint16Array(6 * m);
       for (let k = 0; k < m; k++) {
@@ -533,7 +555,7 @@ class Trail {
         for (let q = 0; q < 3; q++) { const A = pos[3 * i + q], B = pos[3 * j + q]; P4[o12 + q] = A; P4[o12 + 3 + q] = A; P4[o12 + 6 + q] = B; P4[o12 + 9 + q] = B; O4[o12 + q] = B; O4[o12 + 3 + q] = B; O4[o12 + 6 + q] = A; O4[o12 + 9 + q] = A; }
         S4[v] = 1; S4[v + 1] = -1; S4[v + 2] = -1; S4[v + 3] = 1; // offset sign (relative to each corner's own direction)
         E4[v] = 1; E4[v + 1] = -1; E4[v + 2] = 1; E4[v + 3] = -1;  // which edge of the ribbon the corner is on (for the soft edge)
-        T4[v] = T4[v + 1] = this.tt[i]; T4[v + 2] = T4[v + 3] = this.tt[j];
+        T4[v] = T4[v + 1] = ttW[i]; T4[v + 2] = T4[v + 3] = ttW[j];
         I6[6 * k] = v; I6[6 * k + 1] = v + 1; I6[6 * k + 2] = v + 2; I6[6 * k + 3] = v + 1; I6[6 * k + 4] = v + 3; I6[6 * k + 5] = v + 2;
       }
       const fg = this.fat.geometry;
@@ -548,7 +570,7 @@ class Trail {
       const mg = this.mk.geometry; mg.setAttribute('position', new THREE.BufferAttribute(mp, 3)); mg.setAttribute('aT', new THREE.BufferAttribute(mt, 1));
     }
     this.mk.visible = nm > 0;
-    this.anchor = anchor.slice(); this.frame = frame;
+    this.anchor = anchor.slice(); this.frame = frame; this.builtT = tNow;
   }
   dispose() { R.scene.remove(this.line); this.line.geometry.dispose(); this.fat.geometry.dispose(); this.mk.geometry.dispose(); this.mat.dispose(); this.fatMat.dispose(); this.mkMat.dispose(); }
 }
@@ -576,9 +598,9 @@ function updateTrails(t, focusP, camDist) {
   for (const tr of MV.trails) {
     tr.line.visible = show && (MV.layers.future || t >= tr.o.t0);
     if (!tr.line.visible) continue;
-    if (tr.byPhase !== !!MV.layers.phasecol) { tr.colorize(); if (tr.anchor) tr.line.geometry.setAttribute('aC', new THREE.BufferAttribute(tr.col, 3)); }
-    const need = tr.frame !== frame || !tr.anchor || vnorm(vsub(f, tr.anchor)) > Math.max(2000, camDist * 2e3);
-    if (need) tr.build(frame, f);
+    if (tr.byPhase !== !!MV.layers.phasecol) { tr.colorize(); tr.anchor = null; } // rebuild with the new colours
+    const need = tr.frame !== frame || !tr.anchor || vnorm(vsub(f, tr.anchor)) > Math.max(2000, camDist * 2e3) || (TRAIL_U.uWinP.value < 1e11 && !(Math.abs(t - tr.builtT) < TRAIL_PAD * 0.75));
+    if (need) tr.build(frame, f, t);
     const B = frameOrigin(frame, t); const O = R.O;
     if (frame === 'emrot') { const Rm = emRot(t); const A = tr.anchor; const wa = [Rm[0] * A[0] + Rm[1] * A[1] + Rm[2] * A[2], Rm[3] * A[0] + Rm[4] * A[1] + Rm[5] * A[2], Rm[6] * A[0] + Rm[7] * A[1] + Rm[8] * A[2]];
       tr.line.position.set(B[0] + wa[0] - O[0], B[1] + wa[1] - O[1], B[2] + wa[2] - O[2]);

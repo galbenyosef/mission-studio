@@ -81,5 +81,6 @@ const CAPACITY = {
   falconHeavy: [['Low Earth orbit (expendable)', '≈ 63.8 t'], ['Geostationary transfer', '≈ 26.7 t'], ['Mars', '≈ 16.8 t']],
   starship: [['Low Earth orbit (reusable)', '100 – 150 t'], ['Mars (after refilling)', '≈ 100 t']],
   lvm3: [['Geostationary transfer', '≈ 4 t'], ['Chandrayaan-3 (Earth parking orbit)', '3.9 t flown']],
+  shuttle: [['Low Earth orbit (204 km, 28.5°)', '≈ 24.4 t in the payload bay'], ['Space Station orbit (51.6°)', '≈ 16 t'], ['Brought back to Earth', '≈ 14.4 t']],
 };
 const LENSES = [12, 16, 24, 35, 50, 85, 135, 200, 400, 800, 1600, 3200];

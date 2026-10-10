@@ -635,7 +635,6 @@ function simulateWingedEntry(opt) {
       let a = clamp(sigMag, 0, 80 * DEG), fa = f(a), b = clamp(a + (fa > 0 ? 6 : -6) * DEG, 0, 80 * DEG), fb = f(b);
       for (let k = 0; k < 4 && Math.abs(fb) > 2 && Math.abs(fb - fa) > 1e-6; k++) { const c = clamp(b - fb * (b - a) / (fb - fa), 0, 80 * DEG); a = b; fa = fb; b = c; fb = f(b); }
       sigMag = b; lastErr = fb;
-      if (globalThis.DEBUG_ENTRY) console.log('guid', (t - opt.t0).toFixed(0), 'alt', h.toFixed(1), 'v', s.vrn.toFixed(3), 'sig', (b * RAD).toFixed(1), 'err', fb.toFixed(1), 'fa', fa.toFixed(1));
       const pr = predict(r, v, t, sign * sigMag); opt._tgo = pr.t - t;
       const he = headingErr(r, v, t), db = (s.vrn < 1.6 ? 4 : reversals === 0 ? 10.5 : 17.5) * DEG;
       if (Math.abs(he) > db && Math.sign(he) !== sign) { sign = -sign; reversals++; evt(`Roll reversal ${reversals}`, `The heading error to the runway reached ${Math.abs(he * RAD).toFixed(1)}°, so the orbiter rolls through wings-level to bank the other way. Each reversal swings the ground track back across the line to the runway; the Shuttle usually flew three or four.`, 'roll'); }

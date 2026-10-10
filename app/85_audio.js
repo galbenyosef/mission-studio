@@ -203,6 +203,7 @@ const AUD_FX = {
   boom(now, k) { AUD_FX.bang(now, k); audThump(now + 0.04, 1.0 * k, 60, 24, 1.2); audNoiseHit(now + 0.05, SND.g.white, 'bandpass', 1800, 0.5 * k, 0.02, 1.4, 0.5); }, // liftoff
   fwump(now, k) { audNoiseHit(now, SND.g.white, 'bandpass', 420, 0.8 * k, 0.06, 0.8, 0.9); audThump(now + 0.15, 0.6 * k, 62, 38, 0.3); }, // canopy opens
   thud(now, k) { audThump(now, 0.9 * k, 72, 28, 0.5); audNoiseHit(now, SND.g.brown, 'lowpass', 300, 0.5 * k, 0.004, 0.18); }, // touchdown
+  sonic(now, k) { for (const dt of [0, 0.38]) { audNoiseHit(now + dt, SND.g.brown, 'lowpass', 260, 1.0 * k, 0.002, 0.28); audThump(now + dt, 0.9 * k, 48, 26, 0.45); } }, // the orbiter's twin sonic boom
   clunk(now, k) { audThump(now, 0.6 * k, 150, 60, 0.18); audThump(now + 0.12, 0.5 * k, 130, 55, 0.2); audNoiseHit(now, SND.g.white, 'bandpass', 2400, 0.12 * k, 0.002, 0.3, 6); }, // docking latches
 };
 const AUD_EVENT = { staging: 'bang', sep: 'bang', jettison: 'bang', skycrane: 'bang', ignition: 'whoomp', burn: 'whoomp', powered: 'whoomp', chute: 'fwump', touchdown: 'thud', landing: 'thud', dock: 'clunk' };
@@ -210,6 +211,7 @@ function audioEvent(e) {
   const ctx = SND.ctx; if (!ctx || !SND.on || ctx.state !== 'running' || !STATE.playing || STATE.rate > 150) return;
   let fx = AUD_EVENT[e.kind];
   if (e.kind === 'launch') fx = e.ign ? 'whoomp' : 'boom';
+  if (/^Sonic booms?/.test(e.name || '')) fx = 'sonic';
   if (!fx) return;
   const c = e.obj ? craftById(e.obj) : null; let k = 1;
   if (c && c.s && c.node && c.node.visible) {

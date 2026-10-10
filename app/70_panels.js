@@ -87,14 +87,16 @@ function buildInfoPanel() {
   const rows = [];
   const add = (k, v) => rows.push(h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
   add('Liftoff', fmtUTC(M.t0) + ' UTC');
-  const a = M.summary.ascent; if (a) { add('Orbit insertion', `${fMET(a.tIns)} · ${fx(a.hp, 0)} × ${fx(a.ha, 0)} km`); add('Ascent max g · max q', `${a.maxG.toFixed(2)} g · ${fx(a.maxQ / 1000, 1)} kPa`); add('Launch azimuth', a.az.toFixed(1) + '°'); }
+  const a = M.summary.ascent; if (a) { add(L.sideMount ? 'Main engine cutoff' : 'Orbit insertion', `${fMET(a.tIns)} · ${fx(a.hp, 0)} × ${fx(a.ha, 0)} km`); add('Ascent max g · max q', `${a.maxG.toFixed(2)} g · ${fx(a.maxQ / 1000, 1)} kPa`); add('Launch azimuth', a.az.toFixed(1) + '°'); }
   if (M.summary.design) add('Departure C3 · v∞', `${M.summary.design.C3.toFixed(2)} km²/s² · ${M.summary.design.vinfDep.toFixed(2)} km/s`);
   for (const e of md.events) if (['touchdown', 'landing'].includes(e.kind) && /touchdown|splashdown|landing/i.test(e.name)) add(e.name, fmtUTC(e.t) + ' UTC (' + fMET(e.t - M.t0) + ')');
   for (const e of md.events) if (e.kind === 'flyby') add(e.name, fmtUTC(e.t) + ' UTC');
-  if (M.summary.landing) add('Landing accuracy', `${fx(M.summary.landing.miss * 1000, 0)} m from target`);
+  if (M.summary.landing && M.summary.landing.runway) add('Runway', M.summary.landing.runway);
+  else if (M.summary.landing) add('Landing accuracy', `${fx(M.summary.landing.miss * 1000, 0)} m from target`);
   const ents = M.summary.entries || (M.summary.entry ? [{ body: 'earth', ...M.summary.entry }] : []);
-  for (const en of ents) add(`Entry at ${BODIES[en.body || 'earth'].name}`, `${en.vEI.toFixed(2)} km/s · peak ${en.maxG.toFixed(1)} g · ${fx(en.maxHeat, 0)} W/cm² · ${fx(en.miss, 0)} km from target`);
-  if (md.stats.maxDistEarth) add('Farthest from Earth', `${fDist(md.stats.maxDistEarth)} (${fmtUTC(md.stats.tMaxDist, false)})`);
+  for (const en of ents) add(`Entry at ${BODIES[en.body || 'earth'].name}`, `${en.vEI.toFixed(2)} km/s · peak ${en.maxG.toFixed(1)} g · ${fx(en.maxHeat, 0)} W/cm² · ` + (en.reversals != null ? `${en.reversals} roll reversals` : `${fx(en.miss, 0)} km from target`));
+  if (md.stats.maxDistEarth && (md.cfg.profile || '').startsWith('leo')) add('Highest point', `${fDist(md.stats.maxDistEarth - BODIES.earth.R)} above the equator's radius`);
+  else if (md.stats.maxDistEarth) add('Farthest from Earth', `${fDist(md.stats.maxDistEarth)} (${fmtUTC(md.stats.tMaxDist, false)})`);
   for (const f of md.stats.flybys || []) add(`Gravity assist (${BODIES[f.body].name})`, `solar orbit ${f.before} → ${f.after}`);
   add('Mission duration', fTime(M.tEnd - M.t0));
   pane.append(h('div', { class: 'kv kv2' }, ...rows));

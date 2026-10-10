@@ -1,6 +1,6 @@
-# Moon & Mars Mission Studio
+# Mission Studio
 
-**A 3D simulator of real Moon and Mars missions that runs in your browser.** Pick a mission and watch it fly, from the countdown on the pad to landing. On-screen numbers explain every moment: payload, rocket size, propellant, gravity, acceleration, orbits and gravity assists. It was built for storyboarding a solar-system film, so the cameras, lenses and shot capture work like a film tool.
+**A 3D simulator of real space missions — the Space Shuttle, the Moon and Mars — that runs in your browser.** Pick a mission and watch it fly, from the countdown on the pad to landing. On-screen numbers explain every moment: payload, rocket size, propellant, gravity, acceleration, orbits and gravity assists. It was built for storyboarding a solar-system film, so the cameras, lenses and shot capture work like a film tool.
 
 [**▶ Open the simulator**](https://sanghyunpark.pages.dev/apps/mission-studio/) · [Watch the 1-minute video](https://www.youtube.com/watch?v=RXN-PMDKZEs) · [About the project](https://sanghyunpark.pages.dev/projects/mission-studio/) · [한국어 안내](README.ko.md)
 
@@ -8,7 +8,7 @@
 
 ## What you can do
 
-- **Choose a mission or build your own.** There are 13 presets based on flown and planned missions. Before the flight starts you can change:
+- **Choose a mission or build your own.** There are 16 presets based on flown and planned missions. Before the flight starts you can change:
   - the launch vehicle
   - the launch date and site
   - the parking orbit
@@ -16,6 +16,7 @@
   - the lunar orbit altitude
   - the landing site and surface stay
   - the crew
+  - for the Space Shuttle: the orbit, the payload in the bay, the OMS propellant, the landing runway and the drag chute
 - **Watch the whole voyage.** The simulation includes:
   - liquid engines lighting on the pad before T−0 and the hold-down release
   - the ascent, with staging and fairing jettison
@@ -24,6 +25,7 @@
   - entry, parachutes and the sky crane
   - powered landings, rover drives, lunar ascent and rendezvous
   - the return home
+  - the Space Shuttle: the roll program, booster separation and the falling External Tank, OMS burns, docking with the International Space Station or releasing the Hubble Space Telescope from the robot arm, a gliding entry that steers with roll reversals, and the landing on a runway
 - **Read the numbers as they change.**
   - Altitude and speeds (inertial, over the surface, vertical) and the g-load felt.
   - Thrust and acceleration, propellant left and the Δv budget for each stage.
@@ -49,6 +51,7 @@
 
 | | |
 |---|---|
+| ![STS-135: Atlantis docked to the International Space Station](media/screenshot-iss.jpg) | ![STS-135: Atlantis touching down on Runway 15 at Kennedy before dawn, drag chute out](media/screenshot-landing.jpg) |
 | ![Trans-lunar injection: the burn as an orange ribbon over Earth](media/screenshot-tli.jpg) | ![Perseverance on Mars: wheel tracks and its shadow](media/screenshot-rover.jpg) |
 | ![Europa Clipper flying past Mars for a gravity assist](media/screenshot-clipper.jpg) | ![Apollo 11 arriving at the Moon for lunar orbit insertion](media/screenshot-loi.jpg) |
 
@@ -56,6 +59,9 @@
 
 | Mission | Year | Launch vehicle | Profile | Status |
 |---|---|---|---|---|
+| STS-1 Columbia | 1981 | Space Shuttle | First Shuttle flight, landing on Rogers Dry Lake | Flown |
+| STS-31 Discovery | 1990 | Space Shuttle | Hubble Space Telescope deploy | Flown |
+| STS-135 Atlantis | 2011 | Space Shuttle | Docking with the ISS, last Shuttle flight | Flown |
 | Apollo 8 | 1968 | Saturn V | Crewed lunar orbit & return | Flown |
 | Apollo 11 | 1969 | Saturn V | Crewed landing & return | Flown |
 | Apollo 13 | 1970 | Saturn V | Free-return abort (flyby) | Flown |
@@ -78,6 +84,11 @@ Each flight is calculated from physics, not keyframed. The planner solves the mi
 - **Ascent.** Each stage is integrated numerically: a gravity turn followed by closed-loop insertion guidance. The vehicle data are real: thrust at sea level and in vacuum, Isp, dry mass and propellant. The atmosphere uses the US-1976 model, and drag is modelled for the stack.
 - **Earth–Moon flights.** These are integrated with a Dormand–Prince 5(4) integrator in an Earth + Moon + Sun force field. Burns are finite and targeted with Newton iterations.
 - **Interplanetary flights.** These use patched conics. Departures are Lambert solutions and flybys use B-plane targeting. The planet-centred hyperbola and the heliocentric arc join at the sphere of influence.
+- **Space Shuttle flights.**
+  - Orbits include Earth's oblateness (J2), which swings a low orbit's plane several degrees a day.
+  - The ascent follows the main engines' throttle schedule and the 3 g limit, and cuts off on the flight's real MECO orbit; the OMS burns are finite.
+  - For the ISS, the phasing burns are solved so that docking and landing fall at the historical times.
+  - Entry guidance steers by bank angle, with roll reversals, toward the runway. The approach then flies the heading alignment cone, the steep outer glideslope and the flare onto the runway.
 - **Landing.**
   - Mars entry has a parachute and a sky crane.
   - Capsules fly a lifting entry.
@@ -88,7 +99,8 @@ Each flight is calculated from physics, not keyframed. The planner solves the mi
 
 This is a storyboard and teaching tool, not mission-design software.
 
-- Trajectories are solved again from the mission inputs, so event times are close to the flown missions but not identical. For example, Apollo 11's touchdown comes out at about 103 h 36 m after liftoff, against 102 h 45 m in reality.
+- Trajectories are solved again from the mission inputs, so event times are close to the flown missions but not identical. For example, Apollo 11's touchdown comes out at about 103 h 36 m after liftoff, against 102 h 45 m in reality. The Shuttle landings come within a few minutes of the real ones: STS-1 1 minute late, STS-31 5 minutes early and STS-135 2 minutes late.
+- The International Space Station is placed where Atlantis meets it, at its real altitude and inclination. Its position along the orbit before the rendezvous is not the historical one.
 - After Perseverance's first drive, which matches the real one on 4 March 2021, the rover's daily drives are illustrative.
 - The concept missions follow published architectures and their stated assumptions.
 
@@ -134,7 +146,7 @@ media/    screenshots for this README
 - **Mars, Venus, Jupiter and Saturn maps:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), resized.
 - **Stars:** `stars.6.json` from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (BSD 3-Clause), based on XHIP (Anderson & Francis 2012, VizieR V/137D).
 - **Fonts:** IBM Plex Sans Condensed and IBM Plex Mono ([SIL OFL 1.1](https://openfontlicense.org/)), via Google Fonts.
-- **Mission and vehicle data:** NASA mission reports and press kits, NASA/JPL, CNSA releases, and published SpaceX and ISRO figures.
+- **Mission and vehicle data:** NASA mission reports and press kits (including the Space Shuttle press kits, the Shuttle Crew Operations Manual and the NSTS reference manual), NASA/JPL, CNSA releases, and published SpaceX and ISRO figures.
 
 ## License
 

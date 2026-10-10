@@ -111,11 +111,16 @@ function planLEO(cfg, progress = () => { }) {
   {
     const et = M.addObj(new MObject('et', 'External Tank', { kind: 'stage', model: 'stage', color: '#d98b4a' }));
     et.setConfig(tETsep, 'stage', { key: 'stage', launcher: cfg.launcher, stage: 1, variant: cfg.lvVariant });
-    const up = vunit(st().r), mET = (asc.upper ? asc.upper.dry + asc.upper.propLeft : L.stages[1].dry);
-    const rET = leoInt(tETsep, [...st().r, ...vadd(st().v, vscale(up, -0.0012)), mET], tETsep + 3 * H, { events: [{ name: 'breakup', dir: -1, terminal: true, g: (tt, yy) => Math.hypot(yy[0], yy[1], yy[2]) - (R_E + 75) }] });
+    // The stack's attitude after MECO (as the viewer draws it): nose along the velocity, the tank's −Z side (where the
+    // orbiter rides) facing down — or up after the roll to heads-up. The trajectory so far is the stack's reference point
+    // on the tank's axis; the orbiter's own reference point sits 7.4 m aft of it and 8.55 m off the axis.
+    const sv = st(), n = vunit(sv.v), upS = vunit(sv.r), hN = vunit(vcross(asc.r, asc.v)), A = vunit(vcross(hN, upS)), ref = vsub(upS, A);
+    let Zs = vunit(vsub(ref, vscale(n, vdot(ref, n)))); if (cfg.headsUpMET) Zs = vscale(Zs, -1);
+    const offOrb = vadd(vscale(n, -0.007405), vscale(Zs, -0.00855)), mET = (asc.upper ? asc.upper.dry + asc.upper.propLeft : L.stages[1].dry);
+    const rET = leoInt(tETsep, [...sv.r, ...vadd(sv.v, vscale(Zs, 0.0006)), mET], tETsep + 3 * H, { events: [{ name: 'breakup', dir: -1, terminal: true, g: (tt, yy) => Math.hypot(yy[0], yy[1], yy[2]) - (R_E + 75) }] });
     et.add(resToSeg(rET, 'External Tank — falling back'));
-    if (rET.stopEvent) { const ll = subPointLL('earth', [rET.stopEvent.y[0], rET.stopEvent.y[1], rET.stopEvent.y[2]], rET.stopEvent.t); if (globalThis.DEBUG_LEO) console.log('ET breakup', ll); M.ev(rET.stopEvent.t, 'et', 'External Tank breaks up', `The empty tank, ${Math.round(mET / 1000)} t, comes back into the atmosphere half an orbit after separation and breaks up around 75 km over the ${oceanName(ll[0], ll[1])}. It was the only part of the Shuttle that was not reused.`, 'info'); }
-    y[6] = P.massOf(SC.orbiter); y[3] += up[0] * 0.0012; y[4] += up[1] * 0.0012; y[5] += up[2] * 0.0012;
+    if (rET.stopEvent) { const ll = subPointLL('earth', [rET.stopEvent.y[0], rET.stopEvent.y[1], rET.stopEvent.y[2]], rET.stopEvent.t); M.ev(rET.stopEvent.t, 'et', 'External Tank breaks up', `The empty tank, ${Math.round(mET / 1000)} t, comes back into the atmosphere half an orbit after separation and breaks up around 75 km over the ${oceanName(ll[0], ll[1])}. It was the only part of the Shuttle that was not reused.`, 'info'); }
+    y[6] = P.massOf(SC.orbiter); for (let k = 0; k < 3; k++) { y[k] += offOrb[k]; y[3 + k] -= Zs[k] * 0.0012; } // the −Z translation, away from the tank
     ship.setConfig(tETsep, 'sc', orbiterCfg(cfg));
     M.ev(tETsep, 'ship', 'External Tank separation', `Eighteen seconds after MECO the tank is released and the orbiter fires its reaction-control jets to move clear (a 4 ft/s "−Z translation"). MECO left the orbit's low point inside the atmosphere on purpose, so the tank falls back on its own; the orbiter will raise its perigee with the OMS.`, 'sep');
   }
@@ -128,10 +133,12 @@ function planLEO(cfg, progress = () => { }) {
   const tIns = t;
   // payload bay doors open about 1½ hours after launch: the radiators on their inner faces must dump the orbiter's heat
   const tBay = t0 + (cfg.bayOpenMET ?? 1.5) * H;
+  ship.setConfig(tBay, 'sc', { ...orbiterCfg(cfg), bay: 'open' });
   M.ev(tBay, 'ship', 'Payload bay doors open', 'The two 18-m doors swing open. Their inner faces are the radiators that carry the orbiter’s heat away — without opening them the crew would have to come home within hours.', 'info');
   // ---------------- orbit operations ----------------
   const ops = { M, cfg, SC, P, ship, L, t0, H, omsBurn, coast, dvToApsis, get t() { return t; }, set t(v) { t = v; }, get y() { return y; }, set y(v) { y = v; }, st, tBay, rwy, progress };
   for (const b of cfg.orbitBurns || []) { let tc = t0 + b.met * H; if (b.at) { const pre = leoInt(t, y, tc); const yy = pre.y[pre.y.length - 1]; tc = nextApsis(tc, [yy[0], yy[1], yy[2]], [yy[3], yy[4], yy[5]], b.at === 'apo'); } omsBurn(tc, (r, v) => b.ha != null ? dvToApsis(r, v, R_E + b.ha) : dvToApsis(r, v, R_E + b.hp), b.name, x => `${b.desc || 'Orbit adjustment.'} Δv ${Math.round(x.dv)} m/s. Orbit now ${Math.round(x.hp)} × ${Math.round(x.ha)} km.`, 'in orbit'); }
+  for (const e of cfg.scripted || []) M.ev(t0 + e.met * H, 'ship', e.name, e.desc, e.kind || 'info');
   if (cfg.iss) issRendezvous(ops);
   if (cfg.deploy) payloadDeploy(ops);
   return shuttleReturn(ops, tIns);
@@ -218,7 +225,7 @@ function issRendezvous(o) {
   iss.setConfig(M.t0 - 2 * H, 'sc', { key: 'sc', sc: 'iss', parts: ['iss'] });
   // relative-motion legs (LVLH metres → absolute samples): R-bar approach, R-bar pitch maneuver, swing to the V-bar, docking
   const rel0 = toLvlh(lvlh(rI, vI), vsub(sA.r, rI));
-  const dock = c.dockOffset || [0.0285, 0, -0.0045];
+  const dock = c.dockOffset || [0.0231, 0, -0.0068]; // orbiter reference point from the station's, LVLH km: docking ports touching (renderer models)
   const tR0 = isoToT(c.rpm), tR1 = tR0 + 9 * 60, tV = tDock - 28 * 60, tV2 = tDock - 7 * 60;
   const ease = x => smoothstep(clamp(x, 0, 1));
   const relAt = tt => {
@@ -249,7 +256,7 @@ function issRendezvous(o) {
   // docked
   ship.setConfig(tArr - 20 * 60, 'sc', { ...orbiterCfg(cfg), bay: 'open', att: 'rbar' });
   ship.setConfig(tR0, 'sc', { ...orbiterCfg(cfg), bay: 'open', att: 'rpm', rpm0: tR0, rpm1: tR1 });
-  ship.setConfig(tR1, 'sc', { ...orbiterCfg(cfg), bay: 'open', att: 'vbar' });
+  ship.setConfig(tR1, 'sc', { ...orbiterCfg(cfg), bay: 'open', att: 'vbar', sw0: tR1, sw1: tV }); // pitch up while swinging to the V-bar
   const mplmOut = c.mplmOut ? isoToT(c.mplmOut) : null, mplmIn = c.mplmIn ? isoToT(c.mplmIn) : null;
   const dockedRel = () => dock;
   const docked = relSamples(tDock, tUndock, 30, dockedRel, 'docked to the ISS');
@@ -301,7 +308,7 @@ function payloadDeploy(o) {
   M.ev(tArr, 'ship', 'Solar arrays and antennas unfurl', 'The two 12-m solar array wings roll out from their storage drums and the two high-gain antennas swing out on their booms. One wing stuck partway, and two spacewalkers suited up in the airlock before ground controllers freed it with a software fix.', 'photo');
   // release: the payload becomes its own spacecraft; the orbiter backs away
   o.coast(tRel, 'in orbit — deploy');
-  const s = o.st(); const F = lvlh(s.r, s.v), off = fromLvlh(F, [0, 0, 0.014]);
+  const s = o.st(); const F = lvlh(s.r, s.v), off = fromLvlh(F, d.armOffset || [0.0016, -0.0004, 0.0146]); // where the arm holds it, upright over the bay
   const pay = M.addObj(new MObject(d.id || 'payload', d.name, { kind: 'craft', model: d.model, color: '#bfe3ff' }));
   pay.setConfig(tRel, 'sc', { key: 'sc', sc: d.model, parts: ['deployed'] });
   if (d.doorOpen) { const td = isoToT(d.doorOpen); pay.setConfig(td, 'sc', { key: 'sc', sc: d.model, parts: ['deployed'], door: true }); M.ev(td, d.id || 'payload', 'Aperture door opens', 'Two days after the deploy, the telescope’s aperture door swings open; first light follows a month later — and with it the discovery that the main mirror had been ground to the wrong shape.', 'photo'); }
@@ -335,7 +342,6 @@ function shuttleReturn(o, tIns) {
     prev2 = prev; prev = { t: tt, d };
   }
   const pick = passes.map(p => ({ ...p, cost: Math.abs(p.t + 13 * 60 - tLandNom) / 60 + (p.d > 1250 ? 1e6 : p.d / 100) })).sort((a, b) => a.cost - b.cost)[0];
-  if (globalThis.DEBUG_LEO) console.log("passes", passes.map(p => fmtUTC(p.t) + " " + Math.round(p.d) + "km").join(" / "), "pick", pick && fmtUTC(pick.t));
   if (!pick) { M.warnings.push('No landing opportunity found near the planned landing time.'); M.failed = 'deorbit'; o.coast(tLandNom, 'in orbit'); M.finalize(); return M; }
   if (pick.d > 1250) M.warnings.push(`The landing pass is ${Math.round(pick.d)} km off the runway — more than the orbiter's usual cross-range.`);
   // deorbit Δv: retrograde, sized for a −1.2° flight-path angle at entry interface (two-body estimate)
@@ -361,6 +367,7 @@ function shuttleReturn(o, tIns) {
   M.phase(tIns, td - 1800, cfg.orbitPhaseName || 'In orbit', '#4ea8de');
   // deorbit burn
   o.progress('Deorbit burn and entry…');
+  o.coast(Math.min(tDoors, td - 1800), 'in orbit');
   const b = o.omsBurn(td, (r, v) => vscale(vunit(v), -tr.dv), 'Deorbit burn', x => `Flying tail-first and upside down, half a world away from ${rwy.short}, both OMS engines fire for ${fmtDur(x.dur)}: Δv ${Math.round(x.dv)} m/s, enough to drop the far side of the orbit into the atmosphere. There is no turning back after this burn.`, 'in orbit — deorbit preparations');
   ship.setConfig(o.t + 150, 'sc', { ...orbiterCfg(cfg), pay: cfg.bayPayloadReturn !== undefined ? cfg.bayPayloadReturn : cfg.bayPayload || null, bay: 'closed', att: 'entry' });
   M.ev(o.t + 150, 'ship', 'Pitch around to entry attitude', 'The orbiter turns nose-forward and raises its nose 40° above the direction of flight, so the black heat-shield tiles on its belly will meet the air first.', 'info');
@@ -397,7 +404,7 @@ function shuttleReturn(o, tIns) {
 // TAEM, heading alignment cone, outer and inner glideslopes, flare, touchdown and rollout, flown as a guided path
 // (the orbiter is a glider: speed comes from trading altitude). Returns ECL samples and events.
 function shuttleApproach(start, rwy, opt) {
-  const g = 9.80665, t0 = start.t, Rb = R_E + rwy.elev, gearH = 0.0036, ogs = (opt.ogs || 19) * DEG;
+  const g = 9.80665, t0 = start.t, Rb = R_E + rwy.elev, gearH = 0.0056, ogs = (opt.ogs || 19) * DEG; // gearH: orbiter reference plane above the wheels
   const omega = bodyOmegaEcl('earth', t0), Mb = bodyFixedToEcl('earth', t0), toBF = v => mvec(mT(Mb), v);
   const rB = toBF(start.r), vB = toBF(vsub(start.v, vcross(omega, start.r)));
   const U = llToBF(rwy.lat, rwy.lon), Tp = vscale(U, Rb), E = vunit(vcross([0, 0, 1], U)), N = vcross(U, E);
@@ -492,13 +499,20 @@ function shuttleApproach(start, rwy, opt) {
     const vBv = vadd(vscale(dBh, Math.sqrt(Math.max(vms * vms - s.vh * s.vh, 0)) / 1000), vscale(upB, s.vh / 1000));
     const M_ = bodyFixedToEcl('earth', tAbs), w = bodyOmegaEcl('earth', tAbs), r = mvec(M_, pB), vv = vadd(mvec(M_, vBv), vcross(w, r));
     const phase = s.seg === 'taem' ? (mach > 1 ? 'TAEM — supersonic glide' : 'TAEM — subsonic glide') : s.seg === 'hac' ? 'heading alignment cone' : s.seg === 'final' ? (s.x > xPf ? 'flare — inner glideslope' : 'final approach — outer glideslope') : (tq < tStop - 0.01 ? 'rollout' : 'wheel stop');
-    samples.push({ t: tAbs, r, v: vv, m: opt.m, T: 0, thrDir: null, D: [0, 0, 0], alt: hAbs, q, mach, heat: 0, gload: 1 / Math.cos(bankS * DEG), phase, bank: bankS, alpha });
+    samples.push({ t: tAbs, r, v: vv, m: opt.m, T: 0, thrDir: null, D: [0, 0, 0], alt: hAbs, q, mach, heat: 0, gload: 1 / Math.cos(bankS * DEG), phase, bank: bankS, alpha, _va: mvec(M_, vBv), _vs: vms, _vh: s.vh });
     if (!machOne && mach < 1) { machOne = true; events.push({ t: tAbs, name: 'Sonic booms', desc: `The orbiter slows below the speed of sound ${Math.round(hAbs)} km up. A moment later the twin “ba-boom” of its bow and tail shock waves rolls across ${rwy.short.split(' Runway')[0]}: the signal for spectators that the orbiter is coming in.`, kind: 'info' }); }
     if (!hacEv && s.seg === 'hac') { hacEv = true; events.push({ t: tAbs, name: 'Heading alignment cone', desc: `The orbiter banks into a ${Math.round(hac.dth * RAD)}° turn around an imaginary cone ${(rH).toFixed(1)} km in radius, spiralling down to line up with ${rwy.short}. The radius of the turn is the energy control: wider to fly a longer path, tighter to cut it short.`, kind: 'info' }); }
     if (!alEv && s.seg === 'final') { alEv = true; events.push({ t: tAbs, name: 'Approach and landing', desc: `On the centreline, ${(hAbs * 1000 / 0.3048 / 1000).toFixed(0)},000 ft up at 290 knots: the orbiter dives down the ${(ogs * RAD).toFixed(0)}° outer glideslope, about seven times steeper than an airliner’s, with the speed brake (the split rudder) holding the airspeed.`, kind: 'approach' }); }
     if (!pfEv && s.seg === 'final' && s.x > xPf) { pfEv = true; events.push({ t: tAbs, name: 'Preflare', desc: 'At 1,750 ft the commander pulls the nose up, flattening the dive onto the 1.5° inner glideslope.', kind: 'approach' }); }
     if (gearT == null && s.seg === 'final' && s.h < 0.09) { gearT = tAbs; events.push({ t: tAbs, name: 'Landing gear down', desc: 'The pilot arms and deploys the landing gear at about 300 ft — late, because the gear doors are part of the heat shield and the extended gear adds drag. Gravity and springs lower it in seconds.', kind: 'info' }); }
   }
+  // drag (and on the runway, braking) from the along-path balance: dV/dt = −D/m − g·sin γ
+  const Dacc = samples.map((s, i) => {
+    const a = samples[Math.max(0, i - 1)], b = samples[Math.min(samples.length - 1, i + 1)];
+    const dVdt = b.t > a.t ? (b._vs - a._vs) / (b.t - a.t) : 0, sg = s._vs > 1 ? clamp(s._vh / s._vs, -1, 1) : 0;
+    return Math.max(0, -dVdt - g * sg);
+  });
+  samples.forEach((s, i) => { if (vnorm(s._va) > 1e-9) s.D = vscale(vunit(s._va), -opt.m * Dacc[i]); delete s._va; delete s._vs; delete s._vh; });
   const roll0 = roll[0], tdV = vTD;
   events.push({ t: t0 + tTD, name: 'Main gear touchdown', desc: `${Math.round(tdV / 0.5144)} knots (${Math.round(tdV * 3.6)} km/h), ${Math.round(XTD * 1000 / 0.3048)} ft past the threshold of ${rwy.short}.`, kind: 'touchdown' });
   if (chuteT) events.push({ t: t0 + chuteT, name: 'Drag chute', desc: 'The 40-ft drag chute deploys from the base of the tail, cutting the rollout by about 2,000 ft and saving the brakes (used from 1992).', kind: 'chute' });

@@ -32,8 +32,8 @@ const LAUNCH_SITES = {
 // (FAA data). The Rogers Dry Lake lakebed runway 23 has no published threshold coordinates: its position here is
 // approximate (on the lakebed, parallel to the main runway).
 const RUNWAYS = {
-  KSC15: { name: 'Kennedy Space Center, Shuttle Landing Facility Runway 15', short: 'KSC Runway 15', lat: 28.632753, lon: -80.706062, hdg: 150, len: 4.572, wid: 0.091, elev: 0.003, surface: 'concrete', num: '15', ground: 'florida' },
-  KSC33: { name: 'Kennedy Space Center, Shuttle Landing Facility Runway 33', short: 'KSC Runway 33', lat: 28.597026, lon: -80.682680, hdg: 330, len: 4.572, wid: 0.091, elev: 0.003, surface: 'concrete', num: '33', ground: 'florida' },
+  KSC15: { name: 'Kennedy Space Center, Shuttle Landing Facility Runway 15', short: 'KSC Runway 15', lat: 28.632753, lon: -80.706062, hdg: 150, len: 4.572, wid: 0.091, elev: 0, surface: 'concrete', num: '15', ground: 'florida' },
+  KSC33: { name: 'Kennedy Space Center, Shuttle Landing Facility Runway 33', short: 'KSC Runway 33', lat: 28.597026, lon: -80.682680, hdg: 330, len: 4.572, wid: 0.091, elev: 0, surface: 'concrete', num: '33', ground: 'florida' },
   EDW22: { name: 'Edwards Air Force Base, Runway 22 (concrete)', short: 'Edwards Runway 22', lat: 34.91633, lon: -117.86250, hdg: 238, len: 4.579, wid: 0.091, elev: 0.696, surface: 'concrete', num: '22', ground: 'desert' },
   EDW04: { name: 'Edwards Air Force Base, Runway 04 (concrete)', short: 'Edwards Runway 04', lat: 34.89450, lon: -117.90500, hdg: 58, len: 4.579, wid: 0.091, elev: 0.702, surface: 'concrete', num: '04', ground: 'desert' },
   EDW23L: { name: 'Edwards Air Force Base, Rogers Dry Lake Runway 23 (lakebed)', short: 'Rogers Dry Lake Runway 23', lat: 34.9700, lon: -117.7700, hdg: 238, len: 8.0, wid: 0.27, elev: 0.693, surface: 'lakebed', num: '23', ground: 'lakebed', approx: true },
@@ -170,7 +170,7 @@ LAUNCHERS.shuttle = {
   stages: [
     { id: 'SRB', name: '2 × Solid Rocket Boosters (RSRM)', prop: 'solid', engine: 'RSRM', n: 2, thrustSL: 2 * 12.45e6, thrustVac: 2 * 13.61e6, ispSL: 242, ispVac: 268, dry: 2 * 87000, propMass: 2 * 501000, parallel: true,
       curve: [[0, 1.0], [10, 1.062], [20, 1.088], [30, 0.938], [50, 0.775], [60, 0.80], [75, 0.85], [100, 0.732], [110, 0.369], [115, 0.258], [120, 0.144], [124, 0.016], [130, 0.016]],
-      booster: { count: 2, offset: 6.4, y0: -3.0 },
+      booster: { count: 2, offset: 6.4, y0: -8.0 },
       geom: [[3.0, 2.6, 1.86, C.white], [35.4, 1.855, 1.855, C.white, { bands: 4 }], [3.3, 1.855, 1.855, C.white], [3.3, 1.855, 0.75, C.white], [0.46, 0.75, 0.1, C.white]], eng: { n: 1, len: 1.6, r: 1.9, layout: 'single' } },
     { id: 'ET', name: 'External Tank (3 × RS-25 on the orbiter)', prop: 'hydrolox', engine: 'RS-25', n: 3, thrustSL: 3 * 1.769e6, thrustVac: 3 * 2.188e6, ispSL: 365, ispVac: 452.3, dry: 26500, propMass: 729000, maxG: 3.0, minThr: 0.67,
       sched: [[0, 1], [30, 1], [32, 0.69], [50, 0.69], [53, 1]],

@@ -5,8 +5,10 @@
 const SETUP = { scn: null, cfg: null, orig: null, plan: null, planErr: null, planning: false, debounce: 0, progress: '' };
 const MOON_SITES = [['Tranquility Base (Apollo 11)', 0.674, 23.473], ['Ocean of Storms (Apollo 12)', -3.012, -23.422], ['Fra Mauro (Apollo 14)', -3.645, -17.471], ['Hadley–Apennine (Apollo 15)', 26.132, 3.634], ['Descartes (Apollo 16)', -8.973, 15.5], ['Taurus–Littrow (Apollo 17)', 20.191, 30.772], ['Mons Rümker (Chang’e 5)', 43.058, -51.916], ['Copernicus crater rim', 9.62, -20.08]];
 const MARS_SITES = [['Jezero Crater (Perseverance)', 18.4447, 77.4508, -2.57], ['Gale Crater (Curiosity)', -4.5895, 137.4417, -4.5], ['Utopia Planitia (Zhurong)', 25.066, 109.925, -4.1], ['Arcadia Planitia (Starship candidate)', 40.8, 150.0, -4.0], ['Elysium Planitia (InSight)', 4.502, 135.623, -2.6], ['Meridiani Planum (Opportunity)', -1.946, -5.527, -1.4], ['Chryse Planitia (Viking 1)', 22.27, -47.95, -3.6]];
+const RUNWAY_LIST = () => Object.entries(RUNWAYS).map(([k, r]) => [k, r.name]);
 const EARTH_SITES = [['Pacific, SW of Hawaii (Apollo)', 13.3, -169.15], ['Pacific off San Diego (Artemis)', 32.3, -117.8], ['Siziwang Banner, Inner Mongolia', 42.0, 111.5], ['Starbase, Texas', 25.99, -97.15], ['Utah Test and Training Range', 40.2, -113.5], ['Atlantic off Florida', 29.0, -79.0]];
-function scnGroups() { return [['Moon', SCENARIOS.filter(s => s.dest === 'moon')], ['Mars', SCENARIOS.filter(s => s.dest === 'mars' && s.cfg.profile !== 'multi-flyby')], ['Gravity assist', SCENARIOS.filter(s => s.cfg.profile === 'multi-flyby')]]; }
+const isLEO = c => (c.profile || '').startsWith('leo');
+function scnGroups() { return [['Earth orbit', SCENARIOS.filter(s => isLEO(s.cfg))], ['Moon', SCENARIOS.filter(s => s.dest === 'moon')], ['Mars', SCENARIOS.filter(s => s.dest === 'mars' && s.cfg.profile !== 'multi-flyby')], ['Gravity assist', SCENARIOS.filter(s => s.cfg.profile === 'multi-flyby')]]; }
 function buildScenarioList() {
   const nav = $('#scnList'); nav.innerHTML = '';
   for (const [g, list] of scnGroups()) {
@@ -30,7 +32,8 @@ function fieldsFor(cfg, scn) {
   const F = []; const SC = SPACECRAFT[cfg.spacecraft];
   const lunar = (cfg.profile || '').startsWith('lunar');
   const grp = (title, ...items) => F.push({ group: title, items: items.filter(Boolean) });
-  const launchers = Object.entries(LAUNCHERS).filter(([k]) => SC.usesUpperStage ? k === 'starship' : k !== 'starship').map(([k, L]) => [k, `${L.name} — ${L.org}`]);
+  const launchers = Object.entries(LAUNCHERS).filter(([k, L]) => SC.usesUpperStage ? k === 'starship' : SC.winged ? !!L.sideMount : (k !== 'starship' && !L.sideMount)).map(([k, L]) => [k, `${L.name} — ${L.org}`]);
+  if (isLEO(cfg)) return fieldsLEO(cfg, SC, launchers, grp, F);
   grp('Launch',
     { path: 'launcher', label: 'Launch vehicle', type: 'select', options: launchers, wide: true, onSet: c => { delete c.launchAz; } },
     { path: 'site', label: 'Launch site', type: 'select', options: Object.entries(LAUNCH_SITES).map(([k, s]) => [k, s.name]), wide: true, onSet: c => { delete c.launchAz; } },
@@ -89,6 +92,31 @@ function fieldsFor(cfg, scn) {
   }
   return F;
 }
+// Space Shuttle flights: launch, orbit, payload and the runway landing
+function fieldsLEO(cfg, SC, launchers, grp, F) {
+  const pads = Object.entries(LAUNCH_SITES).filter(([k]) => /^KSC39/.test(k)).map(([k, s]) => [k, s.name]);
+  grp('Launch',
+    { path: 'launcher', label: 'Launch vehicle', type: 'select', options: launchers, wide: true },
+    { path: 'site', label: 'Launch pad', type: 'select', options: pads, wide: true },
+    { path: 'launch', label: 'Liftoff (UTC)', type: 'datetime', wide: true },
+    { path: 'incl', label: 'Orbit inclination', unit: '°', type: 'number', min: 28.5, max: 57, step: 0.01 },
+    { path: 'parking.ha', label: 'Apogee at main engine cutoff', unit: 'km', type: 'number', min: 160, max: 700, step: 1 },
+    { path: 'oms2.hp', label: 'Perigee after OMS-2', unit: 'km', type: 'number', min: 150, max: 650, step: 1 },
+  );
+  grp('Crew & payload',
+    { path: 'name', label: 'Mission name', type: 'text', wide: true },
+    { path: 'shipName', label: 'Orbiter', type: 'text', wide: true },
+    { path: 'crew', label: 'Crew', type: 'number', min: 2, max: SC.crewMax, step: 1, unit: `max ${SC.crewMax}` },
+    { path: 'scOverride.PAY.dry', label: 'Payload in the bay', unit: 'kg', type: 'number', min: 0, max: 25000, step: 100 },
+    { path: 'scOverride.OMS.prop', label: 'OMS propellant', unit: 'kg', type: 'number', min: 4000, max: 12800, step: 100 },
+  );
+  grp('Landing',
+    { path: 'runway', label: 'Runway', type: 'select', options: RUNWAY_LIST(), wide: true },
+    { path: 'landing', label: 'Landing (UTC) — the nearest pass is chosen', type: 'datetime', wide: true },
+    { path: 'dragChute', label: 'Drag chute', type: 'select', options: [['true', 'Yes (flown from 1992)'], ['false', 'No']], wide: true, parse: v => v === 'true' },
+  );
+  return F;
+}
 function renderDetail() {
   const s = SETUP.scn, cfg = SETUP.cfg; const root = $('#scnDetail'); root.innerHTML = '';
   root.append(h('div', { class: 'det-head' },
@@ -133,7 +161,7 @@ function fieldEl(f) {
     wrap.append(input); return wrap;
   }
   const val = f.kind === 'calc' ? f.get(cfg) : gp(cfg, f.path);
-  if (f.type === 'select') { input = h('select', null, ...f.options.map(([v, l]) => h('option', { value: v }, l))); input.value = val; }
+  if (f.type === 'select') { input = h('select', null, ...f.options.map(([v, l]) => h('option', { value: v }, l))); input.value = String(val); }
   else if (f.type === 'datetime') { input = h('input', { type: 'datetime-local', value: val ? isoLocalInput(isoToT(val)) : '', step: 60 }); }
   else if (f.type === 'number') { input = h('input', { type: 'number', value: val ?? '', min: f.min, max: f.max, step: f.step || 'any', inputmode: 'decimal' }); }
   else input = h('input', { type: 'text', value: val ?? '' });
@@ -144,10 +172,11 @@ function fieldEl(f) {
     let v = input.value;
     if (f.type === 'number' || f.kind === 'calc') { v = parseFloat(v); if (!isFinite(v)) { input.value = old; return; } if (f.min != null) v = Math.max(f.min, v); if (f.max != null) v = Math.min(f.max, v); input.value = v; }
     if (f.type === 'datetime') { v = inputToIso(v); if (!v || !isFinite(isoToT(v))) { input.value = isoLocalInput(isoToT(old)); return; } }
+    if (f.parse) v = f.parse(v);
     if (f.kind === 'calc') f.set(SETUP.cfg, v); else sp(SETUP.cfg, f.path, v);
     if (f.onSet) f.onSet(SETUP.cfg, v, old);
     mark();
-    if (['launcher', 'crew', 'payloadMass'].includes(f.path)) { renderVehicleCard(); renderScCard(); }
+    if (['launcher', 'crew', 'payloadMass'].includes(f.path) || /^scOverride/.test(f.path || '')) { renderVehicleCard(); renderScCard(); }
     if (f.path === 'launch' || /legs\.0\.t$/.test(f.path)) drawPorkchop();
     if (f.path && f.path.startsWith('landMET') || f.kind === 'calc') renderDetailSoft();
     schedulePlan();
@@ -170,8 +199,19 @@ function stackDeltaV(L, payload) {
   for (; i < st.length; i++) { const s = st[i]; const isp = i === 0 ? (s.ispSL + s.ispVac) / 2 : s.ispVac; dv += isp * G0 * Math.log(m / (m - s.propMass)); m -= s.propMass + s.dry; if (i === 0) m -= jet; }
   return dv / 1000;
 }
-const SHORT_NAMES = { saturnV: 'Saturn V', sls1: 'SLS Block 1', lm5: 'Long March 5', atlasV541: 'Atlas V 541', atlasAgena: 'Atlas-Agena', falconHeavy: 'Falcon Heavy', starship: 'Starship', lvm3: 'LVM3' };
-function launcherSVG(selKey) {
+const SHORT_NAMES = { shuttle: 'Space Shuttle', saturnV: 'Saturn V', sls1: 'SLS Block 1', lm5: 'Long March 5', atlasV541: 'Atlas V 541', atlasAgena: 'Atlas-Agena', falconHeavy: 'Falcon Heavy', starship: 'Starship', lvm3: 'LVM3' };
+function shuttleSVG(L, cx, base, k, parts, variant) {
+  const S = L.stages[0], E = L.stages[1], low = S.booster.y0 - S.eng.len; // the boosters' nozzles stand on the ground
+  const Y = yy => base - (yy - low) * k, cone = (x0, y0, len, rb, rt, col, extra = '') => `<path d="M${x0 - rb * k},${Y(y0)} L${x0 + rb * k},${Y(y0)} L${x0 + rt * k},${Y(y0 + len)} L${x0 - rt * k},${Y(y0 + len)}Z" fill="${col}" ${extra}/>`;
+  for (const sgn of [-1, 1]) { const xb = cx + sgn * S.booster.offset * k; parts.push(cone(xb, low, S.eng.len, S.eng.r * 0.85, 0.5, '#4a4c50')); let yb = S.booster.y0; for (const [len, rb, rt, col] of S.geom) { parts.push(cone(xb, yb, len, rb, rt, col)); yb += len; } }
+  let ye = 0; for (const [len, rb, rt, col] of E.geom) { parts.push(cone(cx, ye, len, rb, rt, variant === 'sts1' && col !== '#4a4a4a' ? '#e9e7e0' : col, 'stroke="rgba(0,0,0,.25)" stroke-width=".4"')); ye += len; } // STS-1 and STS-2 flew painted tanks
+  // the orbiter, seen from above its payload bay doors: fuselage, double-delta wings, OMS pods
+  const oy = SH_STACK.orbY, pt = (x, yy) => `${cx + x * k},${Y(oy + yy)}`;
+  parts.push(`<path d="M${pt(-11.95, 2.3)} L${pt(-4.9, 11.4)} L${pt(-2.6, 19.6)} L${pt(-2.62, 24)} L${pt(-2.2, 28.6)} Q${pt(-1.4, 32.4)} ${pt(0, 32.75)} Q${pt(1.4, 32.4)} ${pt(2.2, 28.6)} L${pt(2.62, 24)} L${pt(2.6, 19.6)} L${pt(4.9, 11.4)} L${pt(11.95, 2.3)} L${pt(11.9, 1)} L${pt(3.25, 0.5)} L${pt(3.25, -0.6)} L${pt(-3.25, -0.6)} L${pt(-3.25, 0.5)} L${pt(-11.9, 1)}Z" fill="#efede7" stroke="rgba(0,0,0,.35)" stroke-width=".5"/>`);
+  parts.push(`<path d="M${pt(-2.3, 25.8)} L${pt(2.3, 25.8)} L${pt(1.8, 28.4)} L${pt(-1.8, 28.4)}Z" fill="#141517"/><path d="M${pt(-0.9, 31.3)} Q${pt(0, 32.9)} ${pt(0.9, 31.3)}Z" fill="#141517"/>`);
+  parts.push(`<line x1="${cx}" y1="${Y(oy + 5.6)}" x2="${cx}" y2="${Y(oy + 23.9)}" stroke="rgba(0,0,0,.3)" stroke-width=".6"/><path d="M${pt(-0.25, 5.8)} L${pt(0.25, 5.8)} L${pt(0.2, -4)} L${pt(-0.2, -4)}Z" fill="#9ea3a9"/>`);
+}
+function launcherSVG(selKey, variant) {
   const keys = Object.keys(LAUNCHERS); const Hh = 300, base = 266, k = 225 / 125; let x = 30; const out = [];
   const grid = [0, 25, 50, 75, 100, 125];
   for (const key of keys) {
@@ -179,6 +219,7 @@ function launcherSVG(selKey) {
     const core = L.stages.filter(s => !s.parallel); const bst = L.stages[0].parallel ? L.stages[0] : null;
     const maxR = Math.max(...L.stages.map(s => Math.max(...s.geom.map(g => g[1]))), (bst ? bst.booster.offset + bst.geom[0][1] : 0));
     const slot = Math.max(66, 2 * maxR * k + 18); const cx = x + slot / 2; let y = base; const parts = [];
+    if (L.sideMount) { shuttleSVG(L, cx, base, k, parts, sel ? variant : null); out.push(`<g opacity="${op}" style="cursor:pointer" data-key="${key}"><rect x="${x}" y="0" width="${slot}" height="${Hh}" fill="transparent"/>${parts.join('')}<text x="${cx}" y="${base + 16}" fill="${sel ? '#ffb547' : '#8794a8'}" font-size="11" text-anchor="middle" font-family="IBM Plex Sans Condensed, sans-serif" font-weight="${sel ? 700 : 500}">${esc(SHORT_NAMES[key] || L.name)}</text><text x="${cx}" y="${base - L.height * k - 7}" fill="${sel ? '#ffb547' : '#56647a'}" font-size="10" text-anchor="middle" font-family="IBM Plex Mono, monospace">${L.height} m</text></g>`); x += slot; continue; }
     if (bst) { const off = bst.booster.offset; for (const sgn of [-1, 1]) { let yb = base; for (const [len, rb, rt, col] of bst.geom) { parts.push(`<path d="M${cx + sgn * off * k - rb * k},${yb} L${cx + sgn * off * k + rb * k},${yb} L${cx + sgn * off * k + rt * k},${yb - len * k} L${cx + sgn * off * k - rt * k},${yb - len * k}Z" fill="${col}"/>`); yb -= len * k; } } }
     for (const s of core) for (const [len, rb, rt, col] of s.geom) { parts.push(`<path d="M${cx - rb * k},${y} L${cx + rb * k},${y} L${cx + rt * k},${y - len * k} L${cx - rt * k},${y - len * k}Z" fill="${col}" stroke="rgba(0,0,0,.35)" stroke-width=".4"/>`); y -= len * k; }
     const rest = L.height * k - (base - y);
@@ -192,15 +233,18 @@ function launcherSVG(selKey) {
 }
 function renderVehicleCard() {
   const el = $('#vehCard'); if (!el) return; const cfg = SETUP.cfg; const L = LAUNCHERS[cfg.launcher];
-  const SC = JSON.parse(JSON.stringify(SPACECRAFT[cfg.spacecraft])); if (cfg.payloadMass && SC.modules.CARGO) SC.modules.CARGO.dry = cfg.payloadMass;
+  const SC = scWithOverrides(cfg);
   const pay = scTotalMass(SC);
   const dvCap = stackDeltaV(L, pay);
   const lunar = (cfg.profile || '').startsWith('lunar');
   let dep = 3.13, depTxt = 'trans-lunar injection';
-  if (!lunar) { try { const tDep = isoToT(cfg.launch) + (cfg.refill ? cfg.refill.days * DAY : 0); const leg = cfg.legs[0]; const a = planetHelio('earth', tDep), b = planetHelio(leg.body, isoToT(leg.t)); const Lm = lambert(a.r, b.r, isoToT(leg.t) - tDep, BODIES.sun.mu, [0, 0, 1]); const vinf = vsub(Lm.v1, a.v); const rp = BODIES.earth.R + 200; dep = Math.sqrt(vdot(vinf, vinf) + 2 * BODIES.earth.mu / rp) - Math.sqrt(BODIES.earth.mu / rp); depTxt = `escape to ${BODIES[leg.body].name} (C3 ${vdot(vinf, vinf).toFixed(1)})`; } catch (e) { dep = 3.6; } }
+  if (isLEO(cfg)) { dep = 0; depTxt = ''; }
+  else if (!lunar) { try { const tDep = isoToT(cfg.launch) + (cfg.refill ? cfg.refill.days * DAY : 0); const leg = cfg.legs[0]; const a = planetHelio('earth', tDep), b = planetHelio(leg.body, isoToT(leg.t)); const Lm = lambert(a.r, b.r, isoToT(leg.t) - tDep, BODIES.sun.mu, [0, 0, 1]); const vinf = vsub(Lm.v1, a.v); const rp = BODIES.earth.R + 200; dep = Math.sqrt(vdot(vinf, vinf) + 2 * BODIES.earth.mu / rp) - Math.sqrt(BODIES.earth.mu / rp); depTxt = `escape to ${BODIES[leg.body].name} (C3 ${vdot(vinf, vinf).toFixed(1)})`; } catch (e) { dep = 3.6; } }
   const leo = 9.3; const need = leo + (cfg.refill || (lunar && cfg.tliBy === 'sc') ? 0 : dep);
   const margin = dvCap - need;
-  el.innerHTML = launcherSVG(cfg.launcher);
+  el.innerHTML = launcherSVG(cfg.launcher, cfg.lvVariant);
+  { const sx = el.querySelector('.scroll-x'), gs = el.querySelector(`g[data-key="${cfg.launcher}"]`); // keep the chosen vehicle in view
+    if (sx && gs) requestAnimationFrame(() => { const a = gs.getBoundingClientRect(), b = sx.getBoundingClientRect(); if (a.right > b.right || a.left < b.left) sx.scrollLeft += a.left - b.left - (b.width - a.width) / 2; }); }
   el.querySelector('svg').addEventListener('click', e => { const g = e.target.closest('g[data-key]'); if (!g) return; const k = g.dataset.key; const ok = $$('#cfgForm select').find(s => [...s.options].some(o => o.value === k)); if (!ok) return; ok.value = k; ok.dispatchEvent(new Event('change')); });
   el.append(h('p', { class: 'p', style: 'margin-top:8px' }, L.blurb));
   el.append(h('div', { class: 'kv' },
@@ -213,8 +257,13 @@ function renderVehicleCard() {
   el.append(h('div', { class: 'scroll-x' }, h('table', { class: 't', style: 'margin-top:8px' }, h('thead', null, h('tr', null, h('th', null, 'Stage'), h('th', null, 'Propellant'), h('th', null, 'Prop. mass'), h('th', null, 'Thrust (vac)'))),
     h('tbody', null, ...L.stages.map(s => h('tr', null, h('td', null, s.name), h('td', null, PROP[s.prop].label), h('td', { class: 'n' }, fMass(s.propMass)), h('td', { class: 'n' }, fForce(s.thrustVac))))))));
 }
+function scWithOverrides(cfg) {
+  const SC = JSON.parse(JSON.stringify(SPACECRAFT[cfg.spacecraft])); if (cfg.payloadMass && SC.modules.CARGO) SC.modules.CARGO.dry = cfg.payloadMass;
+  if (cfg.scOverride) for (const k in cfg.scOverride) if (SC.modules[k]) Object.assign(SC.modules[k], cfg.scOverride[k]);
+  return SC;
+}
 function renderScCard() {
-  const el = $('#scCard'); if (!el) return; const cfg = SETUP.cfg; const SC = JSON.parse(JSON.stringify(SPACECRAFT[cfg.spacecraft])); if (cfg.payloadMass && SC.modules.CARGO) SC.modules.CARGO.dry = cfg.payloadMass;
+  const el = $('#scCard'); if (!el) return; const cfg = SETUP.cfg; const SC = scWithOverrides(cfg);
   el.innerHTML = '';
   el.append(h('p', { class: 'p' }, h('b', null, SC.name), ` — ${fMass(scTotalMass(SC))} total${SC.crewMax ? `, up to ${SC.crewMax} crew` : ''}.`));
   el.append(h('div', { class: 'scroll-x' }, h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Module'), h('th', null, 'Dry'), h('th', null, 'Propellant'))), h('tbody', null, ...Object.values(SC.modules).map(m => h('tr', null, h('td', null, m.name, m.engine ? h('div', { class: 'note-s' }, `${m.engine.name} · ${fForce(m.engine.thrust)} · Isp ${m.engine.isp} s · ${PROP[m.engine.prop].label}`) : null), h('td', { class: 'n' }, fMass(m.dry)), h('td', { class: 'n' }, m.prop ? fMass(m.prop) : '—')))))));
@@ -279,7 +328,7 @@ function renderPlanStatus() {
   kp.append(kpi('Duration', fTime(M.tEnd - M.t0)), kpi('Burns', String(M.burns.length)), kpi('Total Δv (burns)', fx(dvTot, 0) + ' m/s'), kpi('Propellant burned', fMass(prop)));
   if (M.summary.ascent) kp.append(kpi('Ascent peak', M.summary.ascent.maxG.toFixed(1) + ' g'));
   const ents = M.summary.entries || (M.summary.entry ? [M.summary.entry] : []);
-  if (ents.length) { const e = ents[ents.length - 1]; kp.append(kpi('Entry', `${e.vEI.toFixed(1)} km/s · ${e.maxG.toFixed(1)} g`), kpi('Landing error', fx(e.miss, 0) + ' km')); }
+  if (ents.length) { const e = ents[ents.length - 1]; kp.append(kpi('Entry', `${e.vEI.toFixed(1)} km/s · ${e.maxG.toFixed(1)} g`), M.summary.landing && M.summary.landing.runway ? kpi('Landing', M.summary.landing.runway) : kpi('Landing error', fx(e.miss, 0) + ' km')); }
   go.disabled = false; go.textContent = 'Fly this mission ▶';
 }
 function launchFromSetup() {

@@ -68,10 +68,12 @@ function groundSite(t) {
   const near = (b, d) => vnorm(vsub(P, helio(b, t).r)) < d;
   const cfg = md.cfg;
   const off = (body, lat, lon, elev, dE, dN) => { const Rb = surfaceRadius(body); return { body, lat: lat + dN / Rb * RAD, lon: lon + dE / (Rb * Math.cos(lat * DEG)) * RAD, alt: (elev || 0) + 0.0018 }; };
-  if (near('moon', 30000)) { const sp = surfaceSpotOn('moon') || cfg.landing; if (sp) return off('moon', sp.lat, sp.lon, sp.elev || 0, -0.35, -0.12); }
+  if (near('moon', 30000)) { const sp = surfaceSpotOn('moon') || (typeof cfg.landing === 'object' ? cfg.landing : null); if (sp) return off('moon', sp.lat, sp.lon, sp.elev || 0, -0.35, -0.12); }
   if (near('mars', 50000)) { const l = (cfg.legs || []).find(x => x.body === 'mars' && x.site); const sp = surfaceSpotOn('mars') || (l && l.site); if (sp) return off('mars', sp.lat, sp.lon, sp.elev || 0, -0.6, -0.25); }
   if (near('earth', 60000)) {
-    const S = LAUNCH_SITES[cfg.site];
+    const S = LAUNCH_SITES[cfg.site], rw = cfg.runway && RUNWAYS[cfg.runway];
+    if (rw && t > md.M.t0 + 3 * 3600) { // a Shuttle landing: beside the runway, 1.2 km past the threshold, like the photographers at the landing strip
+      const pe = sitePosEcl('earth', rw.lat, rw.lon, 0, t); if (vnorm(vsub(vsub(P, helio('earth', t).r), pe)) < 800) { const hd = rw.hdg * DEG, a = 1.2, sd = 0.42; return off('earth', rw.lat, rw.lon, rw.elev || 0, a * Math.sin(hd) - sd * Math.cos(hd), a * Math.cos(hd) + sd * Math.sin(hd)); } }
     if (t > md.M.t0 + 3 * 3600) { const sp = surfaceSpotOn('earth', md.M.t0 + 3600); if (sp) { const pe = sitePosEcl('earth', sp.lat, sp.lon, 0, t); if (vnorm(vsub(vsub(P, helio('earth', t).r), pe)) < 1500) return off('earth', sp.lat, sp.lon, 0, -4, -3); } }
     return off('earth', S.lat, S.lon, 0, -2.2, -5.5);
   }
@@ -96,6 +98,12 @@ function poseFor(mode, prm, P, t) {
     let u3 = vsub(up, vscale(Ld, vdot(up, Ld))); if (vnorm(u3) < 1e-6) u3 = vperp(Ld); u3 = vunit(u3); const u2 = vcross(u3, Ld);
     const D = vadd(vadd(vscale(Ld, Math.cos(prm.el) * Math.cos(prm.az)), vscale(u2, Math.cos(prm.el) * Math.sin(prm.az))), vscale(u3, Math.sin(prm.el)));
     return { pos: keepAboveGround(P, vscale(D, -dist), t), up: u3, look: vsub(PL, P), center: false };
+  }
+  if (mode === 'from') { // a camera on another craft (the station's windows), looking at the target
+    const fc = prm.from && craftById(prm.from.slice(4));
+    if (fc && fc.P && fc.s) { const F = lvlh(fc.rD || fc.s.r, fc.vD || fc.s.v), off = prm.off || [0, 0, 0], pos = vadd(vsub(fc.P, P), fromLvlh(F, vscale(off, 0.001)));
+      return { pos, up: Math.abs(vdot(vunit(pos), F.z)) > 0.85 ? F.x : F.z, look: [0, 0, 0], center: false }; } // looking straight down: keep the direction of flight up the frame
+    mode = 'chase';
   }
   let e1 = [1, 0, 0], e2 = [0, 1, 0], e3 = [0, 0, 1];
   if (mode === 'chase') {
@@ -144,6 +152,7 @@ function directorShot(c, t) {
   const sunAz = () => { const p = poseFor('chase', { az: 0, el: 0, dist: 1 }, c.P, t); const [e1, e2] = p.basis; const sd = vunit(vscale(c.P, -1)); return Math.atan2(vdot(sd, e2), vdot(sd, e1)); };
   if (c.o.id === 'ship' && (s.pad || t < md.M.t0 + 45)) return { key: 'pad', mode: 'chase', az: sunAz() + 38 * DEG, el: 4 * DEG, dist: L * 4.2, lens: 35, label: 'Launch' };
   if (c.o.id === 'ship' && t < tIns + 5) return { key: 'ascent', mode: 'chase', az: 200 * DEG, el: 9 * DEG, dist: L * (4.5 + 4 * Math.min(Math.max(alt, 0), 100) / 100), lens: 35, label: 'Ascent', blend: 4500 };
+  if (isShuttle(md)) { const sh = shuttleShot(c, t, s, ex, cfgL, L); if (sh) return sh; }
   if (ex.chute) return { key: 'chute', mode: 'chase', az: 120 * DEG, el: -8 * DEG, dist: Math.max(L * 25, 0.09), lens: 35, drift: 0.05, label: 'Parachutes' };
   if ((ex.heat > 2 || ex.q > 300) && alt < 140) return { key: 'entry', mode: 'chase', az: 65 * DEG, el: 8 * DEG, dist: L * 7, lens: 35, label: 'Entry' };
   if (s.surface || (cfgL && cfgL.landed)) return { key: 'surface', mode: 'chase', az: 150 * DEG, el: 10 * DEG, dist: Math.max(L * 6, 0.025), lens: 35, drift: 0.025, label: 'Surface' };
@@ -157,6 +166,27 @@ function directorShot(c, t) {
   if (body !== 'sun') { const vr = vdot(vunit(c.rD), c.vD); if (vr < 0 || alt < 3 * R0) look = body; }
   if (!look) look = nextDestination(md, t, body) || (body !== 'sun' ? body : 'earth');
   return { key: 'coast-' + look, mode: 'lookat', look: 'body:' + look, az: 7 * DEG, el: 4 * DEG, dist: Math.max(L * 4, 0.025), lens: 50, drift: 0.006, label: 'Coasting toward ' + BODIES[look].name };
+}
+// Space Shuttle: proximity operations seen from the station, the docked stack, the deploy, the glide to the runway
+function shuttleShot(c, t, s, ex, cfgL, L) {
+  if (c.o.id !== 'ship' || !cfgL) return null;
+  const ph = ex.phase || '', iss = craftById('iss');
+  if (cfgL.sc === 'shuttle') {
+    const att = cfgL.att;
+    if (iss && iss.P && c.P && /^(rbar|rpm|vbar|fly)$/.test(att || '') && !cfgL.docked) {
+      const d = vnorm(vsub(c.P, iss.P)) * 1000; // m
+      if (d < 1500 && !(att === 'vbar' && d < 75)) { const v = att === 'vbar' || att === 'fly'; return { key: 'from-iss-' + (v ? 'v' : 'r'), mode: 'from', from: 'obj:iss', off: v ? [23, -7, 5] : [-3, -7, -9], lens: clamp(Math.round(0.24 * d / 5) * 5, 24, 400), dist: L * 3, label: 'Seen from the station', blend: 2500 }; }
+    }
+    if (cfgL.docked || (att === 'vbar' && iss && iss.P && c.P && vnorm(vsub(c.P, iss.P)) < 0.075)) return { key: 'docked', mode: 'chase', az: 300 * DEG, el: 24 * DEG, dist: 0.21, lens: 35, drift: 0.01, label: 'Docked to the station' };
+    if (att === 'deploy') return { key: 'deploy', mode: 'chase', az: 140 * DEG, el: 30 * DEG, dist: Math.max(L * 2.4, 0.07), lens: 35, drift: 0.008, label: 'Payload deploy' };
+  }
+  if (ph === 'entry' && (ex.heat > 1 || ex.q > 200)) return { key: 'sh-entry', mode: 'chase', az: 112 * DEG, el: -3 * DEG, dist: L * 3.4, lens: 35, label: 'Entry' };
+  if (/TAEM/.test(ph)) return { key: 'taem', mode: 'chase', az: 150 * DEG, el: 7 * DEG, dist: L * 3.2, lens: 35, label: 'Gliding to the runway' };
+  if (/heading alignment/.test(ph)) return { key: 'hac', mode: 'chase', az: 215 * DEG, el: 14 * DEG, dist: L * 3.4, lens: 35, label: 'Heading alignment cone' };
+  if (/outer glideslope/.test(ph)) return { key: 'ogs', mode: 'chase', az: 162 * DEG, el: 5 * DEG, dist: L * 2.8, lens: 35, label: 'Final approach' };
+  if (/flare|rollout/.test(ph)) return { key: 'touchdown', mode: 'chase', az: 120 * DEG, el: 3 * DEG, dist: L * 2.3, lens: 35, label: 'Touchdown' };
+  if (s.surface) return { key: 'surface', mode: 'chase', az: 145 * DEG, el: 9 * DEG, dist: L * 2.6, lens: 35, drift: 0.02, label: 'Wheel stop' };
+  return null;
 }
 function directorUpdate(t, realDt) {
   const md = MV.md; const c = activeCraft(t); if (!c) return;
@@ -180,7 +210,7 @@ function directorUpdate(t, realDt) {
     DIR.offAz = clamp(DIR.offAz, -aL - shot.az, aL - shot.az); DIR.offEl = clamp(DIR.offEl, -eL - shot.el, eL - shot.el);
     az = clamp(shot.az + DIR.offAz + Math.sin(drift) * Math.min(0.05, aL * 0.3), -aL, aL); el = clamp(shot.el + DIR.offEl, -eL, eL);
   } else { az = shot.az + DIR.offAz + drift; el = clamp(shot.el + DIR.offEl, -1.5, 1.5); }
-  DIR.prm = { mode: shot.mode, look: shot.look, az, el, dist: DIR.dist };
+  DIR.prm = { mode: shot.mode, look: shot.look, from: shot.from, off: shot.off, az, el, dist: DIR.dist };
   DIR.shot = shot;
   const lens = DIR.lensUser || shot.lens;
   if (Math.abs(CAM.lens - lens) > 0.5) { CAM.lens = jump ? lens : Math.exp(Math.log(CAM.lens) + (Math.log(lens) - Math.log(CAM.lens)) * Math.min(1, realDt * 2)); applyLens(); syncCamUI(); }
