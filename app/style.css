@@ -75,6 +75,14 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .tb:hover { border-color: var(--cyan); color: var(--fg); }
 .tb.icon { width: 30px; padding: 5px 0; text-align: center; }
 .tb.on { border-color: var(--amber); color: var(--amber); }
+.tb.icon svg { display: block; margin: 0 auto; }
+.top-actions { position: relative; }
+#top.pop-open { z-index: 25; } /* lift the sound popover above the countdown card and panels */
+#soundPop { top: 100%; bottom: auto; right: 0; margin: 8px 0 0; grid-template-columns: 1fr; width: min(290px, calc(100vw - 24px)); z-index: 30; }
+#soundPop kbd { font: 10px var(--font-mono); padding: 1px 5px; border: 1px solid var(--line-2); border-radius: 3px; color: var(--muted); margin-left: 4px; }
+#soundPop .rng { display: flex; align-items: center; gap: 10px; }
+#soundPop .rng input { flex: 1; min-width: 0; accent-color: var(--amber); }
+#soundPop .note { margin: 2px 0 0; font-size: 11px; line-height: 1.45; color: var(--muted); }
 .narrow-only { display: none; }
 #btnSetup .short { display: none; }
 
@@ -288,6 +296,8 @@ legend { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; colo
 .kpi .kv2 { font: 600 15px var(--font-mono); font-variant-numeric: tabular-nums; }
 .go { font-size: 15px !important; padding: 10px 18px !important; border-radius: 8px !important; cursor: pointer; }
 .go[disabled] { opacity: .5; cursor: progress; }
+.go-wrap { display: flex; align-items: center; gap: 14px; justify-content: flex-end; flex-wrap: wrap; }
+.go-sound { font-size: 13px; color: var(--fg-2); }
 .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--amber); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 #porkWrap { position: relative; }

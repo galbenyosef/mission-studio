@@ -8,9 +8,9 @@
 
 태양계 영화의 스토리보드를 만들려고 만든 도구라서, 카메라·렌즈·장면 저장 기능이 영화 작업에 맞춰져 있어요.
 
-[**▶ 시뮬레이터 열기**](https://sanghyunpark.pages.dev/apps/mission-studio/) · [프로젝트 소개](https://sanghyunpark.pages.dev/ko/projects/mission-studio/) · [English README](README.md)
+[**▶ 시뮬레이터 열기**](https://sanghyunpark.pages.dev/apps/mission-studio/) · [1분 소개 영상](https://www.youtube.com/watch?v=RXN-PMDKZEs) · [프로젝트 소개](https://sanghyunpark.pages.dev/ko/projects/mission-studio/) · [English README](README.md)
 
-![발사대에서 점화하는 새턴 V와 실시간 비행 데이터](media/screenshot-ignition.jpg)
+[![유튜브에서 1분 소개 영상 보기: 아폴로 11호 발사, 달 착륙, 화성의 퍼서비어런스, 화성 옆을 지나는 유로파 클리퍼](media/video-ko.jpg)](https://www.youtube.com/watch?v=RXN-PMDKZEs)
 
 ## 할 수 있는 것
 
@@ -43,10 +43,20 @@
   - 자동 추적(디렉터) 모드, 궤도·추적·바라보기·지상·위에서 보기
   - 12–3200 mm 렌즈와 영화 화면비 가이드(2.39:1 등)
   - 마우스나 손가락으로 돌리고 확대해요.
+- **소리**
+  - 모든 소리는 브라우저에서 실시간으로 합성해요.
+    - 엔진 굉음, 공기 가르는 소리, 대기권 재진입
+    - 낙하산, 로버 모터
+    - 카운트다운 신호음, 분리, 착지
+    - 잔잔한 배경 음악(선택)
+  - 스피커 버튼이나 <kbd>M</kbd>으로 켜요.
+  - **Silent in vacuum**을 체크하면 실제 우주처럼 대기 밖의 엔진 소리가 들리지 않아요.
 - **스토리보드**
   - **Shot** 버튼을 누르면 장면을 저장해요.
   - 장면에는 임무 시각, 카메라, 렌즈, 비행 데이터가 함께 기록돼요.
   - 저장한 장면은 콘택트 시트로 모아 보거나 텍스트로 복사할 수 있어요.
+
+![발사대에서 점화하는 새턴 V와 실시간 비행 데이터](media/screenshot-ignition.jpg)
 
 ## 임무 목록
 

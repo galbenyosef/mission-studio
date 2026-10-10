@@ -37,8 +37,8 @@ function autoWarp(realDt) {
   STATE.rate = Math.exp(lr + (lt - lr) * Math.min(1, realDt * k));
 }
 function crossEvents(t0, t1) {
-  const md = MV.md; let last = -1;
-  for (let i = 0; i < md.events.length; i++) { const e = md.events[i]; if (e.t > t0 && e.t <= t1) last = i; if (e.t > t1) break; }
+  const md = MV.md; let last = -1, sounds = 0;
+  for (let i = 0; i < md.events.length; i++) { const e = md.events[i]; if (e.t > t0 && e.t <= t1) { last = i; if (sounds++ < 3) audioEvent(e); } if (e.t > t1) break; }
   if (last >= 0 && last !== STATE.lastCaptionEv) {
     STATE.lastCaptionEv = last; const e = md.events[last];
     if (!['heat', 'gload', 'ascent', 'los', 'terminal', 'approach'].includes(e.kind) || STATE.rate < 20) showCaption(e);
@@ -91,6 +91,7 @@ function renderFrame(forCapture) {
     const clean = $('#app').classList.contains('hide-ui');
     updateVectors(targetCraft() && tele && !clean ? tele.c : null, t, tele); updateOsc(focus, t);
   }
+  updateAudio(t, tele);
   updateLabels(t, focus);
   if (md && MV.layers.minimap !== false) drawMinimap(t, forCapture);
   const bc = R.bgCam; bc.quaternion.copy(R.camera.quaternion); if (bc.fov !== R.camera.fov || bc.aspect !== R.camera.aspect) { bc.fov = R.camera.fov; bc.aspect = R.camera.aspect; bc.updateProjectionMatrix(); }
@@ -203,6 +204,7 @@ function onKey(e) {
   if (e.target.closest('input, textarea, select')) return;
   if (!$('#help').hidden && e.key === 'Escape') { $('#help').hidden = true; return; }
   if (!$('#sheet').hidden && e.key === 'Escape') { $('#sheet').hidden = true; return; }
+  if (e.key === 'm' || e.key === 'M') { setSound(!SND.on); return; }
   if (!$('#setup').hidden) { if (e.key === 'Escape' && MV.md) $('#setup').hidden = true; return; }
   const k = e.key;
   if (k === ' ') { e.preventDefault(); $('#bPlay').click(); }
@@ -220,7 +222,7 @@ function onResize() {
 }
 // ---------------- boot ----------------
 function boot() {
-  initScene(); initBodyLabels(); initVectors(); initSmoke(); initCameraInput(); initTimeline(); initUI(); initMinimap();
+  initScene(); initBodyLabels(); initVectors(); initSmoke(); initCameraInput(); initTimeline(); initUI(); initMinimap(); initSound();
   $('#app').classList.add('idle');
   onResize();
   STATE.idleT0 = dateToT(new Date());
@@ -229,5 +231,5 @@ function boot() {
   const last = lsGet('mstudio-last', 'apollo11'); selectScenario(scenarioById(last) ? last : 'apollo11');
   requestAnimationFrame(frame);
 }
-window.__ms = { STATE, CAM, DIR, MM, MV, R, setTime, setTarget, setMode, applyLens, SETUP, Planner, renderFrame, autoWarp, crossEvents, computeCraft, helioReset: () => { R.helio = {}; }, capHitLocal, eclToMesh, roverPose, meshDir, THREE };
+window.__ms = { STATE, CAM, DIR, MM, MV, R, setTime, setTarget, setMode, applyLens, SETUP, Planner, renderFrame, autoWarp, crossEvents, computeCraft, helioReset: () => { R.helio = {}; }, capHitLocal, eclToMesh, roverPose, meshDir, SND, setSound, THREE };
 try { boot(); } catch (err) { document.body.insertAdjacentHTML('beforeend', `<pre style="position:fixed;left:16px;top:16px;right:16px;color:#ff6767;background:#000;padding:12px;z-index:99;white-space:pre-wrap">Startup error: ${esc(err && err.stack || err)}</pre>`); throw err; }

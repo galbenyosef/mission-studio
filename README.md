@@ -2,9 +2,9 @@
 
 **A 3D simulator of real Moon and Mars missions that runs in your browser.** Pick a mission and watch it fly, from the countdown on the pad to landing. On-screen numbers explain every moment: payload, rocket size, propellant, gravity, acceleration, orbits and gravity assists. It was built for storyboarding a solar-system film, so the cameras, lenses and shot capture work like a film tool.
 
-[**▶ Open the simulator**](https://sanghyunpark.pages.dev/apps/mission-studio/) · [About the project](https://sanghyunpark.pages.dev/projects/mission-studio/) · [한국어 안내](README.ko.md)
+[**▶ Open the simulator**](https://sanghyunpark.pages.dev/apps/mission-studio/) · [Watch the 1-minute video](https://www.youtube.com/watch?v=RXN-PMDKZEs) · [About the project](https://sanghyunpark.pages.dev/projects/mission-studio/) · [한국어 안내](README.ko.md)
 
-![Saturn V ignition on Launch Complex 39A, with live telemetry, the countdown and the event list](media/screenshot-ignition.jpg)
+[![Watch the 1-minute video on YouTube: Apollo 11's launch, the lunar landing, Perseverance on Mars and Europa Clipper's flyby of Mars](media/video-en.jpg)](https://www.youtube.com/watch?v=RXN-PMDKZEs)
 
 ## What you can do
 
@@ -37,6 +37,15 @@
   - Lenses from 12 to 3200 mm and film aspect-ratio guides (2.39:1, 1.85:1 …).
   - Drag to orbit and scroll or pinch to zoom.
 - **Build a storyboard.** The **Shot** button saves a frame with a slate (mission time, camera, lens, telemetry) to a shot list. You can view the list as a contact sheet or copy it as text.
+- **Hear it.** All sound is synthesised live in the browser:
+  - engine roar, air rush and re-entry
+  - parachutes and the rover's motors
+  - countdown beeps, separations and touchdowns
+  - an optional ambient score
+
+  Turn it on with the speaker button or <kbd>M</kbd>. Tick **Silent in vacuum** if you want engines firing outside an atmosphere to make no sound, as in real space.
+
+![Saturn V ignition on Launch Complex 39A, with live telemetry, the countdown and the event list](media/screenshot-ignition.jpg)
 
 | | |
 |---|---|

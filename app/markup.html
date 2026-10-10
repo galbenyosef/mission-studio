@@ -25,8 +25,17 @@
       <button id="btnTele" class="tb narrow-only">Data</button>
       <button id="btnSide" class="tb narrow-only">Log</button>
       <button id="btnSetup" class="tb"><span class="long">Mission setup</span><span class="short">Setup</span></button>
+      <button id="btnSound" class="tb icon" title="Sound (M)" aria-label="Sound" aria-pressed="false"><svg class="ico-off" viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path d="M3 7.5h3l4-3.5v12l-4-3.5H3z" fill="currentColor"/><path d="M13 8l4 4m0-4l-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg><svg class="ico-on" viewBox="0 0 20 20" width="15" height="15" aria-hidden="true" style="display:none"><path d="M3 7.5h3l4-3.5v12l-4-3.5H3z" fill="currentColor"/><path d="M12.6 7.2a4 4 0 0 1 0 5.6M14.8 5a7 7 0 0 1 0 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
       <button id="btnHide" class="tb icon" title="Clean frame — hide interface (H)">▢</button>
       <button id="btnHelp" class="tb icon" title="Controls & credits">?</button>
+      <div id="soundPop" class="popover sound-pop" hidden>
+        <h5>Sound</h5>
+        <label class="chk"><input type="checkbox" id="sndOn"> Sound on <kbd>M</kbd></label>
+        <label class="rng">Volume <input type="range" id="sndVol" min="0" max="1" step="0.05" aria-label="Volume"></label>
+        <label class="chk"><input type="checkbox" id="sndMusic"> Ambient music</label>
+        <label class="chk" title="Real space carries no sound: engines firing outside an atmosphere make none"><input type="checkbox" id="sndVac"> Silent in vacuum (realistic)</label>
+        <p class="note">Every sound is synthesised live in your browser: engines, air rush, re-entry, parachutes, rover motors, countdown beeps, separations and touchdowns.</p>
+      </div>
     </nav>
   </header>
   <div id="prop" hidden><span class="pi"></span><span class="pl"></span><span class="pd"></span></div>
@@ -176,6 +185,7 @@
         <kbd>Countdown</kbd><span>Every mission opens with the final 10-second launch countdown in real time. Liquid engines light on the pad before liftoff (Saturn V at T−8.9 s, SLS at T−6.36 s, Atlas V at T−2.7 s …) while hold-down clamps keep the rocket in place; solid boosters light at T−0. “Skip countdown” jumps straight to liftoff</span>
         <kbd>C</kbd><span>Capture a storyboard shot</span>
         <kbd>H</kbd><span>Clean frame (hide the interface)</span>
+        <kbd>M</kbd><span>Sound on / off. The speaker button (top right) also sets the volume, the ambient music and “Silent in vacuum”: real space carries no sound, so with it ticked, engines firing outside an atmosphere make none. Everything you hear is synthesised live in the browser</span>
       </div>
       <h3 class="h" style="margin-top:18px">How the numbers are made</h3>
       <p class="p">Every mission is solved before playback by a flight-dynamics engine written for this page: real launch-vehicle data with a gravity-turn ascent through the US-1976 atmosphere, finite burns with the rocket equation, Earth–Moon–Sun n-body coasting, patched conics and Lambert solutions between planets, B-plane targeting for flybys, and lifting entries with heating and parachutes. Planet positions use JPL approximate ephemerides; the Moon uses a truncated ELP/Meeus series; body orientations follow the IAU WGCCRE models.</p>

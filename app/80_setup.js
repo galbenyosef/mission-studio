@@ -119,7 +119,7 @@ function renderDetail() {
   colB.append(h('h3', { class: 'h' }, 'Spacecraft'), h('div', { id: 'scCard' }));
   if (s.real) colB.append(h('h3', { class: 'h' }, s.status === 'Flown' || s.status === 'In flight' ? 'What really happened' : 'Reference'), h('div', { class: 'kv kv2' }, ...Object.entries(s.real).flatMap(([k, v]) => [h('div', { class: 'k' }, k), h('div', { class: 'v', style: 'color:var(--fg-2)' }, v)])));
   // plan box
-  root.append(h('div', { class: 'plan-box' }, h('div', { style: 'min-width:0' }, h('div', { class: 'plan-status', id: 'planStatus' }), h('div', { class: 'plan-kpis', id: 'planKpis' })), h('button', { class: 'tb primary go', id: 'goBtn', onclick: launchFromSetup }, 'Fly this mission ▶')));
+  root.append(h('div', { class: 'plan-box' }, h('div', { style: 'min-width:0' }, h('div', { class: 'plan-status', id: 'planStatus' }), h('div', { class: 'plan-kpis', id: 'planKpis' })), h('div', { class: 'go-wrap' }, h('label', { class: 'chk go-sound', title: 'Sound (M) — engines, countdown, separations, ambient music' }, h('input', { type: 'checkbox', id: 'goSound', checked: SND.on, onchange: e => setSound(e.target.checked) }), 'Sound'), h('button', { class: 'tb primary go', id: 'goBtn', onclick: launchFromSetup }, 'Fly this mission ▶'))));
   renderVehicleCard(); renderScCard(); renderPlanStatus();
 }
 function fieldEl(f) {
