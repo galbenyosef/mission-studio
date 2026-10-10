@@ -95,7 +95,7 @@ python3 -m http.server -d dist 8000   # or: npx serve dist
 # open http://localhost:8000
 ```
 
-The page must be served over HTTP, because opening the file directly blocks the texture loads and the Web Worker. Every path in `dist/` is relative, so the folder works from any base path. Pushing a `v*` tag runs `.github/workflows/release.yml`, which attaches `mission-studio-<tag>.tar.gz` (the contents of `dist/`) to a GitHub Release.
+The page must be served over HTTP, because opening the file directly blocks the texture loads and the Web Worker. Every path in `dist/` is relative, so the folder works from any base path. To publish a release, bump `version` in `package.json` and push to `main`. `.github/workflows/release.yml` then tags the commit and attaches `mission-studio-v<version>.tar.gz` (the contents of `dist/`) to a GitHub Release.
 
 Engine tests (Node, no browser):
 

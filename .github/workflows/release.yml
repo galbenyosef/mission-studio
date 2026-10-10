@@ -1,14 +1,25 @@
 # Builds dist/ and attaches it to a GitHub Release as mission-studio-<tag>.tar.gz
 # (index.html at the root of the archive). sanghyunpark.dev serves a pinned
 # release of it at /apps/mission-studio/.
+#
+# To release: bump "version" in package.json and push to main. The workflow tags
+# the commit as v<version> and creates the release, unless that release already
+# exists. Pushing a v* tag yourself works too.
 name: Release
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+    paths: ["package.json", ".github/workflows/release.yml"]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -18,13 +29,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Test the engine
-        run: node test/t_core.js | tee core.log && ! grep -q '^FAIL' core.log
-      - name: Build
-        run: node build.js
-      - name: Package
-        run: tar -czf "mission-studio-${GITHUB_REF_NAME}.tar.gz" -C dist .
-      - name: Publish the release
+      - name: Pick the version
+        id: v
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "mission-studio-${GITHUB_REF_NAME}.tar.gz" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then v="$GITHUB_REF_NAME"; else v="v$(node -p "require('./package.json').version")"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "$v" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release $v already exists; nothing to do."; echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Test the engine
+        if: steps.v.outputs.exists != 'true'
+        run: node test/t_core.js | tee core.log && ! grep -q '^FAIL' core.log
+      - name: Build and package
+        if: steps.v.outputs.exists != 'true'
+        run: |
+          node build.js
+          tar -czf "mission-studio-${{ steps.v.outputs.version }}.tar.gz" -C dist .
+      - name: Publish the release
+        if: steps.v.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.v.outputs.version }}" "mission-studio-${{ steps.v.outputs.version }}.tar.gz" --target "$GITHUB_SHA" --title "${{ steps.v.outputs.version }}" --generate-notes
