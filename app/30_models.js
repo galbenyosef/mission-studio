@@ -389,6 +389,7 @@ function finishModel(g) {
   wrap.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(wrap); const sz = new THREE.Vector3(); bb.getSize(sz);
   wrap.userData.sizeM = Math.max(sz.x, sz.y, sz.z, 1); // largest dimension in metres (solar arrays included)
   wrap.userData.bbox = { w: sz.x, h: sz.y, d: sz.z };
+  wrap.userData.bbY = [bb.min.y, bb.max.y]; // lowest and highest point along the axis, metres (the camera frames a standing vehicle with it)
   const wheels = []; wrap.traverse(n => { if (n.userData && n.userData.wheel) wheels.push(n); }); wrap.userData.wheels = wheels;
   return wrap;
 }
@@ -416,7 +417,7 @@ void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 wp = mod
 const GLSL_PLUME_F = `
 #include <common>
 #include <logdepthbuf_pars_fragment>
-uniform vec3 uColor; uniform vec3 uCore; uniform float uI; uniform float uTime; uniform float uDiam;
+uniform vec3 uColor; uniform vec3 uCore; uniform float uI; uniform float uTime; uniform float uDiam; uniform float uDF; uniform float uDL; uniform float uCF;
 varying vec2 vUv; varying vec3 vN; varying vec3 vP;
 void main(){
   #include <logdepthbuf_fragment>
@@ -425,13 +426,14 @@ void main(){
   float edge = abs(dot(normalize(vN), V));
   float body = pow(edge, 1.3) * pow(1.0 - along, 1.6);
   float flick = 0.85 + 0.15 * sin(uTime * 37.0 + along * 23.0) * sin(uTime * 11.0);
-  float diam = uDiam * smoothstep(0.55, 1.0, sin(along * 46.0 - uTime * 3.0)) * (1.0 - along) * edge;
-  vec3 col = mix(uCore, uColor, smoothstep(0.0, 0.45, along));
+  // shock diamonds: spaced by the nozzle size and confined to the stretch just behind it, however long the flame
+  float diam = uDiam * smoothstep(0.55, 1.0, sin(along * uDF - uTime * 3.0)) * (1.0 - smoothstep(uDL * 0.55, uDL, along)) * (1.0 - along) * edge;
+  vec3 col = mix(uCore, uColor, smoothstep(0.0, uCF, along));
   gl_FragColor = vec4(col * (body * flick + diam * 0.8) * uI, 1.0);
 }`;
 function makePlume() {
   const geo = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true); geo.translate(0, -0.5, 0); // top (v=1) at y=0, extends to y=-1
-  const m = new THREE.ShaderMaterial({ vertexShader: GLSL_PLUME_V, fragmentShader: GLSL_PLUME_F, uniforms: { uColor: { value: new THREE.Color() }, uCore: { value: new THREE.Color() }, uI: { value: 1 }, uTime: { value: 0 }, uDiam: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const m = new THREE.ShaderMaterial({ vertexShader: GLSL_PLUME_V, fragmentShader: GLSL_PLUME_F, uniforms: { uColor: { value: new THREE.Color() }, uCore: { value: new THREE.Color() }, uI: { value: 1 }, uTime: { value: 0 }, uDiam: { value: 0 }, uDF: { value: 46 }, uDL: { value: 1 }, uCF: { value: 0.45 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geo, m); mesh.frustumCulled = false; mesh.renderOrder = 6; return mesh;
 }
 // shapes the open cone: radius at the nozzle r0, at the tail r1, length len

@@ -89,6 +89,41 @@ function keepAboveGround(P, off, t) {
   }
   return off;
 }
+// ---------------- framing a standing vehicle around the HUD ----------------
+// The screen rows the HUD leaves free in the middle column, where a rocket stands: below the top bar and the propulsion pill,
+// above the bottom bar (and the small map on phones), and clear of the countdown card — mid-screen on wide screens, near
+// the top on phones. The card's place is remembered after it hides, so the framing holds steady through liftoff.
+const BAND = { at: 0, W: 0, H: 0, v: null, card: null, cardKey: '' };
+function screenBand() {
+  const now = performance.now(), W = R.width, H = R.height;
+  if (BAND.v && now - BAND.at < 500 && BAND.W === W && BAND.H === H) return BAND.v;
+  const fr = frameRect(), cx = W / 2, half = clamp(W * 0.12, 60, 110), clean = $('#app').classList.contains('hide-ui');
+  const rectOf = sel => { const el = $(sel); if (!el || el.hidden) return null; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.right > cx - half && r.left < cx + half ? r : null; };
+  let top = fr.y, bot = fr.y + fr.h, card = null;
+  if (!clean) {
+    top = Math.max(top, 84); // the top bar (48 px) and the propulsion pill under it (shown from liftoff on)
+    for (const sel of ['#bottom', '#minimap']) { const r = rectOf(sel); if (r) bot = Math.min(bot, r.top); }
+    const key = W + 'x' + H; card = rectOf('#countdown');
+    if (card) { BAND.card = { top: card.top, bottom: card.bottom }; BAND.cardKey = key; }
+    else card = BAND.cardKey === key ? BAND.card : H <= 520 ? null : W <= 860 ? { top: 96, bottom: 270 } : { top: 0.6 * H - 78, bottom: 0.6 * H + 78 }; // (on short screens the card sits at the side)
+  }
+  let t2 = top, b2 = bot;
+  if (card) { if (card.top + card.bottom < top + bot) t2 = Math.max(top, card.bottom); else b2 = Math.min(bot, card.top); }
+  const minH = Math.max(110, 0.15 * fr.h); // too little room beside the card (a phone held sideways): let the card overlap instead
+  const v = b2 - t2 >= minH ? { top: t2, bot: b2 } : bot - top >= minH ? { top, bot } : { top: fr.y + 0.06 * fr.h, bot: fr.y + 0.94 * fr.h };
+  Object.assign(BAND, { at: now, W, H, v }); return v;
+}
+// camera distance and aim height (km above the base point) that put a vertical column — from the base point up to zTop km —
+// exactly between screen rows yT and yB, for a chase camera at elevation el looking at the aim point (pinhole projection)
+function fitColumn(zTop, el, yT, yB) {
+  const k = R.pxPerRad, Hc = R.height / 2, ce = Math.cos(el), se = Math.sin(el);
+  const p1 = Hc - yT, p2 = Hc - yB, q1 = ce * k + p1 * se, q2 = ce * k + p2 * se; // px above the centre (negative below)
+  const den = p1 / q1 - p2 / q2;
+  if (!(zTop > 0) || !(den > 1e-6) || !(q1 > 0) || !(q2 > 0)) return null;
+  const d = zTop / den; return { dist: d, aimH: -p2 * d / q2 };
+}
+// how high the vehicle reaches above its base point (km): its model's top, standing on the launch mount
+function standingHeight(c, Lkm) { const ud = c.cur && c.cur.userData; return ud && ud.bbY ? Math.max(((c.yOff || 0) + ud.bbY[1]) * 0.001, 0.002) : Lkm + (PAD_TOP + MOUNT_H) * 0.001; }
 // camera pose for a mode, relative to the floating origin P: {pos, up, look}
 function poseFor(mode, prm, P, t) {
   const c = targetCraft(); const dist = prm.dist;
@@ -111,9 +146,10 @@ function poseFor(mode, prm, P, t) {
     else if (CAM.target.startsWith('body:')) { const name = CAM.target.slice(5); const pole = name === 'sun' ? [0, 0, 1] : bodyPoleEcl(name, t); e3 = pole; e1 = vperp(pole); e2 = vcross(e3, e1); }
   }
   const ce = Math.cos(prm.el), se = Math.sin(prm.el), ca = Math.cos(prm.az), sa = Math.sin(prm.az);
-  const off = keepAboveGround(P, vadd(vadd(vscale(e1, dist * ce * ca), vscale(e2, dist * ce * sa)), vscale(e3, dist * se)), t);
+  const A = (mode === 'chase' && prm.aim) || [0, 0, 0]; // the point the camera looks at, relative to P (e.g. halfway up a standing rocket)
+  const off = keepAboveGround(P, vadd(A, vadd(vadd(vscale(e1, dist * ce * ca), vscale(e2, dist * ce * sa)), vscale(e3, dist * se))), t);
   const up = mode === 'top' ? vadd(vscale(e1, -ca), vscale(e2, -sa)) : e3;
-  return { pos: off, up, look: [0, 0, 0], center: true, basis: [e1, e2, e3] };
+  return { pos: off, up, look: A, center: true, basis: [e1, e2, e3] };
 }
 function setPose(pose) {
   const cam = R.camera; cam.position.set(pose.pos[0], pose.pos[1], pose.pos[2]); cam.up.set(pose.up[0], pose.up[1], pose.up[2]);
@@ -150,8 +186,19 @@ function directorShot(c, t) {
   const alt = body === 'sun' ? Infinity : vnorm(c.rD || s.r) - R0;
   const tIns = md.ship && md.ship.segs.length ? md.ship.segs[0].t1 : md.M.t0 + 600;
   const sunAz = () => { const p = poseFor('chase', { az: 0, el: 0, dist: 1 }, c.P, t); const [e1, e2] = p.basis; const sd = vunit(vscale(c.P, -1)); return Math.atan2(vdot(sd, e2), vdot(sd, e1)); };
-  if (c.o.id === 'ship' && (s.pad || t < md.M.t0 + 45)) return { key: 'pad', mode: 'chase', az: sunAz() + 38 * DEG, el: 4 * DEG, dist: L * 4.2, lens: 35, label: 'Launch' };
-  if (c.o.id === 'ship' && t < tIns + 5) return { key: 'ascent', mode: 'chase', az: 200 * DEG, el: 9 * DEG, dist: L * (4.5 + 4 * Math.min(Math.max(alt, 0), 100) / 100), lens: 35, label: 'Ascent', blend: 4500 };
+  if (c.o.id === 'ship' && (s.pad || t < md.M.t0 + 45)) { // the whole vehicle, pad to tip, in the rows the HUD leaves free
+    const shot = { key: 'pad', mode: 'chase', az: sunAz() + 38 * DEG, el: 4 * DEG, dist: L * 4.2, lens: 35, label: 'Launch' };
+    const B = screenBand(), m = (B.bot - B.top) * 0.07, f = fitColumn(standingHeight(c, L), shot.el, B.top + m, B.bot - m * 0.6);
+    if (f) { shot.dist = f.dist; shot.aimH = f.aimH; }
+    return shot;
+  }
+  if (c.o.id === 'ship' && t < tIns + 5) {
+    let dist = L * (4.5 + 4 * Math.min(Math.max(alt, 0), 100) / 100); const el = 9 * DEG;
+    // the camera looks at the engines, so the vehicle stands above the centre of the frame: back off far enough on wide screens to keep its nose below the top bar
+    const B = screenBand(), p1 = R.height / 2 - (B.top + (B.bot - B.top) * 0.04);
+    if (p1 > 20) dist = Math.max(dist, standingHeight(c, L) * (Math.cos(el) * R.pxPerRad / p1 + Math.sin(el)));
+    return { key: 'ascent', mode: 'chase', az: 200 * DEG, el, dist, lens: 35, label: 'Ascent', blend: 4500 };
+  }
   if (isShuttle(md)) { const sh = shuttleShot(c, t, s, ex, cfgL, L); if (sh) return sh; }
   if (ex.chute) return { key: 'chute', mode: 'chase', az: 120 * DEG, el: -8 * DEG, dist: Math.max(L * 25, 0.09), lens: 35, drift: 0.05, label: 'Parachutes' };
   if ((ex.heat > 2 || ex.q > 300) && alt < 140) return { key: 'entry', mode: 'chase', az: 65 * DEG, el: 8 * DEG, dist: L * 7, lens: 35, label: 'Entry' };
@@ -198,11 +245,14 @@ function directorUpdate(t, realDt) {
   if (shot.key !== DIR.key) {
     if (!jump && DIR.key) DIR.blend = { pos: R.camera.position.clone(), quat: R.camera.quaternion.clone(), up: R.camera.up.clone(), center: DIR.prm ? DIR.prm.mode !== 'lookat' : true, t0: now, dur: shot.blend || 1800 };
     else DIR.blend = null;
-    DIR.key = shot.key; DIR.since = now; DIR.offAz = 0; DIR.offEl = 0; DIR.zoomK = 1; DIR.lensUser = null; DIR.dist = null;
+    DIR.key = shot.key; DIR.since = now; DIR.offAz = 0; DIR.offEl = 0; DIR.zoomK = 1; DIR.lensUser = null; DIR.dist = null; DIR.aimH = null;
   }
   const drift = shot.drift ? (now - DIR.since) / 1000 * shot.drift : 0;
   const target = shot.dist * DIR.zoomK;
   DIR.dist = DIR.dist == null || jump ? target : Math.exp(Math.log(DIR.dist) + (Math.log(target) - Math.log(DIR.dist)) * Math.min(1, realDt * 1.5));
+  if (shot.aimH == null) DIR.aimH = null; // look above the base point (a standing rocket is framed around its middle)
+  else DIR.aimH = DIR.aimH == null || jump ? shot.aimH : DIR.aimH + (shot.aimH - DIR.aimH) * Math.min(1, realDt * 1.5);
+  const aim = DIR.aimH != null && c.s ? vscale(vunit(c.rD || c.s.r), DIR.aimH) : null;
   let az, el;
   if (shot.mode === 'lookat') { // keep the craft inside the middle of the film frame, whatever the lens and screen shape
     const fr = frameRect(), tH = 18 / CAM.lens, tV = tH * fr.h / fr.w;
@@ -210,7 +260,7 @@ function directorUpdate(t, realDt) {
     DIR.offAz = clamp(DIR.offAz, -aL - shot.az, aL - shot.az); DIR.offEl = clamp(DIR.offEl, -eL - shot.el, eL - shot.el);
     az = clamp(shot.az + DIR.offAz + Math.sin(drift) * Math.min(0.05, aL * 0.3), -aL, aL); el = clamp(shot.el + DIR.offEl, -eL, eL);
   } else { az = shot.az + DIR.offAz + drift; el = clamp(shot.el + DIR.offEl, -1.5, 1.5); }
-  DIR.prm = { mode: shot.mode, look: shot.look, from: shot.from, off: shot.off, az, el, dist: DIR.dist };
+  DIR.prm = { mode: shot.mode, look: shot.look, from: shot.from, off: shot.off, az, el, dist: DIR.dist, aim };
   DIR.shot = shot;
   const lens = DIR.lensUser || shot.lens;
   if (Math.abs(CAM.lens - lens) > 0.5) { CAM.lens = jump ? lens : Math.exp(Math.log(CAM.lens) + (Math.log(lens) - Math.log(CAM.lens)) * Math.min(1, realDt * 2)); applyLens(); syncCamUI(); }
@@ -255,7 +305,7 @@ function updateCamera(t, realDt) {
         const pT = cam.position.clone(), qT = cam.quaternion.clone();
         const pos = vlerp([DIR.blend.pos.x, DIR.blend.pos.y, DIR.blend.pos.z], [pT.x, pT.y, pT.z], f); const safe = keepAboveGround(P, pos, t);
         cam.position.set(safe[0], safe[1], safe[2]);
-        if (DIR.blend.center && pose.center) { cam.up.copy(DIR.blend.up).lerp(_up.set(pose.up[0], pose.up[1], pose.up[2]), f).normalize(); cam.lookAt(0, 0, 0); if (CAM.roll) cam.rotateZ(CAM.roll); }
+        if (DIR.blend.center && pose.center) { cam.up.copy(DIR.blend.up).lerp(_up.set(pose.up[0], pose.up[1], pose.up[2]), f).normalize(); cam.lookAt(pose.look[0], pose.look[1], pose.look[2]); if (CAM.roll) cam.rotateZ(CAM.roll); }
         else cam.quaternion.slerpQuaternions(DIR.blend.quat, qT, f);
       }
     }

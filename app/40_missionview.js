@@ -192,13 +192,44 @@ function updateCraft(c, t, camPos) {
     shapePlume(wake, r * 1.1, r * 2.2, r * 14 * k); wake.material.uniforms.uI.value = 0.9 * k; wake.material.uniforms.uTime.value = performance.now() / 1000;
   } else c.plasma.visible = false;
 }
+// ---------------- exhaust plumes, sized by propellant mass flow ----------------
+// The visible flame of a rocket engine at sea level grows with the square root of the propellant it burns per second
+// (a nozzle's area scales with its flow): about 1.6 m per √(kg/s), so the Saturn V's five F-1s (13 t/s) trail a flame
+// longer than the rocket while a lunar module's descent engine (15 kg/s) shows a few metres. In thinning air the plume
+// lengthens and balloons out.
+const PLUME = { k: 1.6, solid: 1.25, grow: 1.6 };
+const stageFlow = st => st.thrustVac / (st.ispVac * G0); // kg/s at full thrust
+function curveAt(curve, x) {
+  if (x <= curve[0][0]) return curve[0][1];
+  for (let i = 1; i < curve.length; i++) if (x <= curve[i][0]) { const a = curve[i - 1], b = curve[i]; return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]); }
+  return curve[curve.length - 1][1];
+}
+// propellant flow through one drawn plume (kg/s) and its share of full thrust. Launch-vehicle stages: solid boosters follow
+// their thrust curve, liquid engines their throttle, shared by the boosters or engines drawn for that stage. A spacecraft or
+// an upper stage flying alone: its current thrust over the engine's specific impulse, shared by the engines firing.
+function mountFlow(c, s, t, m, act, cfgL) {
+  const same = act.filter(x => x.tag === m.tag).length || 1;
+  const thr = s.extra && s.extra.throttle != null ? s.extra.throttle : 1;
+  if (cfgL && cfgL.key === 'launch' && m.idx != null) {
+    const st = LAUNCHERS[cfgL.launcher].stages[m.idx];
+    const f = st.parallel ? (st.curve ? Math.max(curveAt(st.curve, t - MV.md.M.t0), 0) : 1) : thr;
+    return { flow: stageFlow(st) * f / same, f };
+  }
+  let isp = 0;
+  if (cfgL && cfgL.key === 'stack') isp = LAUNCHERS[cfgL.launcher].stages[cfgL.stage].ispVac;
+  else { const b = MV.md.burnAt(t, c.o.id); if (b && b.isp) isp = b.isp; }
+  if (!isp) { const mod = MV.md.SC.modules.DS || MV.md.SC.modules.LDR; isp = (mod && mod.engine && mod.engine.isp) || 300; }
+  return { flow: (s.T || 0) / (isp * G0) / act.length, f: thr };
+}
+// all the propellant the vehicle burns at liftoff (kg/s): sizes the fire and smoke at the pad and the trail behind the rocket
+function liftoffFlow(L) { return liftoffStages(L).reduce((a, st) => a + stageFlow(st), 0); }
+const blastScale = L => clamp(Math.sqrt(liftoffFlow(L) / 13000), 0.35, 1.35); // 1 for the Saturn V
 function updatePlumes(c, s, t, act, model) {
   let i = 0;
   if (act.length && s.T > 0) {
     const alt = vnorm(s.r) - surfaceRadius(s.ref);
     const pr = s.ref === 'earth' ? Math.exp(-Math.max(alt, 0) / 7.2) : s.ref === 'mars' ? 0.006 * Math.exp(-Math.max(alt, 0) / 11) : 0;
     const vac = 1 - Math.min(1, pr * 1.2);
-    const thr = clamp(s.extra && s.extra.throttle != null ? s.extra.throttle : 1, s.pad ? 0.04 : 0.2, 1);
     const cfgL = cfgAt(c, t);
     for (const m of act) {
       if (i >= c.plumes.length) break;
@@ -207,13 +238,17 @@ function updatePlumes(c, s, t, act, model) {
       if (c.o.model === 'starshipPayload' || (cfgL && cfgL.launcher === 'starship' && cfgL.key !== 'launch')) prop = 'methalox';
       const look = PROP_LOOK[prop] || PROP_LOOK.mmh; const colr = (PROP[prop] || PROP.mmh).plume;
       const p = c.plumes[i++]; p.visible = true;
-      const r0 = m.r * 0.85; const len = m.r * (5 + 16 * vac) * Math.sqrt(thr) * (prop === 'solid' ? 1.4 : 1);
-      shapePlume(p, r0, r0 * (1.3 + 5.5 * vac), len);
+      const mf = mountFlow(c, s, t, m, act, cfgL), thr = clamp(mf.f, s.pad ? 0.04 : 0.2, 1);
+      const Lsl = PLUME.k * Math.sqrt(Math.max(mf.flow, 0)) * (prop === 'solid' ? PLUME.solid : 1); // m, at sea level
+      const r0 = m.r * 0.85, len = Math.max(Lsl * (1 + PLUME.grow * vac * vac), m.r * 1.5);
+      shapePlume(p, r0, Math.max(r0 * (1.3 + 5.5 * vac), r0 + (0.06 + 0.12 * vac) * Lsl), len);
       const yc = model.userData.yc || 0;
       p.position.set(m.x || 0, m.y - yc + (c.yOff || 0), m.z || 0);
       p.rotation.set(m.flip ? Math.PI : 0, 0, 0);
       const u = p.material.uniforms; u.uColor.value.set(colr); u.uCore.value.set(look[2]);
       u.uI.value = look[0] * (0.35 + 0.65 * (1 - vac * 0.6)) * thr; u.uDiam.value = look[1] * (1 - vac); u.uTime.value = performance.now() / 1000;
+      const dl = 5 * m.r; u.uDF.value = 46 * len / dl; u.uDL.value = clamp(dl / len, 0.03, 1); // diamonds as before, within ~5 nozzle radii
+      u.uCF.value = clamp(9 * m.r / len * (prop === 'solid' ? 1.8 : 1), 0.12, 0.45); // the white-hot core: a few nozzle diameters long
     }
   }
   for (; i < c.plumes.length; i++) c.plumes[i].visible = false;
@@ -282,8 +317,10 @@ function updatePad(t) {
   const t0 = md.M.t0, IG = md.L.ign || { t: 0 }, tIgn = t0 - (IG.t || 0);
   const ship = craftById('ship');
   const altM = te => { if (te < t0) return 0; const s = ship && ship.o.stateAt(te); return s ? (vnorm(s.r) - BODIES.earth.R) * 1000 : 1e9; };
-  // how hard the exhaust hits the pad at time te: engine build-up before liftoff, fading as the vehicle climbs away
-  const blast = te => { if (te < tIgn) return 0; if (te < t0) { const ig = padIgnition(md, te); return ig ? ig.f : 0; } return clamp(1 - altM(te) / 300, 0, 1); };
+  // how hard the exhaust hits the pad at time te: engine build-up before liftoff, fading as the vehicle climbs away — once it
+  // is about one and a half flame lengths up. Bigger engines (more propellant per second) throw out more fire and smoke.
+  const sC = blastScale(md.L), fadeAlt = Math.max(110, 1.5 * PLUME.k * Math.sqrt(liftoffFlow(md.L)));
+  const blast = te => { if (te < tIgn) return 0; if (te < t0) { const ig = padIgnition(md, te); return ig ? ig.f : 0; } return clamp(1 - altM(te) / fadeAlt, 0, 1); };
   const bNow = blast(t);
   g.userData.hole.color.setRGB(0.08 + 0.92 * bNow, 0.07 + 0.55 * bNow, 0.06 + 0.2 * bNow);
   // sunlight on the cloud (night launches get a dim cloud lit orange by the flames)
@@ -298,12 +335,12 @@ function updatePad(t) {
     if (k < 0.03 || a > 200) { al[i] = 0; continue; }
     let x, y, z, sz; const kind = i % 5;
     if (kind < 4) { // fire, then smoke and steam, blasting out of both ends of the flame trench
-      const side = kind % 2 ? 1 : -1, v0 = (45 + 40 * r2) * (0.35 + 0.65 * k), tau = 3.0;
+      const side = kind % 2 ? 1 : -1, v0 = (45 + 40 * r2) * (0.35 + 0.65 * k) * (0.55 + 0.45 * sC), tau = 3.0;
       const d = 70 + v0 * tau * (1 - Math.exp(-a / tau)) + 1.5 * a;
-      x = (r3 - 0.5) * (12 + 10 * a); z = side * d; y = 7 + (1.8 + 3 * r1) * a + 0.1 * a * a; sz = 20 + 9 * a + 14 * r2;
-      gl[i] = clamp(k * (1 - a / 1.8), 0, 1) * 0.9;
+      x = (r3 - 0.5) * (12 + 10 * a); z = side * d; y = 7 + (1.8 + 3 * r1) * a + 0.1 * a * a; sz = (20 + 9 * a + 14 * r2) * (0.45 + 0.55 * sC);
+      gl[i] = clamp(k * (1 - a / (1.2 + 0.8 * sC)), 0, 1) * 0.9;
     } else { // steam from the water deluge, boiling up around the launch mount
-      const ang = r2 * TAU, rr = foot + 6 + 8 * r3 + 3 * a; x = Math.cos(ang) * rr; z = Math.sin(ang) * rr; y = MOUNT_H + 2 + (4 + 4 * r1) * a; sz = 10 + 6 * a;
+      const ang = r2 * TAU, rr = foot + 6 + 8 * r3 + 3 * a; x = Math.cos(ang) * rr; z = Math.sin(ang) * rr; y = MOUNT_H + 2 + (4 + 4 * r1) * a; sz = (10 + 6 * a) * (0.5 + 0.5 * sC);
       gl[i] = clamp(k * (1 - a / 1.2), 0, 1) * 0.5;
     }
     pos[3 * i] = x; pos[3 * i + 1] = y; pos[3 * i + 2] = z; size[i] = sz * 0.001;
@@ -737,7 +774,7 @@ function updateSmoke(t) {
   const L = md.L; const smoky = L.stages.some(s => (s.prop === 'kerolox' || s.prop === 'solid') && (s.parallel || L.stages.indexOf(s) === 0));
   if (!smoky) { sm.visible = false; return; }
   const pos = sm.geometry.attributes.position.array, size = sm.geometry.attributes.aSize.array, al = sm.geometry.attributes.aA.array; const O = R.O; const N = size.length;
-  let k = 0;
+  let k = 0; const sK = 0.45 + 0.55 * blastScale(L); // a thicker trail behind engines that burn more propellant
   for (let i = 0; i < N; i++) {
     const age = i * 2.0 + 0.5; const te = t - age; if (te < md.M.t0) { al[i] = 0; continue; }
     const s = c.o.stateAt(te); if (!s) { al[i] = 0; continue; }
@@ -746,7 +783,7 @@ function updateSmoke(t) {
     // smoke stays fixed to the rotating Earth: rotate the emission point forward by Earth rotation over its age
     const w = bodyOmegaEcl('earth', t); const pRot = vrot(s.r, vunit(w), vnorm(w) * age);
     pos[3 * i] = E[0] + pRot[0] - O[0]; pos[3 * i + 1] = E[1] + pRot[1] - O[1]; pos[3 * i + 2] = E[2] + pRot[2] - O[2];
-    size[i] = (0.04 + 0.012 * age) * (1 + alt / 12); al[i] = clamp(0.55 * (1 - alt / 45) * Math.exp(-age / 160), 0, 0.6); k++;
+    size[i] = (0.04 + 0.012 * age) * (1 + alt / 12) * sK; al[i] = clamp(0.55 * (1 - alt / 45) * Math.exp(-age / 160), 0, 0.6); k++;
   }
   sm.geometry.attributes.position.needsUpdate = true; sm.geometry.attributes.aSize.needsUpdate = true; sm.geometry.attributes.aA.needsUpdate = true;
   sm.material.uniforms.uPx.value = R.height / (2 * Math.tan(R.camera.fov * DEG / 2));

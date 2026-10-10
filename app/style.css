@@ -359,5 +359,14 @@ legend { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; colo
   #prop { font-size: 11px; padding: 3px 10px 3px 8px; gap: 6px; }
   #prop .pl { font-size: 10px; letter-spacing: .08em; }
 }
+/* short screens (a phone held sideways): a compact countdown card at the right, so the rocket keeps the middle of the view */
+@media (max-height: 520px) {
+  #countdown { top: 54px; left: auto; right: 10px; transform: none; min-width: 0; padding: 6px 14px 5px; gap: 0; }
+  #countdown .cd-num { font-size: 36px; }
+  #countdown .cd-t { font-size: 18px; }
+  #countdown .cd-sub { display: none; }
+  #countdown button { margin-top: 0; padding: 1px 6px; }
+  #countdown.liftoff .cd-num { font-size: 26px; }
+}
 .idle #left, .idle #right, .idle #bottom, .idle #vecLabels, .idle #minimap { display: none; }
 .idle #btnHide, .idle #btnTele, .idle #btnSide { display: none; }
