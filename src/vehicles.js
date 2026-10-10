@@ -1,0 +1,285 @@
+// ============================================================================
+// vehicles.js — real launch vehicles, spacecraft and launch sites
+// Masses kg, thrust N, Isp s, lengths m.  Geometry parts: [len, rBottom, rTop, color, opts]
+// ============================================================================
+const PROP = {
+  kerolox: { label: 'RP-1 / LOX (kerosene)', plume: '#ffb347', smoke: true },
+  hydrolox: { label: 'LH₂ / LOX (liquid hydrogen)', plume: '#bcd7ff', smoke: false },
+  methalox: { label: 'CH₄ / LOX (liquid methane)', plume: '#8fb6ff', smoke: false },
+  solid: { label: 'Solid (PBAN / HTPB composite)', plume: '#fff1c4', smoke: true },
+  hypergolic: { label: 'Aerozine-50 / N₂O₄ (hypergolic)', plume: '#ffd0a0', smoke: false },
+  udmh: { label: 'UDMH / IRFNA (hypergolic)', plume: '#ffc890', smoke: false },
+  mmh: { label: 'MMH / MON (hypergolic)', plume: '#ffd8b0', smoke: false },
+  hydrazine: { label: 'Hydrazine (monopropellant)', plume: '#e8f0ff', smoke: false },
+  xenon: { label: 'Xenon (electric)', plume: '#9ab8ff', smoke: false },
+};
+const C = { white: '#ecebe6', black: '#1b1b1d', orange: '#d0702a', grey: '#9ba0a6', dark: '#3b3e44', steel: '#b9bec5', gold: '#c9a043', silver: '#d6d9de', cream: '#efe7d4', red: '#c43c2c', foam: '#d98b4a' };
+
+const LAUNCH_SITES = {
+  KSC39A: { name: 'Kennedy LC-39A, Florida', lat: 28.6084, lon: -80.6043, azRange: [35, 120] },
+  KSC39B: { name: 'Kennedy LC-39B, Florida', lat: 28.6272, lon: -80.6208, azRange: [35, 120] },
+  CCSFS41: { name: 'Cape Canaveral SLC-41, Florida', lat: 28.5833, lon: -80.5830, azRange: [35, 120] },
+  CCSFS12: { name: 'Cape Canaveral LC-12, Florida', lat: 28.4806, lon: -80.5422, azRange: [35, 120] },
+  WENCHANG: { name: 'Wenchang LC-101, Hainan', lat: 19.6145, lon: 110.9510, azRange: [70, 180] },
+  SDSC: { name: 'Satish Dhawan SLP, Sriharikota', lat: 13.7199, lon: 80.2304, azRange: [90, 140] },
+  STARBASE: { name: 'Starbase, Texas', lat: 25.9971, lon: -97.1553, azRange: [80, 115] },
+  TANEGASHIMA: { name: 'Tanegashima, Japan', lat: 30.4000, lon: 130.9750, azRange: [90, 160] },
+  BAIKONUR: { name: 'Baikonur 81/24, Kazakhstan', lat: 46.0700, lon: 63.6500, azRange: [35, 65] },
+};
+
+// Each launcher: stages in ignition order. parallel:true → burns together with the next stage from liftoff (boosters).
+const LAUNCHERS = {
+  saturnV: {
+    name: 'Saturn V', org: 'NASA (USA)', years: '1967–1973', height: 110.6, diameter: 10.1, crewRated: true,
+    blurb: 'Three-stage super heavy-lift rocket of the Apollo program. Still the most powerful rocket ever to fly crews to the Moon.',
+    stages: [
+      { id: 'S-IC', name: 'S-IC first stage', prop: 'kerolox', engine: 'F-1', n: 5, thrustSL: 5 * 6770e3, thrustVac: 5 * 7770e3, ispSL: 263, ispVac: 304, dry: 130000, propMass: 2077000, maxG: 4.0, minThr: 0.8,
+        geom: [[42.1, 5.05, 5.05, C.white, { roll: 'sic' }]], eng: { n: 5, len: 5.8, r: 1.85, layout: 'cross', spread: 3.4 }, fins: { n: 4, len: 9.0, span: 3.4, color: C.white } },
+      { id: 'S-II', name: 'S-II second stage', prop: 'hydrolox', engine: 'J-2', n: 5, thrustSL: 5 * 486e3, thrustVac: 5 * 1033e3, ispSL: 200, ispVac: 421, dry: 36200, propMass: 443000,
+        geom: [[19.7, 5.05, 5.05, C.white, { band: true }], [5.2, 5.05, 3.3, C.white]], eng: { n: 5, len: 3.4, r: 1.0, layout: 'cross', spread: 2.4 } },
+      { id: 'S-IVB', name: 'S-IVB third stage', prop: 'hydrolox', engine: 'J-2', n: 1, thrustSL: 486e3, thrustVac: 1033e3, ispSL: 200, ispVac: 421, dry: 11300, propMass: 107000, restart: true,
+        geom: [[17.8, 3.3, 3.3, C.white, { roll: 'sivb' }], [0.9, 3.3, 3.3, C.grey]], eng: { n: 1, len: 3.4, r: 1.0, layout: 'single' } },
+    ],
+    jettison: [{ name: 'S-II aft interstage', mass: 5200, afterStage: 0, delay: 30 }, { name: 'Launch Escape System', mass: 4170, afterStage: 0, delay: 35, part: 'LES' }],
+    payloadFairing: null, ascent: { hp: 185, ha: 190, vert: 12, kickGuess: 1.5 },
+  },
+  sls1: {
+    name: 'SLS Block 1', org: 'NASA (USA)', years: '2022–', height: 98.1, diameter: 8.4, crewRated: true,
+    blurb: 'Space Launch System Block 1 — RS-25 core stage, two five-segment solid boosters and the ICPS upper stage. Launched Artemis I and the crewed Artemis II.',
+    stages: [
+      { id: 'SRB', name: '2 × five-segment solid rocket boosters', prop: 'solid', engine: 'RSRMV', n: 2, thrustSL: 2 * 11.88e6, thrustVac: 2 * 13.20e6, ispSL: 242, ispVac: 268.8, dry: 2 * 98000, propMass: 2 * 631000, parallel: true,
+        curve: [[0, 1.22], [20, 1.18], [45, 0.94], [62, 0.95], [85, 1.04], [108, 0.78], [122, 0.4], [135, 0.05]], booster: { count: 2, offset: 6.1 },
+        geom: [[2.6, 2.6, 1.86, C.white], [46.0, 1.855, 1.855, C.white, { bands: 4 }], [5.5, 1.855, 0.35, C.white]], eng: { n: 1, len: 3.6, r: 1.9, layout: 'single' } },
+      { id: 'Core', name: 'Core stage (4 × RS-25)', prop: 'hydrolox', engine: 'RS-25', n: 4, thrustSL: 4 * 1860e3, thrustVac: 4 * 2280e3, ispSL: 366, ispVac: 452, dry: 85000, propMass: 980000, maxG: 3.5, minThr: 0.67,
+        geom: [[4.5, 4.6, 4.2, C.white], [60.1, 4.2, 4.2, C.orange], [8.3, 4.2, 2.55, C.white]], eng: { n: 4, len: 4.3, r: 1.2, layout: 'square', spread: 2.0 } },
+      { id: 'ICPS', name: 'Interim Cryogenic Propulsion Stage', prop: 'hydrolox', engine: 'RL10B-2', n: 1, thrustSL: 60e3, thrustVac: 110.1e3, ispSL: 300, ispVac: 465.5, dry: 3490, propMass: 27220, restart: true,
+        geom: [[13.7, 2.55, 2.55, C.white], [1.5, 2.55, 2.05, C.white]], eng: { n: 1, len: 2.4, r: 1.1, layout: 'single' } },
+    ],
+    jettison: [{ name: 'Launch Abort System', mass: 7700, time: 195, part: 'LES' }, { name: 'Service module fairings', mass: 1350, time: 190, part: 'SAJ' }],
+    payloadFairing: null, ascent: { hp: 185, ha: 2300, vert: 10, kickGuess: 1.2 },
+  },
+  lm5: {
+    name: 'Long March 5', org: 'CASC (China)', years: '2016–', height: 57.0, diameter: 5.0,
+    blurb: 'China’s heavy-lift launcher: hydrolox core with four kerosene boosters. Launched Chang’e 5 and Tianwen-1.',
+    stages: [
+      { id: 'K3-1', name: '4 × K3-1 boosters (2 × YF-100 each)', prop: 'kerolox', engine: 'YF-100', n: 8, thrustSL: 8 * 1200e3, thrustVac: 8 * 1340e3, ispSL: 300, ispVac: 335, dry: 4 * 13000, propMass: 4 * 143000, parallel: true,
+        booster: { count: 4, offset: 4.2 }, geom: [[22.6, 1.675, 1.675, C.white], [5.0, 1.675, 0.3, C.white]], eng: { n: 2, len: 2.3, r: 0.75, layout: 'pair', spread: 0.8 } },
+      { id: 'Core', name: 'Core stage (2 × YF-77)', prop: 'hydrolox', engine: 'YF-77', n: 2, thrustSL: 2 * 510e3, thrustVac: 2 * 700e3, ispSL: 310, ispVac: 430, dry: 21600, propMass: 158500,
+        geom: [[33.2, 2.5, 2.5, C.white, { flag: 'cn' }]], eng: { n: 2, len: 2.8, r: 0.9, layout: 'pair', spread: 1.1 } },
+      { id: 'Stage 2', name: 'Second stage (2 × YF-75D)', prop: 'hydrolox', engine: 'YF-75D', n: 2, thrustSL: 2 * 50e3, thrustVac: 2 * 88.36e3, ispSL: 300, ispVac: 442.6, dry: 3400, propMass: 26100, restart: true,
+        geom: [[11.5, 2.5, 2.5, C.white]], eng: { n: 2, len: 1.6, r: 0.55, layout: 'pair', spread: 0.8 } },
+    ],
+    jettison: [{ name: 'Payload fairing', mass: 3000, alt: 115, part: 'fairing' }],
+    payloadFairing: { len: 12.5, r: 2.6, color: C.white }, ascent: { hp: 200, ha: 200, vert: 12, kickGuess: 1.6 },
+  },
+  atlasV541: {
+    name: 'Atlas V 541', org: 'ULA (USA)', years: '2011–', height: 59.7, diameter: 3.81,
+    blurb: 'RD-180 powered common core, four solid boosters, single-engine Centaur upper stage and 5-m fairing. Launched Curiosity and Perseverance.',
+    stages: [
+      { id: 'SRB', name: '4 × AJ-60A solid boosters', prop: 'solid', engine: 'AJ-60A', n: 4, thrustSL: 4 * 1170e3, thrustVac: 4 * 1330e3, ispSL: 245, ispVac: 279, dry: 4 * 4100, propMass: 4 * 42630, parallel: true,
+        curve: [[0, 1.15], [30, 1.05], [70, 0.95], [85, 0.6], [95, 0.05]], booster: { count: 4, offset: 2.75 },
+        geom: [[17.0, 0.79, 0.79, C.white], [3.0, 0.79, 0.15, C.white]], eng: { n: 1, len: 1.6, r: 0.75, layout: 'single' } },
+      { id: 'CCB', name: 'Common Core Booster (RD-180)', prop: 'kerolox', engine: 'RD-180', n: 1, thrustSL: 3827e3, thrustVac: 4152e3, ispSL: 311.3, ispVac: 337.8, dry: 21054, propMass: 284089, maxG: 4.8, minThr: 0.47,
+        geom: [[32.5, 1.905, 1.905, '#d9864e']], eng: { n: 2, len: 3.6, r: 0.75, layout: 'pair', spread: 0.8 } },
+      { id: 'Centaur', name: 'Centaur III (single RL10C-1)', prop: 'hydrolox', engine: 'RL10C-1', n: 1, thrustSL: 50e3, thrustVac: 101.8e3, ispSL: 300, ispVac: 449.7, dry: 2316, propMass: 20830, restart: true,
+        geom: [[12.7, 1.525, 1.525, C.silver]], eng: { n: 1, len: 2.3, r: 0.75, layout: 'single' } },
+    ],
+    jettison: [{ name: '5-m payload fairing', mass: 4000, alt: 120, part: 'fairing' }],
+    payloadFairing: { len: 20.7, r: 2.7, color: C.white, encloseUpper: true }, ascent: { hp: 185, ha: 185, vert: 10, kickGuess: 2.5 },
+  },
+  atlasAgena: {
+    name: 'Atlas LV-3 Agena-D', org: 'USAF / NASA (USA)', years: '1963–1978', height: 31.0, diameter: 3.05,
+    blurb: '“Stage-and-a-half” Atlas with balloon tanks plus a restartable Agena-D upper stage. Sent Mariner 4 to the first Mars flyby.',
+    stages: [
+      { id: 'Booster', name: 'Atlas booster section (2 × LR89 + sustainer)', prop: 'kerolox', engine: 'LR89 ×2 + LR105', n: 3, thrustSL: 1590e3, thrustVac: 1850e3, ispSL: 258, ispVac: 290, dry: 3050, propMass: 87000,
+        geom: [[3.2, 1.6, 1.6, C.steel]], eng: { n: 2, len: 2.3, r: 0.7, layout: 'pair', spread: 1.0 } },
+      { id: 'Sustainer', name: 'Atlas sustainer (LR105)', prop: 'kerolox', engine: 'LR105', n: 1, thrustSL: 254e3, thrustVac: 363e3, ispSL: 220, ispVac: 316, dry: 2350, propMass: 26500,
+        geom: [[18.0, 1.525, 1.525, C.steel], [2.0, 1.525, 0.76, C.steel]], eng: { n: 1, len: 1.6, r: 0.45, layout: 'single' } },
+      { id: 'Agena-D', name: 'Agena-D (Bell 8247)', prop: 'udmh', engine: 'Bell 8247', n: 1, thrustSL: 40e3, thrustVac: 71.2e3, ispSL: 200, ispVac: 290, dry: 670, propMass: 6100, restart: true,
+        geom: [[7.1, 0.76, 0.76, C.silver]], eng: { n: 1, len: 1.2, r: 0.45, layout: 'single' } },
+    ],
+    jettison: [{ name: 'Mariner shroud', mass: 400, alt: 110, part: 'fairing' }],
+    payloadFairing: { len: 7.6, r: 0.8, color: C.silver }, ascent: { hp: 185, ha: 185, vert: 10, kickGuess: 2.0 },
+  },
+  falconHeavy: {
+    name: 'Falcon Heavy (expendable)', org: 'SpaceX (USA)', years: '2018–', height: 70.0, diameter: 3.66,
+    blurb: 'Three Falcon 9-derived cores (27 Merlin engines). Flown fully expendable for Europa Clipper.',
+    stages: [
+      { id: 'Side boosters', name: '2 × side boosters (9 × Merlin 1D each)', prop: 'kerolox', engine: 'Merlin 1D', n: 18, thrustSL: 18 * 845e3, thrustVac: 18 * 914e3, ispSL: 282, ispVac: 311, dry: 2 * 22200, propMass: 2 * 411000, parallel: true,
+        booster: { count: 2, offset: 3.75 }, geom: [[37.0, 1.83, 1.83, C.white], [4.2, 1.83, 1.83, C.black], [3.2, 1.83, 0.25, C.white]], eng: { n: 9, len: 1.4, r: 0.45, layout: 'octaweb', spread: 1.25 } },
+      { id: 'Center core', name: 'Center core (9 × Merlin 1D)', prop: 'kerolox', engine: 'Merlin 1D', n: 9, thrustSL: 9 * 845e3, thrustVac: 9 * 914e3, ispSL: 282, ispVac: 311, dry: 25000, propMass: 411000, thrWithBoosters: 0.55, maxG: 4.5, minThr: 0.4,
+        geom: [[37.0, 1.83, 1.83, C.white], [4.2, 1.83, 1.83, C.black]], eng: { n: 9, len: 1.4, r: 0.45, layout: 'octaweb', spread: 1.25 } },
+      { id: 'Stage 2', name: 'Second stage (Merlin Vacuum)', prop: 'kerolox', engine: 'MVac', n: 1, thrustSL: 600e3, thrustVac: 981e3, ispSL: 200, ispVac: 348, dry: 4000, propMass: 107500, restart: true,
+        geom: [[12.6, 1.83, 1.83, C.white]], eng: { n: 1, len: 3.0, r: 1.5, layout: 'single' } },
+    ],
+    jettison: [{ name: 'Payload fairing', mass: 1900, alt: 110, part: 'fairing' }],
+    payloadFairing: { len: 13.1, r: 2.6, color: C.white }, ascent: { hp: 185, ha: 185, vert: 10, kickGuess: 2.0 },
+  },
+  starship: {
+    name: 'Starship (Super Heavy + Ship, Block 2)', org: 'SpaceX (USA)', years: '2025–', height: 123.0, diameter: 9.0, crewRated: true,
+    blurb: 'Fully reusable methalox two-stage vehicle (33 + 6 Raptor engines). Mars missions require refilling the Ship with ~8–10 tanker flights in Earth orbit.',
+    stages: [
+      { id: 'Super Heavy', name: 'Super Heavy booster (33 × Raptor 2)', prop: 'methalox', engine: 'Raptor 2', n: 33, thrustSL: 73.5e6, thrustVac: 78.0e6, ispSL: 327, ispVac: 347, dry: 275000, propMass: 3400000, maxG: 3.5, minThr: 0.4,
+        geom: [[69.0, 4.5, 4.5, C.steel, { chines: true }], [2.0, 4.5, 4.5, C.dark]], eng: { n: 33, len: 2.5, r: 0.65, layout: 'raptor33', spread: 4.0 }, gridfins: true },
+      { id: 'Ship', name: 'Ship (3 Raptor + 3 Raptor Vacuum)', prop: 'methalox', engine: 'Raptor / RVac', n: 6, thrustSL: 10.5e6, thrustVac: 15.0e6, ispSL: 327, ispVac: 368, dry: 100000, propMass: 1500000, restart: true,
+        geom: [[44.0, 4.5, 4.5, C.steel, { tiles: true }], [8.1, 4.5, 0.6, C.steel, { tiles: true }]], eng: { n: 6, len: 2.8, r: 0.9, layout: 'ship6', spread: 2.2 }, flaps: true },
+    ],
+    jettison: [], payloadFairing: null, ascent: { hp: 200, ha: 200, vert: 8, kickGuess: 1.5 },
+  },
+  lvm3: {
+    name: 'LVM3', org: 'ISRO (India)', years: '2017–', height: 43.5, diameter: 4.0,
+    blurb: 'India’s heaviest launcher: two S200 solid boosters, L110 liquid core and C25 cryogenic upper stage. Launched Chandrayaan-2 and -3.',
+    stages: [
+      { id: 'S200', name: '2 × S200 solid boosters', prop: 'solid', engine: 'S200', n: 2, thrustSL: 2 * 4.6e6, thrustVac: 2 * 5.15e6, ispSL: 247, ispVac: 274.5, dry: 2 * 31300, propMass: 2 * 207000, parallel: true,
+        curve: [[0, 1.12], [40, 1.05], [80, 0.95], [115, 0.7], [130, 0.05]], booster: { count: 2, offset: 3.6 },
+        geom: [[22.0, 1.6, 1.6, C.white], [4.0, 1.6, 0.3, C.white]], eng: { n: 1, len: 2.6, r: 1.3, layout: 'single' } },
+      { id: 'L110', name: 'L110 core (2 × Vikas)', prop: 'udmh', engine: 'Vikas', n: 2, thrustSL: 2 * 600e3, thrustVac: 2 * 806e3, ispSL: 230, ispVac: 293, dry: 9000, propMass: 116000, ignition: 110,
+        geom: [[17.0, 2.0, 2.0, C.cream]], eng: { n: 2, len: 2.1, r: 0.6, layout: 'pair', spread: 0.8 } },
+      { id: 'C25', name: 'C25 cryogenic stage (CE-20)', prop: 'hydrolox', engine: 'CE-20', n: 1, thrustSL: 100e3, thrustVac: 186e3, ispSL: 300, ispVac: 442, dry: 5000, propMass: 28000,
+        geom: [[13.5, 2.0, 2.0, C.white]], eng: { n: 1, len: 2.0, r: 0.8, layout: 'single' } },
+    ],
+    jettison: [{ name: 'Payload fairing', mass: 2400, alt: 115, part: 'fairing' }],
+    payloadFairing: { len: 10.75, r: 2.5, color: C.white }, ascent: { hp: 170, ha: 36500, vert: 10, kickGuess: 2.5 },
+  },
+};
+
+// Engine start on the pad: liquid engines light t seconds before liftoff and build up to full thrust (ramp, s; stagger
+// between engine groups, s) while hold-down clamps keep the vehicle down; solid boosters always light at T−0.
+//   Saturn V: engine start sequence at T−8.9 s, centre F-1 first, then opposing pairs 300 ms apart (NASA)
+//   SLS: RS-25 start-up at T−6.36 s, boosters at T−0 (NASA Artemis II countdown)
+//   Atlas V: RD-180 ignition at T−2.7 s, solids at T−0 (ULA timelines)
+//   Falcon Heavy: 27 Merlins at about T−2 s (Spaceflight Now) · Starship: about T−3 s (press reports)
+//   Long March 5: core and boosters ignite before liftoff (time approximate) · Atlas LV-3: approximate
+//   LVM3: the S200 solids light at T−0 and the L110 core is air-started, so nothing burns on the pad beforehand
+const PAD_IGNITION = {
+  saturnV: { t: 8.9, ramp: 4.0, stagger: 0.3, seq: 'centre engine first, then opposing pairs 0.3 s apart' },
+  sls1: { t: 6.36, ramp: 3.0, stagger: 0.12, seq: 'the four RS-25s start 0.12 s apart' },
+  atlasV541: { t: 2.7, ramp: 1.4 },
+  atlasAgena: { t: 2.0, ramp: 1.2, approx: true },
+  falconHeavy: { t: 2.0, ramp: 1.2 },
+  lm5: { t: 3.0, ramp: 1.6, approx: true },
+  starship: { t: 3.0, ramp: 1.6, approx: true },
+  lvm3: { t: 0, ramp: 0 },
+};
+for (const k in PAD_IGNITION) if (LAUNCHERS[k]) LAUNCHERS[k].ign = PAD_IGNITION[k];
+// stages whose engines are burning at liftoff: boosters plus the first core stage (unless that core is air-started)
+function liftoffStages(L) { const iCore = L.stages.findIndex(s => !s.parallel); return L.stages.filter((s, i) => (s.parallel || i === iCore) && !(s.ignition > 0)); }
+// "27 × Merlin 1D", "8 × YF-100 + 2 × YF-77": engine counts, identical engines merged
+function engineCounts(stages) { const m = new Map(); for (const s of stages) m.set(s.engine, (m.get(s.engine) || 0) + s.n); return [...m].map(([e, n]) => `${n} × ${e}`).join(' + '); }
+
+// ---------------- spacecraft (payload stacks) ----------------
+// modules: dry kg, prop kg, engine {name, thrust N, isp s, prop}
+const SPACECRAFT = {
+  apolloCSMLM: {
+    name: 'Apollo CSM + LM', crewMax: 3,
+    modules: {
+      CM: { name: 'Command Module “Columbia”', dry: 5557, prop: 0, heat: { diam: 3.91, LD: 0.3, cd: 1.3, rn: 4.7, chutes: 'apollo' } },
+      SM: { name: 'Service Module', dry: 4831, prop: 18413, engine: { name: 'SPS (AJ10-137)', thrust: 91190, isp: 314, prop: 'hypergolic' } },
+      LMDS: { name: 'LM Descent Stage', dry: 2034, prop: 8248, engine: { name: 'DPS (LMDE)', thrust: 45040, isp: 311, prop: 'hypergolic', minThr: 0.1 } },
+      LMAS: { name: 'LM Ascent Stage “Eagle”', dry: 2416, prop: 2353, engine: { name: 'APS', thrust: 15570, isp: 311, prop: 'hypergolic' } },
+      SLA: { name: 'Spacecraft–LM Adapter panels', dry: 1800, prop: 0 },
+    },
+    orbiter: ['CM', 'SM'], lander: ['LMDS', 'LMAS'], ascender: ['LMAS'], adapter: ['SLA'], prop: { orbiter: 'SM', lander: 'LMDS', ascender: 'LMAS' },
+    capsule: 'CM', model: 'apollo',
+  },
+  apolloCSMLTA: {
+    name: 'Apollo CSM + LTA-B test mass', crewMax: 3,
+    modules: {
+      CM: { name: 'Command Module', dry: 5621, prop: 0, heat: { diam: 3.91, LD: 0.3, cd: 1.3, rn: 4.7, chutes: 'apollo' } },
+      SM: { name: 'Service Module', dry: 4901, prop: 18413, engine: { name: 'SPS (AJ10-137)', thrust: 91190, isp: 314, prop: 'hypergolic' } },
+      LTA: { name: 'LM Test Article B (ballast)', dry: 9026, prop: 0 },
+      SLA: { name: 'Spacecraft–LM Adapter panels', dry: 1800, prop: 0 },
+    },
+    orbiter: ['CM', 'SM'], lander: null, adapter: ['SLA', 'LTA'], prop: { orbiter: 'SM' }, capsule: 'CM', model: 'apolloCSM',
+  },
+  orion: {
+    name: 'Orion (CM + European Service Module)', crewMax: 4,
+    modules: {
+      CM: { name: 'Orion Crew Module “Integrity”', dry: 9520, prop: 0, heat: { diam: 5.02, LD: 0.27, cd: 1.3, rn: 6.0, chutes: 'orion' } },
+      ESM: { name: 'European Service Module', dry: 6858, prop: 8600, engine: { name: 'OMS-E (AJ10-190)', thrust: 26600, isp: 316, prop: 'mmh' } },
+    },
+    orbiter: ['CM', 'ESM'], lander: null, prop: { orbiter: 'ESM' }, capsule: 'CM', model: 'orion',
+  },
+  change5: {
+    name: 'Chang’e 5 (orbiter + returner + lander + ascender)', crewMax: 0,
+    modules: {
+      RET: { name: 'Returner capsule', dry: 300, prop: 0, heat: { diam: 1.25, LD: 0.25, cd: 1.3, rn: 1.2, chutes: 'probe' } },
+      ORB: { name: 'Orbiter', dry: 1250, prop: 2750, engine: { name: '3000 N main engine', thrust: 3000, isp: 315, prop: 'mmh' } },
+      LDR: { name: 'Lander', dry: 900, prop: 2300, engine: { name: '7500 N variable-thrust engine', thrust: 7500, isp: 310, prop: 'mmh', minThr: 0.2 } },
+      ASC: { name: 'Ascender', dry: 330, prop: 370, engine: { name: '3000 N ascent engine', thrust: 3000, isp: 310, prop: 'mmh' } },
+    },
+    orbiter: ['RET', 'ORB'], lander: ['LDR', 'ASC'], ascender: ['ASC'], prop: { orbiter: 'ORB', lander: 'LDR', ascender: 'ASC' }, capsule: 'RET', model: 'change5',
+  },
+  mariner4: {
+    name: 'Mariner 4', crewMax: 0,
+    modules: { BUS: { name: 'Mariner 4 spacecraft', dry: 255, prop: 6, engine: { name: '222 N midcourse motor', thrust: 222, isp: 230, prop: 'hydrazine' } } },
+    orbiter: ['BUS'], lander: null, prop: { orbiter: 'BUS' }, model: 'mariner',
+  },
+  perseverance: {
+    name: 'Mars 2020: cruise stage + aeroshell + descent stage + Perseverance', crewMax: 0,
+    modules: {
+      CRUISE: { name: 'Cruise stage', dry: 469, prop: 70, engine: { name: '8 × MR-111 thrusters', thrust: 35, isp: 220, prop: 'hydrazine' } },
+      AEROSHELL: { name: 'Heat shield + backshell + parachute', dry: 1425, prop: 0 },
+      DS: { name: 'Descent stage (sky crane)', dry: 670, prop: 400, engine: { name: '8 × MLE (Mars Landing Engines)', thrust: 8 * 3060, isp: 220, prop: 'hydrazine', minThr: 0.08 } },
+      ROVER: { name: 'Perseverance rover + Ingenuity', dry: 1027, prop: 0 },
+    },
+    orbiter: ['CRUISE'], entry: ['AEROSHELL', 'DS', 'ROVER'], prop: { orbiter: 'CRUISE', lander: 'DS' },
+    edl: { diam: 4.5, LD: 0.24, cd: 1.65, rn: 1.125, chute: { diam: 21.5, cd: 0.6, mach: 1.75 }, heatshieldSepMach: 0.8, backshellSepAlt: 2.1, skycrane: true },
+    model: 'msl',
+  },
+  tianwen1: {
+    name: 'Tianwen-1 (orbiter + entry capsule with Zhurong)', crewMax: 0,
+    modules: {
+      ORB: { name: 'Orbiter', dry: 1265, prop: 2450, engine: { name: '3000 N main engine', thrust: 3000, isp: 315, prop: 'mmh' } },
+      CAPS: { name: 'Entry capsule (heat shield + backshell)', dry: 450, prop: 0 },
+      LDR: { name: 'Lander', dry: 330, prop: 265, engine: { name: '7500 N variable-thrust engine', thrust: 7500, isp: 300, prop: 'mmh', minThr: 0.2 } },
+      ROVER: { name: 'Zhurong rover', dry: 240, prop: 0 },
+    },
+    orbiter: ['ORB'], entry: ['CAPS', 'LDR', 'ROVER'], prop: { orbiter: 'ORB', lander: 'LDR' },
+    edl: { diam: 3.4, LD: 0.2, cd: 1.6, rn: 1.0, chute: { diam: 16, cd: 0.6, mach: 1.8 }, heatshieldSepMach: 0.8, backshellSepAlt: 1.5, skycrane: false },
+    model: 'tianwen',
+  },
+  europaClipper: {
+    name: 'Europa Clipper', crewMax: 0,
+    modules: { SC: { name: 'Europa Clipper spacecraft', dry: 3315, prop: 2750, engine: { name: '16 × 27.5 N + main thrusters', thrust: 16 * 27.5, isp: 225, prop: 'mmh' } } },
+    orbiter: ['SC'], lander: null, prop: { orbiter: 'SC' }, model: 'clipper',
+  },
+  starshipCrew: {
+    name: 'Starship (crewed Mars configuration)', crewMax: 12,
+    modules: { CARGO: { name: 'Crew habitat + cargo', dry: 100000, prop: 0 } },
+    orbiter: ['CARGO'], lander: null, usesUpperStage: true, prop: {}, model: 'starshipPayload',
+    edl: { diam: 9, LD: 0.25, cd: 1.1, rn: 4.5, propulsive: true },
+  },
+  msrConcept: {
+    name: 'Sample-return stack (orbiter/returner + lander/ascent vehicle)', crewMax: 0,
+    modules: {
+      RET: { name: 'Earth entry capsule', dry: 110, prop: 0, heat: { diam: 1.25, LD: 0, cd: 1.2, rn: 0.6, chutes: 'none' } },
+      ORB: { name: 'Orbiter / Earth-return vehicle', dry: 1400, prop: 6200, engine: { name: '3000 N main engine', thrust: 3000, isp: 318, prop: 'mmh' } },
+      CAPS: { name: 'Entry aeroshell', dry: 700, prop: 0 },
+      LDR: { name: 'Lander', dry: 650, prop: 500, engine: { name: '7500 N variable-thrust engine', thrust: 7500, isp: 300, prop: 'mmh', minThr: 0.2 } },
+      MAV: { name: 'Mars Ascent Vehicle (2-stage, modelled as 1)', dry: 100, prop: 470, engine: { name: 'Solid rocket motors', thrust: 9000, isp: 292, prop: 'solid' } },
+    },
+    orbiter: ['RET', 'ORB'], entry: ['CAPS', 'LDR', 'MAV'], ascender: ['MAV'], prop: { orbiter: 'ORB', lander: 'LDR', ascender: 'MAV' }, capsule: 'RET', orbiterStays: true,
+    edl: { diam: 4.0, LD: 0.22, cd: 1.6, rn: 1.0, chute: { diam: 18, cd: 0.6, mach: 1.8 }, heatshieldSepMach: 0.8, backshellSepAlt: 1.8, skycrane: false },
+    model: 'tianwen',
+  },
+  inspirationMars: {
+    name: 'Crew capsule + inflatable habitat (Inspiration Mars concept)', crewMax: 2,
+    modules: {
+      CAP: { name: 'Crew capsule (Dragon-class)', dry: 5000, prop: 0, heat: { diam: 3.7, LD: 0.25, cd: 1.3, rn: 4.0, chutes: 'orion' } },
+      HAB: { name: 'Inflatable habitat + 501 days of consumables', dry: 3500, prop: 0 },
+      PROP: { name: 'Service module', dry: 800, prop: 700, engine: { name: 'Service module engine', thrust: 30000, isp: 320, prop: 'mmh' } },
+    },
+    orbiter: ['CAP', 'HAB', 'PROP'], lander: null, prop: { orbiter: 'PROP' }, capsule: 'CAP', model: 'capsuleHab',
+  },
+  chandrayaan3: {
+    name: 'Chandrayaan-3 (propulsion module + Vikram lander + Pragyan)', crewMax: 0,
+    modules: {
+      PM: { name: 'Propulsion module', dry: 448, prop: 1696, engine: { name: '440 N LAM', thrust: 440, isp: 315, prop: 'mmh' } },
+      LDR: { name: 'Vikram lander + Pragyan rover', dry: 620, prop: 1132, engine: { name: '4 × 800 N throttleable engines', thrust: 3200, isp: 305, prop: 'mmh', minThr: 0.3 } },
+    },
+    orbiter: ['PM'], lander: ['LDR'], prop: { orbiter: 'PM', lander: 'LDR' }, model: 'chandrayaan',
+  },
+};
+function scMass(sc, ids) { if (!ids) return 0; let m = 0; for (const id of ids) { const md = sc.modules[id]; if (md) m += md.dry + md.prop; } return m; }
+function scTotalMass(sc) { let m = 0; for (const k in sc.modules) m += sc.modules[k].dry + sc.modules[k].prop; return m; }

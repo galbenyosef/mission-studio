@@ -1,0 +1,13 @@
+{
+  "name": "mission-studio",
+  "version": "1.0.0",
+  "description": "3D Moon and Mars mission simulator with real launch vehicles, solved trajectories, live telemetry and storyboard capture.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "serve": "python3 -m http.server -d docs 8000",
+    "test": "node test/t_core.js && node test/t_lunar.js && node test/t_mission.js"
+  },
+  "engines": { "node": ">=18" }
+}

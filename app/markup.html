@@ -1,0 +1,186 @@
+<div id="app">
+  <canvas id="gl"></canvas>
+  <div id="labels" aria-hidden="true"></div>
+  <div id="vecLabels" aria-hidden="true"></div>
+  <div id="frame" aria-hidden="true">
+    <div class="lb" id="lbT"></div><div class="lb" id="lbB"></div><div class="lb" id="lbL"></div><div class="lb" id="lbR"></div>
+    <div id="guides"></div>
+    <div id="burnin"></div>
+  </div>
+  <div id="caption" class="fade"><div class="cap-name"></div><div class="cap-desc"></div></div>
+
+  <header id="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <div class="app-name">Mission Studio</div>
+        <div id="missionName" class="mission-name">Choose a mission</div>
+      </div>
+    </div>
+    <div class="clock">
+      <div id="met" class="met">&nbsp;</div>
+      <div id="utc" class="utc">—</div>
+    </div>
+    <nav class="top-actions">
+      <button id="btnTele" class="tb narrow-only">Data</button>
+      <button id="btnSide" class="tb narrow-only">Log</button>
+      <button id="btnSetup" class="tb"><span class="long">Mission setup</span><span class="short">Setup</span></button>
+      <button id="btnHide" class="tb icon" title="Clean frame — hide interface (H)">▢</button>
+      <button id="btnHelp" class="tb icon" title="Controls & credits">?</button>
+    </nav>
+  </header>
+  <div id="prop" hidden><span class="pi"></span><span class="pl"></span><span class="pd"></span></div>
+  <div id="countdown" hidden>
+    <div class="cd-label">Liftoff in</div>
+    <div class="cd-num" aria-hidden="true"><span class="cd-t">T−</span><span class="cd-n">10</span></div>
+    <div class="cd-sub"></div>
+    <button id="cdSkip" type="button">Skip countdown ▸</button>
+  </div>
+
+  <aside id="left" class="panel" aria-label="Telemetry"><div id="tele"></div></aside>
+
+  <aside id="right" class="panel" aria-label="Mission log">
+    <div class="tabs" role="tablist">
+      <button data-tab="events" class="on">Events</button>
+      <button data-tab="budget">Δv &amp; fuel</button>
+      <button data-tab="info">Mission</button>
+      <button data-tab="shots">Shots <span id="shotCount"></span></button>
+    </div>
+    <div id="tab-events" class="tabpane"></div>
+    <div id="tab-budget" class="tabpane" hidden></div>
+    <div id="tab-info" class="tabpane" hidden></div>
+    <div id="tab-shots" class="tabpane" hidden></div>
+  </aside>
+
+  <section id="minimap" class="panel" aria-label="Solar System map">
+    <header class="mm-head">
+      <span class="mm-title" id="mmTitle">Solar System</span>
+      <div class="mm-tabs" role="group" aria-label="Map scale"><button data-mm="auto" class="on" title="Pick the scale automatically from where the spacecraft is">Auto</button><button data-mm="sun" title="Inner Solar System">Sun</button><button data-mm="earth" title="Earth–Moon system">Earth</button><button data-mm="mars" title="Mars system">Mars</button></div>
+      <button id="mmCollapse" class="mm-col" title="Show or hide the map">▾</button>
+    </header>
+    <canvas id="mmc"></canvas>
+    <div id="mmInfo" class="mm-info"></div>
+  </section>
+
+  <footer id="bottom">
+    <div id="timeline" title="Mission timeline — phases are stretched so short events stay visible. Click or drag to scrub."><canvas id="tlc"></canvas><div id="tlHover"></div></div>
+    <div class="controls">
+      <div class="grp">
+        <button id="bPrev" title="Previous event (←)">⏮</button>
+        <button id="bPlay" title="Play / pause (space)">▶</button>
+        <button id="bNext" title="Next event (→)">⏭</button>
+        <div class="warp"><button id="bSlower" title="Slower ([)">−</button><span id="warp">1×</span><button id="bFaster" title="Faster (])">+</button></div>
+        <label class="chk" title="Speeds through quiet coasts and slows down for burns and events"><input type="checkbox" id="autoWarp" checked> Auto warp</label>
+      </div>
+      <div class="grp">
+        <label>Target <select id="selTarget"></select></label>
+        <label>Camera <select id="selMode">
+          <option value="auto">Auto follow (director)</option>
+          <option value="orbit">Orbit (free)</option>
+          <option value="chase">Chase (follow)</option>
+          <option value="lookat">Look-at (2 subjects)</option>
+          <option value="ground">Ground observer</option>
+          <option value="top">Top-down map</option>
+        </select></label>
+        <label id="lookWrap" hidden>at <select id="selLook"></select></label>
+        <label>Lens <select id="selLens"></select></label>
+        <label>Frame <select id="selAspect">
+          <option value="0">Full screen</option>
+          <option value="2.39">2.39 : 1 Scope</option>
+          <option value="1.85">1.85 : 1 Flat</option>
+          <option value="1.778">16 : 9</option>
+          <option value="1.333">4 : 3</option>
+        </select></label>
+        <label>Paths <select id="selFrame">
+          <option value="auto">Auto frame</option>
+          <option value="earth">Earth-centred</option>
+          <option value="moon">Moon-centred</option>
+          <option value="mars">Mars-centred</option>
+          <option value="sun">Sun-centred</option>
+          <option value="emrot">Earth–Moon rotating</option>
+        </select></label>
+        <button id="bLayers" title="Display layers">Layers ▾</button>
+        <button id="bShot" class="primary" title="Capture storyboard shot (C)">● Shot</button>
+      </div>
+    </div>
+    <div id="layers" class="popover" hidden>
+      <h5>Display layers</h5>
+      <div class="legend"><span><i></i>Engine burn — powered flight</span><span><i class="c"></i>Coasting — engines off</span><span><i class="d"></i>Burn point</span></div>
+      <label class="chk"><input type="checkbox" data-layer="paths" checked> Trajectories</label>
+      <label class="chk"><input type="checkbox" data-layer="future" checked> Planned path ahead</label>
+      <label class="chk" title="Colour coasting arcs by mission phase instead of blue; engine burns stay orange"><input type="checkbox" data-layer="phasecol"> Coasting arcs by phase</label>
+      <label class="chk"><input type="checkbox" data-layer="osc"> Osculating orbit</label>
+      <label class="chk"><input type="checkbox" data-layer="orbits" checked> Planet &amp; Moon orbits</label>
+      <label class="chk"><input type="checkbox" data-layer="vectors" checked> Force &amp; velocity vectors</label>
+      <label class="chk"><input type="checkbox" data-layer="labels" checked> Labels</label>
+      <label class="chk"><input type="checkbox" data-layer="minimap" checked> Solar System map</label>
+      <label class="chk"><input type="checkbox" data-layer="captions" checked> Event captions</label>
+      <label class="chk"><input type="checkbox" data-layer="guides"> Thirds &amp; safe area</label>
+      <label class="chk"><input type="checkbox" data-layer="burnin"> Burn-in slate (MET, lens)</label>
+      <label class="chk"><input type="checkbox" data-layer="stars" checked> Stars</label>
+      <label class="chk" title="Real cameras cannot expose stars next to a sunlit planet"><input type="checkbox" data-layer="exposure"> Realistic exposure</label>
+      <label class="chk" title="Draws spacecraft larger than life when far away"><input type="checkbox" data-layer="bigcraft"> Enlarge distant craft</label>
+      <label class="chk" title="Soft ambient light so shadowed sides stay readable; off = harsh real-space lighting"><input type="checkbox" data-layer="fill" checked> Cinematic fill light</label>
+    </div>
+  </footer>
+
+  <div id="setup" class="overlay">
+    <div class="setup-wrap">
+      <header class="setup-head">
+        <div><div class="eyebrow">Pre-flight</div><h1>Mission setup</h1></div>
+        <p class="lede">Pick a real mission or a concept, adjust its inputs, and the flight planner solves the whole trajectory — ascent, burns, flybys, landing and return — before you fly it in 3D.</p>
+        <button id="setupClose" class="tb" hidden>Back to simulation ✕</button>
+      </header>
+      <div class="setup-grid">
+        <nav id="scnList" class="scn-list" aria-label="Scenarios"></nav>
+        <section id="scnDetail" class="scn-detail"></section>
+      </div>
+    </div>
+  </div>
+
+  <div id="planning" class="overlay" hidden>
+    <div class="box">
+      <div class="eyebrow">Flight dynamics</div>
+      <h2 id="planTitle" style="margin:4px 0 0">Solving trajectory…</h2>
+      <div id="planLog"></div>
+    </div>
+  </div>
+
+  <div id="sheet" class="overlay" hidden>
+    <div class="modal">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+        <h2>Storyboard contact sheet</h2>
+        <div class="btnrow"><button id="sheetCopy" class="tb">Copy shot list</button><button id="sheetClose" class="tb">Close ✕</button></div>
+      </div>
+      <p class="p" style="margin-bottom:10px">Right-click (or long-press) the image to save it. The shot list copies as plain text for your script or spreadsheet.</p>
+      <img id="sheetImg" alt="Storyboard contact sheet">
+      <textarea id="sheetText" readonly style="width:100%;box-sizing:border-box;min-height:140px;margin-top:10px;background:var(--chip);border:1px solid var(--line);border-radius:6px;font:12px/1.5 var(--font-mono);padding:8px"></textarea>
+    </div>
+  </div>
+
+  <div id="help" class="overlay" hidden>
+    <div class="modal" style="max-width:760px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><h2>Controls</h2><button id="helpClose" class="tb">Close ✕</button></div>
+      <div class="keys">
+        <kbd>Drag</kbd><span>Orbit the camera around the target (ground observer: pan the view)</span>
+        <kbd>Wheel / pinch</kbd><span>Zoom in and out (ground observer: change focal length)</span>
+        <kbd>Right-drag / Shift-drag</kbd><span>Roll the view around its axis (orbit and chase cameras)</span>
+        <kbd>Double-click label</kbd><span>Make that body or craft the camera target</span>
+        <kbd>Space</kbd><span>Play / pause</span>
+        <kbd>← →</kbd><span>Jump to previous / next event</span>
+        <kbd>[ ]</kbd><span>Slower / faster time warp (turns auto warp off)</span>
+        <kbd>F</kbd><span>Auto follow: the camera stays on the spacecraft and picks the framing for each phase (pad, ascent, burns, entry, parachutes, landing, coast toward the next destination). Drag or zoom to adjust it; the next phase resets it</span>
+        <kbd>1 – 6</kbd><span>Camera: auto follow, orbit, chase, look-at, ground observer, top-down</span>
+        <kbd>Paths</kbd><span>Thick orange = engines firing (powered flight). Thin blue = coasting: engines off, the craft moves on momentum alone while gravity bends its path (inertial flight). Dots mark each burn — filled once fired, a ring while still ahead. The status pill under the clock says which is happening right now, and the orange blocks on the timeline show every burn</span>
+        <kbd>Map</kbd><span>The Solar System map (bottom left) shows where the spacecraft is, seen from ecliptic north. Auto switches between the inner Solar System, the Earth–Moon system and the Mars system; click a planet or craft on the map to aim the camera at it</span>
+        <kbd>Countdown</kbd><span>Every mission opens with the final 10-second launch countdown in real time. Liquid engines light on the pad before liftoff (Saturn V at T−8.9 s, SLS at T−6.36 s, Atlas V at T−2.7 s …) while hold-down clamps keep the rocket in place; solid boosters light at T−0. “Skip countdown” jumps straight to liftoff</span>
+        <kbd>C</kbd><span>Capture a storyboard shot</span>
+        <kbd>H</kbd><span>Clean frame (hide the interface)</span>
+      </div>
+      <h3 class="h" style="margin-top:18px">How the numbers are made</h3>
+      <p class="p">Every mission is solved before playback by a flight-dynamics engine written for this page: real launch-vehicle data with a gravity-turn ascent through the US-1976 atmosphere, finite burns with the rocket equation, Earth–Moon–Sun n-body coasting, patched conics and Lambert solutions between planets, B-plane targeting for flybys, and lifting entries with heating and parachutes. Planet positions use JPL approximate ephemerides; the Moon uses a truncated ELP/Meeus series; body orientations follow the IAU WGCCRE models.</p>
+      <h3 class="h">Credits</h3>
+      <p class="credits">Earth day, night and cloud maps: Solar System Scope (CC BY 4.0), via the three.js examples. Moon: three.js examples (NASA-derived). Mars, Venus, Jupiter, Saturn maps: NASA 3D Resources (public domain). Star catalogue: d3-celestial by Olaf Frohn (BSD-3), from the Hipparcos/Yale bright-star data. Rendering: three.js r160 (MIT). Mission data: NASA mission reports, CNSA and ISRO releases; concept profiles from published SpaceX and Inspiration Mars material.</p>
+    </div>
+  </div>
+</div>
