@@ -8,7 +8,7 @@
 
 태양계 영화의 스토리보드를 만들려고 만든 도구라서, 카메라·렌즈·장면 저장 기능이 영화 작업에 맞춰져 있어요.
 
-[**▶ 시뮬레이터 열기**](https://sean-lab.github.io/mission-studio/) · [English README](README.md)
+[**▶ 시뮬레이터 열기**](https://sanghyunpark.pages.dev/apps/mission-studio/) · [프로젝트 소개](https://sanghyunpark.pages.dev/ko/projects/mission-studio/) · [English README](README.md)
 
 ![발사대에서 점화하는 새턴 V와 실시간 비행 데이터](media/screenshot-ignition.jpg)
 
@@ -96,8 +96,8 @@
 ```bash
 git clone https://github.com/sean-lab/mission-studio.git
 cd mission-studio
-node build.js                         # docs/index.html 생성
-python3 -m http.server -d docs 8000   # 또는 npx serve docs
+node build.js                         # dist/ 생성
+python3 -m http.server -d dist 8000   # 또는 npx serve dist
 # 브라우저에서 http://localhost:8000 열기
 ```
 
@@ -106,7 +106,7 @@ python3 -m http.server -d docs 8000   # 또는 npx serve docs
 ## 출처와 라이선스
 
 - **코드:** [MIT 라이선스](LICENSE)
-- **three.js:** MIT
+- **three.js:** r160, MIT (`vendor/`에 포함)
 - **지구 지도:** [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0, three.js 예제를 거쳐 받았어요.
 - **달 지도:** three.js 예제
 - **화성·금성·목성·토성 지도:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)

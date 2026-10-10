@@ -1,0 +1,30 @@
+# Builds dist/ and attaches it to a GitHub Release as mission-studio-<tag>.tar.gz
+# (index.html at the root of the archive). sanghyunpark.dev serves a pinned
+# release of it at /apps/mission-studio/.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test the engine
+        run: node test/t_core.js | tee core.log && ! grep -q '^FAIL' core.log
+      - name: Build
+        run: node build.js
+      - name: Package
+        run: tar -czf "mission-studio-${GITHUB_REF_NAME}.tar.gz" -C dist .
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "mission-studio-${GITHUB_REF_NAME}.tar.gz" --title "$GITHUB_REF_NAME" --generate-notes

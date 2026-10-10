@@ -2,7 +2,7 @@
 
 **A 3D simulator of real Moon and Mars missions that runs in your browser.** Pick a mission and watch it fly, from the countdown on the pad to landing. On-screen numbers explain every moment: payload, rocket size, propellant, gravity, acceleration, orbits and gravity assists. It was built for storyboarding a solar-system film, so the cameras, lenses and shot capture work like a film tool.
 
-[**▶ Open the simulator**](https://sean-lab.github.io/mission-studio/) · [한국어 안내](README.ko.md)
+[**▶ Open the simulator**](https://sanghyunpark.pages.dev/apps/mission-studio/) · [About the project](https://sanghyunpark.pages.dev/projects/mission-studio/) · [한국어 안내](README.ko.md)
 
 ![Saturn V ignition on Launch Complex 39A, with live telemetry, the countdown and the event list](media/screenshot-ignition.jpg)
 
@@ -90,12 +90,12 @@ You need [Node.js](https://nodejs.org/) 18 or later and a browser with WebGL 2.
 ```bash
 git clone https://github.com/sean-lab/mission-studio.git
 cd mission-studio
-node build.js                         # → docs/index.html
-python3 -m http.server -d docs 8000   # or: npx serve docs
+node build.js                         # → dist/
+python3 -m http.server -d dist 8000   # or: npx serve dist
 # open http://localhost:8000
 ```
 
-The page must be served over HTTP, because opening the file directly blocks the texture loads and the Web Worker. `node build.js fragment` writes `dist/index.html` without `<html>` and `<head>`, for hosts that wrap pages in their own document.
+The page must be served over HTTP, because opening the file directly blocks the texture loads and the Web Worker. Every path in `dist/` is relative, so the folder works from any base path. Pushing a `v*` tag runs `.github/workflows/release.yml`, which attaches `mission-studio-<tag>.tar.gz` (the contents of `dist/`) to a GitHub Release.
 
 Engine tests (Node, no browser):
 
@@ -110,16 +110,16 @@ node test/t_mission.js   # complete missions
 
 ```
 src/      flight engine (plain JavaScript; also runs in a Web Worker)
-app/      renderer and UI (three.js r160, ES module), markup and styles
+app/      renderer and UI (ES module), markup and styles
 assets/   planet textures and the star catalogue
+vendor/   three.js r160 (MIT)
 test/     Node tests for the engine
-docs/     built site, served by GitHub Pages
-media/    screenshots, thumbnail
+media/    screenshots for this README
 ```
 
 ## Credits
 
-- **three.js** r160 ([MIT](https://github.com/mrdoob/three.js/blob/dev/LICENSE)), loaded from jsDelivr.
+- **three.js** r160 ([MIT](vendor/three.LICENSE)), included in `vendor/`.
 - **Earth day, night and cloud maps:** [Solar System Scope](https://www.solarsystemscope.com/textures/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). They are taken from the three.js examples, which resized and merged them.
 - **Moon map:** `moon_1024.jpg` from the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets).
 - **Mars, Venus, Jupiter and Saturn maps:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), resized.
