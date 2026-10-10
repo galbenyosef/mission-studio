@@ -340,6 +340,7 @@ legend { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; colo
   .mission-name { max-width: 30vw; }
   .app-name { display: none; }
   #caption .cap-desc { font-size: 13px; }
+  #caption { bottom: calc(var(--bottomH, 150px) + var(--mmH, 0px) + 12px); } /* above the Solar System map, which sits bottom-left on narrow screens */
 }
 @media (max-width: 560px) {
   .met { font-size: 16px; }

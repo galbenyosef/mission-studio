@@ -1,6 +1,6 @@
 {
   "name": "mission-studio",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "3D Moon and Mars mission simulator with real launch vehicles, solved trajectories, live telemetry and storyboard capture.",
   "license": "MIT",
   "private": true,
