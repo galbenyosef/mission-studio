@@ -188,6 +188,54 @@ const SCENARIOS = [
       tcmAfterFlyby: 10,
     },
   },
+  // ------------------------------------------------------------------ EARTH ORBIT (Space Shuttle)
+  {
+    id: 'sts1', title: 'STS-1 Columbia', year: 1981, agency: 'NASA', status: 'Flown', crewed: true, dest: 'earth', tag: 'First Space Shuttle flight',
+    blurb: 'The first Space Shuttle flight, and the first time NASA flew a crew on a new spacecraft’s maiden flight. John Young and Bob Crippen tested Columbia for 36 orbits, then glided home onto a dry lakebed in the Mojave Desert.',
+    crewNames: 'John Young, Robert Crippen',
+    real: { 'Launch': '1981-04-12 12:00:04 UTC, LC-39A', 'Ascent': 'Standard insertion: MECO T+8:34, OMS-1 T+10:34, OMS-2 T+44:02', 'Orbit': '≈ 241 km, raised to 273 × 276 km; 40.3°', 'Landing': '1981-04-14 18:20:57 UTC, Rogers Dry Lake Runway 23, Edwards AFB', 'Duration': '2 d 6 h 20 m 53 s, 36 orbits', 'External Tank': 'Painted white (STS-1 and STS-2 only)' },
+    cfg: {
+      name: 'STS-1', profile: 'leo-shuttle', dest: 'earth', launcher: 'shuttle', spacecraft: 'shuttle', crew: 2, shipName: 'Columbia (OV-102)', orbiterId: 'OV-102', lvVariant: 'sts1', bayPayload: 'dfi',
+      site: 'KSC39A', launch: '1981-04-12T12:00:04Z', incl: 40.3, parking: { hp: 37, ha: 125, hCut: 118 }, etDry: 34500,
+      ssme: { sched: [[0, 0.957], [27, 0.957], [29, 0.622], [52, 0.622], [55, 0.957]] }, negReturn: 245, pressToMeco: 385,
+      oms1: { met: 690, ha: 244 }, oms2: { hp: 241 }, bayOpenMET: 1.45,
+      orbitBurns: [{ met: 6.346, name: 'OMS-3 — orbit raise', ha: 276, desc: 'The first of two burns that lift Columbia to its working orbit.' }, { met: 7.092, name: 'OMS-4 — circularisation', hp: 273, desc: 'Half an orbit later the second burn rounds the orbit off.' }],
+      scripted: [{ met: 1.6, name: 'Missing tiles on the OMS pods', desc: 'Television pictures of the open payload bay show gaps where sixteen heat-shield tiles came off the OMS pods during launch. The pods see little heating and engineers clear them, but the crew cannot see Columbia’s belly — its condition stays unknown until entry.', kind: 'photo' }, { met: 7.6, name: 'TV from orbit', desc: 'The crew shows the world the inside of the first reusable spacecraft, floating through the mid-deck and the flight deck.', kind: 'info' }],
+      landing: '1981-04-14T18:20:57Z', runway: 'EDW23L', blackout: true, dragChute: false, ogs: 19, rollout: 2.741, orbitPhaseName: 'In orbit — flight tests',
+      scOverride: { ORB: { name: 'Columbia (OV-102) with crew and consumables', dry: 84000 }, PAY: { name: 'Development Flight Instrumentation pallet', dry: 4600 }, OMS: { prop: 10800 } },
+    },
+  },
+  {
+    id: 'sts31', title: 'STS-31 Discovery — Hubble', year: 1990, agency: 'NASA / ESA', status: 'Flown', crewed: true, dest: 'earth', tag: 'Deploying the Hubble Space Telescope',
+    blurb: 'Discovery carried the Hubble Space Telescope to about 615 km, the highest orbit any Shuttle reached. The robot arm lifted the 11-tonne telescope out of the bay, its solar arrays unrolled, and it was set free — where it still works today.',
+    crewNames: 'Loren Shriver, Charles Bolden, Steven Hawley, Bruce McCandless II, Kathryn Sullivan',
+    real: { 'Launch': '1990-04-24 12:33:51 UTC, LC-39B', 'MECO orbit': '611 × 89 km (330 × 48 nmi)', 'After OMS-2': '611 × 576 km (330 × 311 nmi), 28.5°', 'Hubble release': '1990-04-25 19:37:51 UTC', 'Landing': '1990-04-29 13:49:57 UTC, Edwards Runway 22', 'Duration': '5 d 1 h 16 m', 'Hubble mass': '≈ 10,900 kg' },
+    cfg: {
+      name: 'STS-31', profile: 'leo-shuttle', dest: 'earth', launcher: 'shuttle', spacecraft: 'shuttle', crew: 5, shipName: 'Discovery (OV-103)', orbiterId: 'OV-103', bayPayload: 'hst', bayPayloadReturn: null,
+      site: 'KSC39B', launch: '1990-04-24T12:33:51Z', incl: 28.45, parking: { hp: 89, ha: 611, hCut: 112 }, etDry: 30000,
+      ssme: { sched: [[0, 0.995], [18, 0.995], [19, 0.928], [28, 0.928], [29, 0.641], [59, 0.641], [61, 0.995]] }, negReturn: 250, pressToMeco: 390,
+      oms2: { hp: 576 }, bayOpenMET: 1.4,
+      orbitBurns: [{ met: 2.2, at: 'apo', name: 'OMS-3 — raise to deploy orbit', hp: 613, desc: 'Raises the low side of the orbit to about 613 km: the higher Hubble starts, the longer it lasts before air drag pulls it down.' }],
+      deploy: { t: '1990-04-25T19:37:51Z', name: 'Hubble Space Telescope', short: 'Hubble', id: 'hst', model: 'hubble', mass: 10886, grapple: 8, unberth: 6.4, arrays: 2.6, doorOpen: '1990-04-27T13:30:00Z' },
+      landing: '1990-04-29T13:49:57Z', runway: 'EDW22', blackout: false, dragChute: false, ogs: 19, rollout: 2.705, orbitPhaseName: 'In orbit',
+      scOverride: { ORB: { name: 'Discovery (OV-103) with crew and consumables', dry: 84800 }, PAY: { name: 'Hubble Space Telescope', dry: 10886 }, OMS: { prop: 11400 } },
+    },
+  },
+  {
+    id: 'sts135', title: 'STS-135 Atlantis', year: 2011, agency: 'NASA', status: 'Flown', crewed: true, dest: 'earth', tag: 'Last Shuttle flight — docking with the ISS',
+    blurb: 'The 135th and final Space Shuttle flight. Atlantis carried a year’s worth of supplies to the International Space Station in the Raffaello logistics module, stayed docked for eight days, flew a last lap around the station and landed at Kennedy before dawn.',
+    crewNames: 'Chris Ferguson, Doug Hurley, Sandra Magnus, Rex Walheim',
+    real: { 'Launch': '2011-07-08 15:29:04 UTC, LC-39A', 'MECO': 'T+8:24, then OMS-2 at T+37:45 → 158 × 229 km', 'Docking': '2011-07-10 15:07 UTC, PMA-2 on Harmony', 'Undocking': '2011-07-19 06:26 UTC', 'Landing': '2011-07-21 09:57:00 UTC, KSC Runway 15 (night)', 'Duration': '12 d 18 h 28 m', 'ISS orbit': '≈ 383 × 390 km, 51.6°' },
+    cfg: {
+      name: 'STS-135', profile: 'leo-shuttle', dest: 'earth', launcher: 'shuttle', spacecraft: 'shuttle', crew: 4, shipName: 'Atlantis (OV-104)', orbiterId: 'OV-104', bayPayload: 'mplm',
+      site: 'KSC39A', launch: '2011-07-08T15:29:04Z', incl: 51.6, parking: { hp: 58, ha: 225, hCut: 105 },
+      ssme: { sched: [[0, 1], [35, 1], [36, 0.69], [47, 0.69], [48, 1]] }, headsUpMET: 345, negReturn: 234, pressToMeco: 374,
+      oms2: { hp: 158 }, bayOpenMET: 1.4,
+      iss: { dock: '2011-07-10T15:07:15Z', rpm: '2011-07-10T14:05:20Z', undock: '2011-07-19T06:25:45Z', hp: 383, ha: 390, mass: 420000, crew: 6, mplmOut: '2011-07-11T11:30:00Z', mplmIn: '2011-07-18T12:30:00Z', mplmName: 'Raffaello' },
+      landing: '2011-07-21T09:57:00Z', runway: 'KSC15', blackout: false, dragChute: true, ogs: 18, rollout: 2.84, orbitPhaseName: 'In orbit',
+      scOverride: { ORB: { name: 'Atlantis (OV-104) with crew and consumables', dry: 91500 }, PAY: { name: 'Raffaello logistics module (loaded)', dry: 12900 }, OMS: { prop: 11000 } },
+    },
+  },
   // ------------------------------------------------------------------ GRAVITY ASSIST
   {
     id: 'europaClipper', title: 'Europa Clipper (MEGA)', year: 2024, agency: 'NASA / JPL', status: 'In flight', crewed: false, dest: 'mars', tag: 'Mars & Earth gravity assists',
@@ -205,6 +253,7 @@ const SCENARIOS = [
 ];
 function scenarioById(id) { return SCENARIOS.find(s => s.id === id); }
 function planScenario(cfg, progress) {
+  if ((cfg.profile || '').startsWith('leo')) return planLEO(cfg, progress);
   if (cfg.dest === 'moon' || (cfg.profile || '').startsWith('lunar')) return planLunar(cfg, progress);
   return planInterplanetary(cfg, progress);
 }

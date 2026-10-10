@@ -27,6 +27,19 @@ const LAUNCH_SITES = {
   BAIKONUR: { name: 'Baikonur 81/24, Kazakhstan', lat: 46.0700, lon: 63.6500, azRange: [35, 65] },
 };
 
+// Shuttle landing runways: threshold of the landing end (lat, lon), true heading of the landing direction (°),
+// length and width (km), elevation (km). KSC SLF from FAA data (KTTS); Edwards concrete 04/22 is today's 05R/23L
+// (FAA data). The Rogers Dry Lake lakebed runway 23 has no published threshold coordinates: its position here is
+// approximate (on the lakebed, parallel to the main runway).
+const RUNWAYS = {
+  KSC15: { name: 'Kennedy Space Center, Shuttle Landing Facility Runway 15', short: 'KSC Runway 15', lat: 28.632753, lon: -80.706062, hdg: 150, len: 4.572, wid: 0.091, elev: 0.003, surface: 'concrete', num: '15', ground: 'florida' },
+  KSC33: { name: 'Kennedy Space Center, Shuttle Landing Facility Runway 33', short: 'KSC Runway 33', lat: 28.597026, lon: -80.682680, hdg: 330, len: 4.572, wid: 0.091, elev: 0.003, surface: 'concrete', num: '33', ground: 'florida' },
+  EDW22: { name: 'Edwards Air Force Base, Runway 22 (concrete)', short: 'Edwards Runway 22', lat: 34.91633, lon: -117.86250, hdg: 238, len: 4.579, wid: 0.091, elev: 0.696, surface: 'concrete', num: '22', ground: 'desert' },
+  EDW04: { name: 'Edwards Air Force Base, Runway 04 (concrete)', short: 'Edwards Runway 04', lat: 34.89450, lon: -117.90500, hdg: 58, len: 4.579, wid: 0.091, elev: 0.702, surface: 'concrete', num: '04', ground: 'desert' },
+  EDW23L: { name: 'Edwards Air Force Base, Rogers Dry Lake Runway 23 (lakebed)', short: 'Rogers Dry Lake Runway 23', lat: 34.9700, lon: -117.7700, hdg: 238, len: 8.0, wid: 0.27, elev: 0.693, surface: 'lakebed', num: '23', ground: 'lakebed', approx: true },
+  WSSH17: { name: 'White Sands Space Harbor, Runway 17 (gypsum)', short: 'White Sands Runway 17', lat: 32.9900, lon: -106.4250, hdg: 170, len: 10.7, wid: 0.09, elev: 1.193, surface: 'lakebed', num: '17', ground: 'gypsum', approx: true },
+};
+
 // Each launcher: stages in ignition order. parallel:true → burns together with the next stage from liftoff (boosters).
 const LAUNCHERS = {
   saturnV: {
@@ -143,6 +156,30 @@ const LAUNCHERS = {
   },
 };
 
+// Space Shuttle: the stack is the External Tank with two solid boosters on its sides and the orbiter on its belly.
+// The three RS-25 main engines sit on the orbiter but burn the tank's propellant, so the "core stage" here is the
+// ET (dry mass) with the RS-25s' thrust; the engines' own mass is part of the orbiter (spacecraft).
+//   RSRM (per booster): 2.80 Mlbf sea level at liftoff, 3.07 Mlbf peak at T+20 s, propellant 1,107,000 lb, inert
+//   ≈ 192,000 lb, action time ≈ 124 s, shaped grain with a thrust bucket around Max-Q (NASA RSRM overview, NTRS).
+//   RS-25 at 104.5 %: 491,900 lbf vacuum / ≈ 397,700 lbf sea level, Isp 452 / 365 s; minimum power 67 %.
+//   Super Lightweight Tank: 58,500 lb dry, ≈ 1.62 Mlb of LOX + LH2.
+// The curve below is the booster's vacuum thrust relative to its liftoff value (1985 SRM data scaled to the RSRM).
+LAUNCHERS.shuttle = {
+  name: 'Space Shuttle', org: 'NASA (USA)', years: '1981–2011', height: 56.1, diameter: 8.4, crewRated: true, sideMount: true,
+  blurb: 'Two solid rocket boosters and three RS-25 engines on the winged orbiter, all burning at liftoff; the RS-25s draw on the orange External Tank. The boosters fall away after two minutes, the tank at orbit, and the orbiter glides home to a runway.',
+  stages: [
+    { id: 'SRB', name: '2 × Solid Rocket Boosters (RSRM)', prop: 'solid', engine: 'RSRM', n: 2, thrustSL: 2 * 12.45e6, thrustVac: 2 * 13.61e6, ispSL: 242, ispVac: 268, dry: 2 * 87000, propMass: 2 * 501000, parallel: true,
+      curve: [[0, 1.0], [10, 1.062], [20, 1.088], [30, 0.938], [50, 0.775], [60, 0.80], [75, 0.85], [100, 0.732], [110, 0.369], [115, 0.258], [120, 0.144], [124, 0.016], [130, 0.016]],
+      booster: { count: 2, offset: 6.4, y0: -3.0 },
+      geom: [[3.0, 2.6, 1.86, C.white], [35.4, 1.855, 1.855, C.white, { bands: 4 }], [3.3, 1.855, 1.855, C.white], [3.3, 1.855, 0.75, C.white], [0.46, 0.75, 0.1, C.white]], eng: { n: 1, len: 1.6, r: 1.9, layout: 'single' } },
+    { id: 'ET', name: 'External Tank (3 × RS-25 on the orbiter)', prop: 'hydrolox', engine: 'RS-25', n: 3, thrustSL: 3 * 1.769e6, thrustVac: 3 * 2.188e6, ispSL: 365, ispVac: 452.3, dry: 26500, propMass: 729000, maxG: 3.0, minThr: 0.67,
+      sched: [[0, 1], [30, 1], [32, 0.69], [50, 0.69], [53, 1]],
+      geom: [[0.9, 2.4, 4.2, C.foam], [26.1, 4.2, 4.2, C.foam], [6.9, 4.2, 4.2, '#c9803f', { bands: true }], [1.9, 4.2, 4.2, C.foam], [4.4, 4.2, 3.55, C.foam], [3.8, 3.55, 2.3, C.foam], [2.4, 2.3, 0.75, C.foam], [0.5, 0.75, 0.15, '#4a4a4a']], eng: null },
+  ],
+  jettison: [], payloadFairing: null,
+  // direct insertion: main engine cutoff (MECO) at ≈ 105 km on a 58 × 225 km orbit; the OMS raises the perigee later
+  ascent: { hp: 58, ha: 225, hCut: 105, vert: 7, kickGuess: 3, qMax: 36000, gTgo: true }, arefExtra: 25,
+};
 // Engine start on the pad: liquid engines light t seconds before liftoff and build up to full thrust (ramp, s; stagger
 // between engine groups, s) while hold-down clamps keep the vehicle down; solid boosters always light at T−0.
 //   Saturn V: engine start sequence at T−8.9 s, centre F-1 first, then opposing pairs 300 ms apart (NASA)
@@ -160,6 +197,7 @@ const PAD_IGNITION = {
   lm5: { t: 3.0, ramp: 1.6, approx: true },
   starship: { t: 3.0, ramp: 1.6, approx: true },
   lvm3: { t: 0, ramp: 0 },
+  shuttle: { t: 6.6, ramp: 3.0, stagger: 0.12, seq: 'main engines 3, 2 and 1 start 0.12 s apart' }, // NSTS News Reference Manual
 };
 for (const k in PAD_IGNITION) if (LAUNCHERS[k]) LAUNCHERS[k].ign = PAD_IGNITION[k];
 // stages whose engines are burning at liftoff: boosters plus the first core stage (unless that core is air-started)
@@ -271,6 +309,18 @@ const SPACECRAFT = {
       PROP: { name: 'Service module', dry: 800, prop: 700, engine: { name: 'Service module engine', thrust: 30000, isp: 320, prop: 'mmh' } },
     },
     orbiter: ['CAP', 'HAB', 'PROP'], lander: null, prop: { orbiter: 'PROP' }, capsule: 'CAP', model: 'capsuleHab',
+  },
+  // Space Shuttle orbiter. ORB: empty orbiter with its three RS-25s (≈ 79 t), plus crew, consumables and RCS
+  // propellant; scenarios override it per vehicle and flight. OMS: two AJ10-190 engines, 6,000 lbf each, Isp 313 s.
+  shuttle: {
+    name: 'Space Shuttle orbiter', crewMax: 8,
+    modules: {
+      ORB: { name: 'Orbiter (with 3 × RS-25, crew, consumables, RCS)', dry: 84000, prop: 0 },
+      OMS: { name: 'Orbital Maneuvering System (two pods)', dry: 0, prop: 10800, engine: { name: '2 × OMS (AJ10-190)', thrust: 2 * 26690, isp: 313, prop: 'mmh' } },
+      PAY: { name: 'Payload in the bay', dry: 0, prop: 0 },
+    },
+    orbiter: ['ORB', 'OMS', 'PAY'], lander: null, prop: { orbiter: 'OMS' }, model: 'shuttle',
+    winged: { S: 249.9, rn: 1.0, span: 23.79, len: 37.24 },
   },
   chandrayaan3: {
     name: 'Chandrayaan-3 (propulsion module + Vikram lander + Pragyan)', crewMax: 0,

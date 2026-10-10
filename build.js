@@ -10,7 +10,7 @@
 //   python3 -m http.server -d dist 8000
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const ROOT = __dirname, OUT = path.join(ROOT, 'dist');
-const ORDER = ['core.js', 'kepler.js', 'integrator.js', 'vehicles.js', 'flight.js', 'timeline.js', 'planner.js', 'lunar.js', 'interplanetary.js', 'scenarios.js'];
+const ORDER = ['core.js', 'kepler.js', 'integrator.js', 'vehicles.js', 'flight.js', 'timeline.js', 'planner.js', 'lunar.js', 'interplanetary.js', 'leo.js', 'scenarios.js'];
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });

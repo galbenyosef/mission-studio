@@ -20,7 +20,7 @@ class SampleSeg {
       const s = samples[i]; this.t[i] = s.t;
       for (let k = 0; k < 3; k++) { this.r[3 * i + k] = s.r[k]; this.v[3 * i + k] = s.v[k]; this.dir[3 * i + k] = s.thrDir ? s.thrDir[k] : 0; this.D[3 * i + k] = s.D ? s.D[k] : 0; }
       this.m[i] = s.m ?? meta.m ?? 0; this.T[i] = s.T || 0;
-      const ex = {}; for (const key of ['alt', 'q', 'mach', 'heat', 'gload', 'phase', 'chute', 'blackout', 'stage', 'throttle', 'bank']) if (s[key] !== undefined) ex[key] = s[key];
+      const ex = {}; for (const key of ['alt', 'q', 'mach', 'heat', 'gload', 'phase', 'chute', 'blackout', 'stage', 'throttle', 'bank', 'alpha', 'hdg']) if (s[key] !== undefined) ex[key] = s[key];
       this.extra.push(ex);
     }
     this.t0 = this.t[0]; this.t1 = this.t[n - 1];

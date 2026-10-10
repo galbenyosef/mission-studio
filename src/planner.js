@@ -148,12 +148,13 @@ function launchPhase(M, cfg, L, scMass, normal, opts = {}) {
   const t0 = M.t0;
   const stack = buildAscentStack(L, scMass);
   const hp = cfg.parking?.hp ?? L.ascent.hp, ha = cfg.parking?.ha ?? L.ascent.ha;
-  const asc = optimizeAscent({ body: 'earth', t0, lat: S.lat, lon: S.lon, stack, target: { normal, hp, ha }, vert: L.ascent.vert, kickGuess: L.ascent.kickGuess, fairingR: L.payloadFairing ? L.payloadFairing.r : 0, qMax: 33000, sampleDt: 0.5 });
+  const hCut = cfg.parking?.hCut ?? L.ascent.hCut;
+  const asc = optimizeAscent({ body: 'earth', t0, lat: S.lat, lon: S.lon, stack, target: { normal, hp, ha, hCut }, vert: L.ascent.vert, kickGuess: L.ascent.kickGuess, fairingR: L.payloadFairing ? L.payloadFairing.r : 0, qMax: L.ascent.qMax || 33000, arefExtra: L.arefExtra || 0, gTgo: !!L.ascent.gTgo, sampleDt: 0.5 });
   const ship = opts.ship;
   ship.add(new SampleSeg('earth', asc.samples, { phase: 'ascent' }));
   // configs per staging
   const nSt = L.stages.length;
-  const cfgAt = (stFrom, boosters, fairing, les, sac) => ({ key: 'launch', stFrom, boosters, fairing, les, sac: sac ?? true, launcher: cfg.launcher });
+  const cfgAt = (stFrom, boosters, fairing, les, sac) => ({ key: 'launch', stFrom, boosters, fairing, les, sac: sac ?? true, launcher: cfg.launcher, variant: cfg.lvVariant });
   ship.setConfig(t0 - 7200, 'launch', cfgAt(0, true, true, true));
   let stFrom = 0, boosters = L.stages[0].parallel, fairing = !!L.payloadFairing, les = L.jettison.some(j => j.part === 'LES'), saj = L.jettison.some(j => j.part === 'SAJ');
   const lit = liftoffStages(L), liq = lit.filter(s => s.prop !== 'solid'), sol = lit.filter(s => s.prop === 'solid'); const IG = L.ign || { t: 3, ramp: 1.5 };
@@ -172,7 +173,7 @@ function launchPhase(M, cfg, L, scMass, normal, opts = {}) {
       const st = ship.stateAt(e.t);
       if (st) {
         const deb = M.addObj(new MObject('debris-' + e.stage, L.stages[idx].name, { kind: 'debris', model: 'stage', color: '#888', trail: false }));
-        deb.setConfig(e.t, 'stage', { key: 'stage', launcher: cfg.launcher, stage: idx });
+        deb.setConfig(e.t, 'stage', { key: 'stage', launcher: cfg.launcher, stage: idx, variant: cfg.lvVariant });
         const vSep = vadd(st.v, vscale(vunit(st.v), -0.004));
         deb.add(new ConicSeg('earth', e.t, e.t + 900, st.r, vSep, L.stages[idx].dry, { extra: { phase: 'spent stage' } }));
       }

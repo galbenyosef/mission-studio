@@ -77,6 +77,12 @@ function simulateAscent(opt) {
   const nT = vunit(opt.target.normal), hp = opt.target.hp, ha = opt.target.ha ?? hp;
   const rpT = surfaceRadius(body) + hp, raT = surfaceRadius(body) + ha, aT = (rpT + raT) / 2;
   const epsT = -mu / (2 * aT);
+  // cutoff point on the target orbit: its perigee, or (direct insertion, e.g. the Shuttle's MECO) a given altitude on
+  // the way up to apogee, with the radial speed the target orbit has there
+  const rCut = opt.target.hCut != null ? surfaceRadius(body) + opt.target.hCut : rpT;
+  const hAngT = Math.sqrt(mu * 2 * rpT * raT / (rpT + raT));
+  const vtCut = opt.target.hCut != null ? hAngT / rCut : Math.sqrt(mu * (2 / rpT - 1 / aT));
+  const vrCut = opt.target.hCut != null ? Math.sqrt(Math.max(0, 2 * (epsT + mu / rCut) - vtCut * vtCut)) : 0;
   // inertial launch azimuth from target plane, then rotating-frame correction
   const lf0 = localFrame(body, r, t0);
   let dIn = vcross(nT, lf0.up); dIn = vsub(dIn, vscale(lf0.up, vdot(dIn, lf0.up))); dIn = vunit(dIn);
@@ -103,6 +109,11 @@ function simulateAscent(opt) {
       if (s.propLeft <= 0) continue;
       const ve = s.ispVac * g0, mdot = s.thrustVac / ve;
       const dvAv = ve * Math.log(m0 / (m0 - s.propLeft));
+      if (opt.gTgo && s.maxG) { // engines throttled to hold the g limit once the stack is light enough (Shuttle: 3 g)
+        const aMax = s.maxG * g0, mLim = s.thrustVac / aMax;
+        if (mLim < m0) { const dv1 = ve * Math.log(m0 / Math.max(mLim, m0 - s.propLeft)); if (dv <= dv1) { tt += (m0 - m0 * Math.exp(-dv / ve)) / mdot; return tt; }
+          if (mLim > m0 - s.propLeft) { tt += (m0 - mLim) / mdot; const dv2 = Math.min(dv - dv1, ve * Math.log(mLim / (m0 - s.propLeft))); tt += dv2 / aMax; if (dv - dv1 <= dv2 + 1e-9) return tt; dv -= dv1 + dv2; m0 -= s.propLeft + s.dry; continue; } }
+      }
       if (dv <= dvAv) { tt += (m0 - m0 * Math.exp(-dv / ve)) / mdot; return tt; }
       tt += s.propLeft / mdot; dv -= dvAv; m0 -= s.propLeft + s.dry;
     }
@@ -149,6 +160,7 @@ function simulateAscent(opt) {
     for (const s of act) {
       let thr = 1;
       if (s.thrWithBoosters && anyBoosters()) thr = s.thrWithBoosters;
+      if (s.sched) thr *= curveAt(s.sched, t - s.tIgn); // scheduled throttle (e.g. the Shuttle's Max-Q bucket)
       const cv = curveAt(s.curve, t - s.tIgn);
       const Tv = s.thrustVac * cv, Ts = s.thrustSL * cv;
       const T = Math.max(0, Tv - (Tv - Ts) * Math.min(pr, 1)) * thr;
@@ -158,7 +170,7 @@ function simulateAscent(opt) {
     const core = act.find(s => !s.parallel);
     const qNowPre = 0.5 * atm.rho * Math.pow(vreln * 1000, 2);
     if (core && core.minThr && opt.qMax && qNowPre > opt.qMax && core._T > 0 && body === 'earth') {
-      const k = clamp(Math.pow(opt.qMax / qNowPre, 2), core.minThr, 1);
+      const k = clamp(Math.pow(opt.qMax / qNowPre, 2), core.sched ? Math.min(1, core.minThr / Math.max(core._thr, 1e-6)) : core.minThr, 1);
       Ttot = Ttot - core._T + core._T * k; mdot = mdot - core._mdot + core._mdot * k; core._mdot *= k; core._thr *= k; core._T *= k;
     }
     if (core && core.maxG) {
@@ -171,9 +183,9 @@ function simulateAscent(opt) {
     }
     // drag
     let Aref = 0;
-    { let rmax = 0; for (const s of st) if (s.attached && !s.parallel) { rmax = Math.max(rmax, s.geom ? s.geom[0][1] : 2); break; }
+    { let rmax = 0; for (const s of st) if (s.attached && !s.parallel) { rmax = Math.max(rmax, s.geom ? Math.max(...s.geom.map(gg => gg[1])) : 2); break; }
       if (opt.fairingR && stack.jettison.some(j => j.part === 'fairing' && !j.done)) rmax = Math.max(rmax, opt.fairingR);
-      Aref = Math.PI * rmax * rmax;
+      Aref = Math.PI * rmax * rmax + (opt.arefExtra || 0);
       for (const s of st) if (s.attached && s.parallel && s.booster) Aref += s.booster.count * Math.PI * Math.pow(s.geom[0][1], 2);
       if (Aref === 0) Aref = 10; }
     const M = vreln * 1000 / (atm.a || 300), q = 0.5 * atm.rho * Math.pow(vreln * 1000, 2);
@@ -201,14 +213,17 @@ function simulateAscent(opt) {
       const up = vunit(r);
       let ed = vcross(nT, up); ed = vunit(vsub(ed, vscale(up, vdot(ed, up))));
       const vr = vdot(v, up), vd = vdot(v, ed), vn = vdot(v, nT), npos = vdot(r, nT);
-      const vt = Math.sqrt(mu * (2 / rpT - 1 / aT));
-      const dvNeed = Math.sqrt((vt - vd) ** 2 + vr * vr + vn * vn);
+      const dvNeed = Math.sqrt((vtCut - vd) ** 2 + (vrCut - vr) ** 2 + vn * vn);
       let tgo = Math.max(1, burnTimeFor(dvNeed));
       const aTh = m > 0 ? Ttot / m / 1000 : 0; // km/s^2
       if (tgo > 6 && aTh > 0) {
         const geff = mu / (rn * rn) - (vd * vd + vn * vn) / rn;
         const tg = Math.max(tgo, 8);
-        let ar = 6 * (rpT - rn - vr * tg) / (tg * tg) + 2 * vr / tg;
+        let ar = 6 * (rCut - rn - vr * tg) / (tg * tg) - 2 * (vrCut - vr) / tg;
+        if (opt.target.hCut != null && tgo < 45) { // direct insertion: in the last seconds steer only the climb rate, toward the one the target orbit has at this radius
+          const vtr = hAngT / rn, vrNow = Math.sqrt(Math.max(0, 2 * (epsT + mu / rn) - vtr * vtr));
+          ar = 2 * (vrNow - vr) / Math.max(tgo, 4);
+        }
         ar = ar + geff;
         let an = 6 * (-npos - vn * tg) / (tg * tg) + 2 * vn / tg;
         ar = clamp(ar, -0.7 * aTh, 0.95 * aTh);
@@ -530,3 +545,113 @@ function simulateTwoBurnAscent(opt) {
   res.stack = { stages: [{ propLeft: res.prop }] };
   return res;
 }
+
+// ---------------------------------------------------------------------------
+// WINGED ENTRY (Space Shuttle orbiter), from entry interface to terminal area energy management (TAEM, about
+// Mach 2.5 at 25 km). The angle of attack follows the flight schedule: 40° until about Mach 13, easing to about 14°
+// at TAEM. The bank angle is the guidance. Its size sets how quickly the orbiter sinks into denser air (more bank,
+// less vertical lift, more drag), re-planned every few seconds by predicting the range still to fly. Its sign steers
+// toward the runway and flips, in a roll reversal, whenever the heading error grows past a deadband.
+// opt: t0, r0, v0 (Earth-centred ECL), m0, S (m²), rn (m), target {lat, lon, elev}, rTaem (km before the target),
+//      vTaem (km/s), blackout (bool), maxTime
+// ---------------------------------------------------------------------------
+function shuttleAlpha(vRel) { // deg, from the Earth-relative speed (km/s)
+  if (vRel >= 4.2) return 40;
+  if (vRel <= 0.76) return 14;
+  if (vRel >= 1.4) return 22 + 18 * (vRel - 1.4) / 2.8;
+  return 14 + 8 * (vRel - 0.76) / 0.64;
+}
+const SHUTTLE_AERO = [[14, 0.48, 0.25], [22, 0.62, 0.40], [30, 0.78, 0.62], [40, 0.84, 0.84], [45, 0.86, 1.0]]; // alpha°, CL, CD (hypersonic, S = 249.9 m²)
+function shuttleAero(alphaDeg) {
+  const T = SHUTTLE_AERO; if (alphaDeg <= T[0][0]) return { CL: T[0][1], CD: T[0][2] };
+  for (let i = 0; i < T.length - 1; i++) if (alphaDeg <= T[i + 1][0]) { const f = (alphaDeg - T[i][0]) / (T[i + 1][0] - T[i][0]); return { CL: T[i][1] + f * (T[i + 1][1] - T[i][1]), CD: T[i][2] + f * (T[i + 1][2] - T[i][2]) }; }
+  const L = T[T.length - 1]; return { CL: L[1], CD: L[2] };
+}
+function simulateWingedEntry(opt) {
+  const mu = BODIES.earth.mu, R = BODIES.earth.R, kSG = 1.7415e-4, S = opt.S || 249.9, rn = opt.rn || 1.0;
+  const omega = bodyOmegaEcl('earth', opt.t0), m = opt.m0;
+  const vTaem = opt.vTaem ?? 0.76, rTaem = opt.rTaem ?? 96;
+  const tgt = opt.target, tgtAt = tt => vunit(sitePosEcl('earth', tgt.lat, tgt.lon, 0, tt));
+  // aerodynamic acceleration (km/s²) for a state and a bank angle (rad, + = lift to the right)
+  const aero = (rr, vv, bank, planar) => {
+    const rnorm = vnorm(rr), h = rnorm - R, at = earthAtmos(h);
+    const vr = vsub(vv, vcross(omega, rr)), vrn = vnorm(vr);
+    if (vrn < 1e-9 || at.rho <= 0) return { a: [0, 0, 0], q: 0, mach: 0, rho: 0, vrn, alpha: 40, D: 0 };
+    const vms = vrn * 1000, q = 0.5 * at.rho * vms * vms, alpha = shuttleAlpha(vrn), co = shuttleAero(alpha);
+    const D = q * co.CD * S / m / 1000, Lf = q * co.CL * S / m / 1000;
+    const vh = vscale(vr, 1 / vrn); let up = vsub(vscale(rr, 1 / rnorm), vscale(vh, vdot(rr, vh) / rnorm)); up = vunit(up);
+    const side = vcross(vh, up), ld = planar ? vscale(up, Math.cos(bank)) : vadd(vscale(up, Math.cos(bank)), vscale(side, Math.sin(bank)));
+    return { a: vadd(vscale(vh, -D), vscale(ld, Lf)), q, mach: vms / (at.a || 300), rho: at.rho, vrn, alpha, D: D * 1000 };
+  };
+  const grav = rr => { const n = vnorm(rr); return vscale(rr, -mu / (n * n * n)); };
+  const rk4 = (rr, vv, bank, h, planar) => {
+    const acc = (r_, v_) => vadd(grav(r_), aero(r_, v_, bank, planar).a);
+    const k1v = acc(rr, vv), k1r = vv;
+    const k2r = vaddScaled(vv, k1v, h / 2), k2v = acc(vaddScaled(rr, k1r, h / 2), k2r);
+    const k3r = vaddScaled(vv, k2v, h / 2), k3v = acc(vaddScaled(rr, k2r, h / 2), k3r);
+    const k4r = vaddScaled(vv, k3v, h), k4v = acc(vaddScaled(rr, k3r, h), k4r);
+    return { r: vadd(rr, vscale(vadd(vadd(k1r, vscale(k2r, 2)), vadd(vscale(k3r, 2), k4r)), h / 6)), v: vadd(vv, vscale(vadd(vadd(k1v, vscale(k2v, 2)), vadd(vscale(k3v, 2), k4v)), h / 6)) };
+  };
+  // fly a constant bank to TAEM speed, with the lift kept in the vertical plane (the range predictor: the bank sign
+  // only steers, it is left out); return the final point and time
+  // the bank is assumed to taper linearly with speed from its current value to 35° at TAEM, as entry bank angles do;
+  // planning on a lighter bank late keeps steering margin for the end of the entry
+  const predict = (rr, vv, tt, bank) => {
+    let r = rr, v = vv, t = tt; const v0 = vnorm(vsub(vv, vcross(omega, rr))), bEnd = Math.sign(bank || 1) * 35 * DEG;
+    for (let k = 0; k < 2500; k++) {
+      const s = aero(r, v, 0, true); const h = vnorm(r) - R;
+      if (s.vrn <= vTaem || h < 12) break;
+      const w = clamp((s.vrn - vTaem) / Math.max(v0 - vTaem, 1e-6), 0, 1), bk = bEnd + (bank - bEnd) * w;
+      const dt = h > 100 ? 8 : 3; const nx = rk4(r, v, bk, dt, true); r = nx.r; v = nx.v; t += dt;
+    }
+    return { r, t };
+  };
+  // range error of a prediction: distance flown minus the distance still to go to the TAEM point (+ = too far)
+  const rangeErr = (rNow, pr) => vangle(rNow, pr.r) * R - (vangle(rNow, tgtAt(pr.t)) * R - rTaem);
+  const headingErr = (rr, vv, tt) => { // target bearing minus Earth-relative velocity azimuth (rad)
+    const lf = localFrame('earth', rr, tt), vr = vsub(vv, vcross(omega, rr));
+    const azV = Math.atan2(vdot(vr, lf.east), vdot(vr, lf.north));
+    const uT = tgtAt(tt + (opt._tgo || 900)), d = vsub(uT, vscale(lf.up, vdot(uT, lf.up)));
+    const azT = Math.atan2(vdot(d, lf.east), vdot(d, lf.north));
+    return wrapPi(azT - azV);
+  };
+  let t = opt.t0, r = vcopy(opt.r0), v = vcopy(opt.v0);
+  const samples = [], events = []; const evt = (name, desc, kind) => events.push({ t, name, desc, kind });
+  let bank = 0, sigMag = 60 * DEG, sign = 0, banked = false, reversals = 0, nextGuid = t, blackout = false;
+  let maxG = 0, maxHeat = 0, maxQ = 0, tPeakG = t, tPeakHeat = t, mach10 = false, lastErr = 0;
+  for (let step = 0; step < 20000; step++) {
+    const s = aero(r, v, bank), h = vnorm(r) - R;
+    const heat = kSG * Math.sqrt(s.rho / rn) * Math.pow(s.vrn * 1000, 3) / 1e4;
+    const g = vnorm(s.a) * 1000 / G0;
+    if (g > maxG) { maxG = g; tPeakG = t; } if (heat > maxHeat) { maxHeat = heat; tPeakHeat = t; } if (s.q > maxQ) maxQ = s.q;
+    // guidance
+    if (opt.fixedBank != null) { banked = true; sign = 1; sigMag = opt.fixedBank; nextGuid = Infinity; }
+    const climbing = vdot(vsub(v, vcross(omega, r)), vunit(r)) > 0 && h < 100 && t - opt.t0 > 60;
+    if (!banked && (s.D >= 0.8 || climbing || t - opt.t0 > 330)) { banked = true; sign = Math.sign(headingErr(r, v, t)) || 1; evt('First roll', `With the air thick enough to steer by (drag ≈ ${fx1(s.D / G0 * 100)} % of g), the orbiter rolls about ${Math.round(sigMag * RAD)}° onto its ${sign > 0 ? 'right' : 'left'} side. Banking tilts the lift away from vertical: the orbiter sinks into denser air and brakes harder, and the bank angle becomes the steering wheel for the next 25 minutes.`, 'roll'); }
+    if (banked && t >= nextGuid && s.vrn < 1.3) { nextGuid = t + 4; sigMag = Math.min(sigMag, 50 * DEG); const he = headingErr(r, v, t); if (Math.abs(he) > 4 * DEG && Math.sign(he) !== sign) { sign = -sign; reversals++; evt(`Roll reversal ${reversals}`, 'Below Mach 4 the orbiter banks toward the runway to line up for the approach.', 'roll'); } }
+    if (banked && t >= nextGuid) {
+      nextGuid = t + (s.vrn > 3 ? 10 : 6);
+      const f = sg => rangeErr(r, predict(r, v, t, sign * sg));
+      let a = clamp(sigMag, 0, 80 * DEG), fa = f(a), b = clamp(a + (fa > 0 ? 6 : -6) * DEG, 0, 80 * DEG), fb = f(b);
+      for (let k = 0; k < 4 && Math.abs(fb) > 2 && Math.abs(fb - fa) > 1e-6; k++) { const c = clamp(b - fb * (b - a) / (fb - fa), 0, 80 * DEG); a = b; fa = fb; b = c; fb = f(b); }
+      sigMag = b; lastErr = fb;
+      if (globalThis.DEBUG_ENTRY) console.log('guid', (t - opt.t0).toFixed(0), 'alt', h.toFixed(1), 'v', s.vrn.toFixed(3), 'sig', (b * RAD).toFixed(1), 'err', fb.toFixed(1), 'fa', fa.toFixed(1));
+      const pr = predict(r, v, t, sign * sigMag); opt._tgo = pr.t - t;
+      const he = headingErr(r, v, t), db = (s.vrn < 1.6 ? 4 : reversals === 0 ? 10.5 : 17.5) * DEG;
+      if (Math.abs(he) > db && Math.sign(he) !== sign) { sign = -sign; reversals++; evt(`Roll reversal ${reversals}`, `The heading error to the runway reached ${Math.abs(he * RAD).toFixed(1)}°, so the orbiter rolls through wings-level to bank the other way. Each reversal swings the ground track back across the line to the runway; the Shuttle usually flew three or four.`, 'roll'); }
+    }
+    const want = banked ? sign * sigMag : 0, rate = 8 * DEG; // roll rate in reversals
+    // samples
+    if (!opt.noSamples && (!samples.length || t - samples[samples.length - 1].t >= 0.999)) samples.push({ t, r: vcopy(r), v: vcopy(v), m, T: 0, thrDir: null, D: vscale(s.a, m * 1000), alt: h, q: s.q, mach: s.mach, heat, gload: g, phase: 'entry', bank: bank * RAD, alpha: s.alpha, blackout: blackout || undefined });
+    if (!mach10 && s.mach < 10 && h < 60) { mach10 = true; evt('Mach 10', `Speed ${fx1(s.vrn)} km/s at ${Math.round(h)} km. The angle of attack begins to ease from 40° toward 14° as the air thickens.`, 'info'); }
+    const bo = !!opt.blackout && h < 85 && h > 40 && s.vrn > 4.0;
+    if (bo && !blackout) { blackout = true; evt('Communications blackout', 'Ionised air around the orbiter blocks radio contact with the ground. (From 1988 the TDRS relay satellites, reached through the top of the plasma sheath, all but ended the blackout.)', 'blackout'); }
+    if (!bo && blackout) { blackout = false; evt('Blackout ends', 'Radio contact with Mission Control is restored.', 'blackout'); }
+    if (s.vrn <= vTaem || h < 15 || t - opt.t0 > (opt.maxTime || 2600)) break;
+    const dt = h > 100 ? 2 : (opt.coarse ? 2 : 0.5);
+    bank = opt.fixedBank != null ? opt.fixedBank : bank + clamp(want - bank, -rate * dt, rate * dt);
+    const nx = rk4(r, v, bank, dt); r = nx.r; v = nx.v; t += dt;
+  }
+  return { t, r, v, m, samples, events, maxG, maxHeat, maxQ, tPeakG, tPeakHeat, reversals, rangeErr: lastErr };
+}
+function fx1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
