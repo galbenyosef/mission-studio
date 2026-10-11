@@ -188,6 +188,8 @@ function directorShot(c, t) {
   const sunAz = () => { const p = poseFor('chase', { az: 0, el: 0, dist: 1 }, c.P, t); const [e1, e2] = p.basis; const sd = vunit(vscale(c.P, -1)); return Math.atan2(vdot(sd, e2), vdot(sd, e1)); };
   if (c.o.id === 'ship' && (s.pad || t < md.M.t0 + 45)) { // the whole vehicle, pad to tip, in the rows the HUD leaves free
     const shot = { key: 'pad', mode: 'chase', az: sunAz() + 38 * DEG, el: 4 * DEG, dist: L * 4.2, lens: 35, label: 'Launch' };
+    const blk = MV.pad && MV.pad.userData.block; // not through a tower: round to the nearer side of it
+    if (blk) for (let k = 0; k < 4; k++) { let moved = false; for (const [a, w] of blk) { const d = wrapPi(shot.az - a * DEG); if (Math.abs(d) < w * DEG - 1e-9) { shot.az = a * DEG + (d < 0 ? -w : w) * DEG; moved = true; } } if (!moved) break; }
     const B = screenBand(), m = (B.bot - B.top) * 0.07, f = fitColumn(standingHeight(c, L), shot.el, B.top + m, B.bot - m * 0.6);
     if (f) { shot.dist = f.dist; shot.aimH = f.aimH; }
     return shot;

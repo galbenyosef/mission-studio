@@ -26,6 +26,7 @@
     - 승무원 수
     - 우주왕복선: 궤도, 화물칸 탑재물, OMS 연료, 착륙 활주로, 감속 낙하산
 - **비행 전체를 재현**
+  - 발사 당일 모습의 발사대: 아폴로·우주왕복선·아르테미스·팰컨 헤비 시절의 39A·39B 발사대(타워와 떨어져 나가는 스윙 암), SLC-41, LC-12, 원창, 스타베이스
   - 발사대 점화(T−0 전 액체 엔진 점화 → 고정 장치 해제)
   - 상승(새턴 V의 롤 프로그램 포함)과 단 분리, 주차 궤도, 궤도 전이 분사
   - 스윙바이
@@ -122,6 +123,7 @@
 - 우주왕복선 착륙 시각은 실제와 몇 분 차이예요. STS-1은 1분쯤, STS-135는 2분 가까이 늦고, STS-31은 5분 반 일러요.
 - 국제우주정거장은 아틀란티스가 만나는 자리에 실제 고도와 궤도 경사각으로 놓아요. 랑데부 전 궤도 위 위치는 실제와 달라요.
 - 퍼서비어런스의 첫 주행(2021년 3월 4일)은 실제 기록대로예요. 그 뒤의 주행은 예시예요.
+- 발사대는 공개된 치수와 사진을 바탕으로 그렸어요. 스윙 암 길이나 탱크 위치처럼 공개된 수치가 없는 부분은 사진에서 읽었어요.
 
 ## 내 컴퓨터에서 실행하기
 
@@ -147,6 +149,7 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 - **새턴 V:** [BoldlyBuilding](https://sketchfab.com/TitanicKyle)의 ["Saturn V"](https://sketchfab.com/3d-models/saturn-v-88f68de3b3e9435582560e02a52b325d)([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))를 바탕으로 했어요. `tools/models`로 S-IC, S-II 후방 단간부, S-II, S-IVB로 나누고 단마다 공개된 길이와 지름에 맞게 늘렸어요. 단간부는 실제 비행처럼 단 분리 30초 뒤에 떨어져요. 모델에 있던 우주선은 앱의 아폴로 우주선으로 바꿨어요.
 - **우주왕복선 외부 연료탱크와 부스터:** [paburoviii](https://sketchfab.com/paburoviii)의 ["Space Shuttle Atlantis"](https://sketchfab.com/3d-models/space-shuttle-atlantis-2f04130e3c78439d9765b5ac71b333d2)([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))를 바탕으로 했어요. `tools/models`로 탱크와 부스터 하나만 남기고(반대쪽 부스터는 앱이 좌우를 뒤집어 그려요) 공개된 크기에 맞췄어요. 스캔한 궤도선과 어울리도록 탱크에는 분사 단열재(폼) 질감을 칠하고 부스터 도장에는 풍화 흔적을 더했어요.
 - **아폴로 사령·기계선, 다른 발사체:** 공개된 치수를 바탕으로 코드로 그렸어요.
+- **발사대:** 공개된 치수와 사진을 바탕으로 코드로 그렸어요. NASA와 케네디 우주센터 자료, 미국 역사공학기록(HAER)의 39번 발사 단지 기록, 《Moonport》(NASA SP-4204), NSTS 뉴스 참고 매뉴얼, ULA·SpaceX·CASC 자료를 참고했어요.
 - **지구 지도:** [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0, three.js 예제를 거쳐 받았어요.
 - **달 지도:** three.js 예제
 - **화성·금성·목성·토성 지도:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)

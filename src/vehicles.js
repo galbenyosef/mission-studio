@@ -75,6 +75,7 @@ const LAUNCHERS = {
     ],
     jettison: [{ name: 'Launch Abort System', mass: 7700, time: 195, part: 'LES' }, { name: 'Service module fairings', mass: 1350, time: 190, part: 'SAJ' }],
     payloadFairing: null, ascent: { hp: 185, ha: 2300, vert: 10, kickGuess: 1.2 },
+    roll: { padAz: 0, t: [8, 20] }, // on the pad the boosters stand east and west of the core, the launcher's tower to the north; it rolls to the flight azimuth once clear of the tower
   },
   lm5: {
     name: 'Long March 5', org: 'CASC (China)', years: '2016–', height: 57.0, diameter: 5.0,
@@ -132,6 +133,7 @@ const LAUNCHERS = {
     ],
     jettison: [{ name: 'Payload fairing', mass: 1900, alt: 110, part: 'fairing' }],
     payloadFairing: { len: 13.1, r: 2.6, color: C.white }, ascent: { hp: 185, ha: 185, vert: 10, kickGuess: 2.0 },
+    roll: { padAz: 0, t: [10, 22] }, // on Pad 39A the three cores stand in a row east–west, the transporter-erector to the south
   },
   starship: {
     name: 'Starship (Super Heavy + Ship, Block 2)', org: 'SpaceX (USA)', years: '2025–', height: 123.0, diameter: 9.0, crewRated: true,

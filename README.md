@@ -18,6 +18,7 @@
   - the crew
   - for the Space Shuttle: the orbit, the payload in the bay, the OMS propellant, the landing runway and the drag chute
 - **Watch the whole voyage.** The simulation includes:
+  - the launch pads as they stood on each launch day: Launch Complex 39A and 39B with their Apollo, Shuttle, Artemis and Falcon Heavy towers, the swing arms pulling away, and SLC-41, LC-12, Wenchang and Starbase
   - liquid engines lighting on the pad before T−0 and the hold-down release
   - the ascent, with the Saturn V's roll program, staging and fairing jettison
   - the parking orbit and the transfer burns
@@ -104,6 +105,7 @@ This is a storyboard and teaching tool, not mission-design software.
 - The International Space Station is placed where Atlantis meets it, at its real altitude and inclination. Its position along the orbit before the rendezvous is not the historical one.
 - After Perseverance's first drive, which matches the real one on 4 March 2021, the rover's daily drives are illustrative.
 - The concept missions follow published architectures and their stated assumptions.
+- The launch pads are drawn from published dimensions and photographs. Where nothing is published, such as the length of a swing arm or where a tank stands, the figure is read from photographs.
 
 ## Run it locally
 
@@ -149,6 +151,7 @@ media/    screenshots for this README
 - **Saturn V:** based on ["Saturn V"](https://sketchfab.com/3d-models/saturn-v-88f68de3b3e9435582560e02a52b325d) by [BoldlyBuilding](https://sketchfab.com/TitanicKyle), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). `tools/models` cuts it into the S-IC, the S-II's aft interstage, the S-II and the S-IVB, and stretches each to its published length and diameter. The interstage drops away 30 s after staging, as on the real flights. The model's own spacecraft is replaced by the app's Apollo spacecraft.
 - **Space Shuttle external tank and boosters:** based on ["Space Shuttle Atlantis"](https://sketchfab.com/3d-models/space-shuttle-atlantis-2f04130e3c78439d9765b5ac71b333d2) by [paburoviii](https://sketchfab.com/paburoviii), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). `tools/models` keeps the tank and one booster (the app mirrors it for the other side) and scales them to their published sizes. It paints the tank's sprayed foam and weathers the boosters' paint, so they match the scanned orbiter they fly with.
 - **Apollo command and service modules, other launch vehicles:** drawn in code from published dimensions.
+- **Launch pads:** drawn in code from published dimensions and photographs: NASA and Kennedy Space Center fact sheets, the Historic American Engineering Record's documentation of Launch Complex 39, *Moonport* (NASA SP-4204), the NSTS News Reference Manual, and ULA, SpaceX and CASC material.
 - **Earth day, night and cloud maps:** [Solar System Scope](https://www.solarsystemscope.com/textures/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). They are taken from the three.js examples, which resized and merged them.
 - **Moon map:** `moon_1024.jpg` from the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets).
 - **Mars, Venus, Jupiter and Saturn maps:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), resized.
