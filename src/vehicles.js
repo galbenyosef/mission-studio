@@ -175,11 +175,13 @@ LAUNCHERS.shuttle = {
   stages: [
     { id: 'SRB', name: '2 × Solid Rocket Boosters (RSRM)', prop: 'solid', engine: 'RSRM', n: 2, thrustSL: 2 * 12.45e6, thrustVac: 2 * 13.61e6, ispSL: 242, ispVac: 268, dry: 2 * 87000, propMass: 2 * 501000, parallel: true,
       curve: [[0, 1.0], [10, 1.062], [20, 1.088], [30, 0.938], [50, 0.775], [60, 0.80], [75, 0.85], [100, 0.732], [110, 0.369], [115, 0.258], [120, 0.144], [124, 0.016], [130, 0.016]],
-      booster: { count: 2, offset: 6.4, y0: -8.0 },
-      geom: [[3.0, 2.6, 1.86, C.white], [35.4, 1.855, 1.855, C.white, { bands: 4 }], [3.3, 1.855, 1.855, C.white], [3.3, 1.855, 0.75, C.white], [0.46, 0.75, 0.1, C.white]], eng: { n: 1, len: 1.6, r: 1.9, layout: 'single' } },
+      // 45.46 m from the nozzle's exit to the nose, 3.71 m across; the nozzle's exit 9.26 m below the tank's aft dome (the stack
+      // stands 56.1 m tall). Drawn with the detailed model 'shuttle_stack' once it has loaded (the left booster mirrored).
+      booster: { count: 2, offset: 6.4, y0: -8.38 },
+      geom: [[2.5, 2.6, 1.86, C.white], [35.9, 1.855, 1.855, C.white, { bands: 4 }], [3.3, 1.855, 1.6, C.white], [2.4, 1.6, 0.6, C.white], [0.48, 0.6, 0.1, C.white]], eng: { n: 1, len: 0.88, r: 1.9, layout: 'single' }, detail: 'shuttle_stack' },
     { id: 'ET', name: 'External Tank (3 × RS-25 on the orbiter)', prop: 'hydrolox', engine: 'RS-25', n: 3, thrustSL: 3 * 1.769e6, thrustVac: 3 * 2.188e6, ispSL: 365, ispVac: 452.3, dry: 26500, propMass: 729000, maxG: 3.0, minThr: 0.67,
       sched: [[0, 1], [30, 1], [32, 0.69], [50, 0.69], [53, 1]],
-      geom: [[0.9, 2.4, 4.2, C.foam], [26.1, 4.2, 4.2, C.foam], [6.9, 4.2, 4.2, '#c9803f', { bands: true }], [1.9, 4.2, 4.2, C.foam], [4.4, 4.2, 3.55, C.foam], [3.8, 3.55, 2.3, C.foam], [2.4, 2.3, 0.75, C.foam], [0.5, 0.75, 0.15, '#4a4a4a']], eng: null },
+      geom: [[0.9, 2.4, 4.2, C.foam], [26.1, 4.2, 4.2, C.foam], [6.9, 4.2, 4.2, '#c9803f', { bands: true }], [1.9, 4.2, 4.2, C.foam], [4.4, 4.2, 3.55, C.foam], [3.8, 3.55, 2.3, C.foam], [2.4, 2.3, 0.75, C.foam], [0.5, 0.75, 0.15, '#4a4a4a']], eng: null, detail: 'shuttle_stack' },
   ],
   jettison: [], payloadFairing: null,
   // direct insertion: main engine cutoff (MECO) at ≈ 105 km on a 58 × 225 km orbit; the OMS raises the perigee later

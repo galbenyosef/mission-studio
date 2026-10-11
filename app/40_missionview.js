@@ -247,6 +247,7 @@ function updateCraft(c, t, camPos) {
   else model.position.y = anchorY(c, cfgL, model, s) + stagingShift(c, t, cfgL, model, s);
   c.yOff = model.position.y;
   if (ud.wheels && ud.wheels.length) { const wo = s.rover ? s.rover.wodo : 0; for (const w of ud.wheels) w.rotation.x = -wo / w.userData.wheel; }
+  if (ud.animate) ud.animate(t); // parts in motion on their own timeline (the Shuttle's bay doors and robot arm, Hubble's door)
   // plumes
   updatePlumes(c, s, t, act, model);
   // parachutes

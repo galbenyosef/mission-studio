@@ -35,7 +35,8 @@
   - 우주왕복선
     - 롤 프로그램, 부스터 분리, 떨어져 나가는 외부 연료 탱크
     - OMS 분사
-    - 국제우주정거장 도킹, 또는 로봇 팔로 허블 우주망원경 놓아주기
+    - 화물칸 문 열고 닫기
+    - 국제우주정거장 도킹, 또는 로봇 팔로 허블 우주망원경을 화물칸에서 꺼내 놓아주기
     - 롤 리버설로 방향을 잡는 활공 재진입
     - 활주로 착륙
 - **실시간 수치와 설명**
@@ -144,6 +145,7 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 - **우주왕복선 궤도선:** 스미스소니언이 국립항공우주박물관 우드바-헤이지 센터에 있는 디스커버리(OV-103)를 [3D 스캔한 모델](https://sketchfab.com/3d-models/orbiter-space-shuttle-ov-103-discovery-5f7176a2ae284d6b99fc970c9d265c04)이에요([CC0](https://creativecommons.org/publicdomain/zero/1.0/)). `tools/models`로 본체, 화물칸 문 두 짝, 착륙 기어를 나눠서 궤도에서는 문이 열리고 착륙할 때는 기어가 내려와요. 화물칸 내부, 로봇 팔, 탑재물은 코드로 그렸어요.
 - **국제우주정거장:** 존슨 우주센터 IGOAL 연구실이 만든 NASA 모델이에요([NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)). `tools/models`로 STS-135 때인 2011년 7월 모습으로 되돌렸어요. 그 뒤에 붙은 나우카, 프리찰, iROSA 태양전지판, BEAM, 비숍 에어록, 도킹 어댑터는 빼고 면을 줄였어요.
 - **새턴 V:** [BoldlyBuilding](https://sketchfab.com/TitanicKyle)의 ["Saturn V"](https://sketchfab.com/3d-models/saturn-v-88f68de3b3e9435582560e02a52b325d)([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))를 바탕으로 했어요. `tools/models`로 S-IC, S-II 후방 단간부, S-II, S-IVB로 나누고 단마다 공개된 길이와 지름에 맞게 늘렸어요. 단간부는 실제 비행처럼 단 분리 30초 뒤에 떨어져요. 모델에 있던 우주선은 앱의 아폴로 우주선으로 바꿨어요.
+- **우주왕복선 외부 연료탱크와 부스터:** [paburoviii](https://sketchfab.com/paburoviii)의 ["Space Shuttle Atlantis"](https://sketchfab.com/3d-models/space-shuttle-atlantis-2f04130e3c78439d9765b5ac71b333d2)([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))를 바탕으로 했어요. `tools/models`로 탱크와 부스터 하나만 남기고(반대쪽 부스터는 앱이 좌우를 뒤집어 그려요) 공개된 크기에 맞췄어요. 스캔한 궤도선과 어울리도록 탱크에는 분사 단열재(폼) 질감을 칠하고 부스터 도장에는 풍화 흔적을 더했어요.
 - **아폴로 사령·기계선, 다른 발사체:** 공개된 치수를 바탕으로 코드로 그렸어요.
 - **지구 지도:** [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0, three.js 예제를 거쳐 받았어요.
 - **달 지도:** three.js 예제

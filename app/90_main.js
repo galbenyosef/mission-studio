@@ -13,6 +13,21 @@ function stepWarp(dir) {
   STATE.auto = false; let i = WARPS.findIndex(w => w >= STATE.rate * 0.999); if (i < 0) i = WARPS.length - 1;
   i = clamp(i + dir, 0, WARPS.length - 1); STATE.rate = WARPS[i]; syncPlayUI();
 }
+// Stretches of a mission when parts move on their own timeline (app/32_shuttle.js): [start, end, top speed]. The automatic
+// time-warp slows down to arrive at the start and plays them through at a pace that can be watched: the bay doors swinging
+// open or shut, the robot arm reaching for the telescope, lifting it out and swinging it upright, its arrays unfurling, the
+// release and the arm folding back, the telescope's aperture door.
+function animWindows(md) {
+  if (md.animWin) return md.animWin;
+  const W = new Map(), add = (a, b, r) => W.set(a + ':' + b, [a, b, r]);
+  for (const o of md.M.objects) for (const cf of o.configs) {
+    const L = cf.label || {};
+    if (L.bayT != null) add(L.bayT, L.bayT + 210, 12);
+    if (L.armT) { const T = L.armT; add(T.gr - 1500, T.gr, 60); add(T.un, T.un + 480, 24); add(T.un + 480, T.un + 1680, 60); add(T.arr, T.arr + 720, 40); add(T.rel, T.rel + 180, 12); add(T.rel + 1800, T.rel + 3000, 60); }
+    if (L.doorT != null) add(L.doorT, L.doorT + 60, 6);
+  }
+  return (md.animWin = [...W.values()]);
+}
 function autoWarp(realDt) {
   const md = MV.md, t = STATE.t; const c = craftById('ship'); const s = c && c.s;
   let next = null; for (const e of md.events) if (e.t > t + 0.25 && !['heat', 'gload', 'blackout'].includes(e.kind)) { next = e; break; }
@@ -29,6 +44,7 @@ function autoWarp(realDt) {
   else if (s && s.extra && (s.extra.q > 200 || s.extra.heat > 1)) { active = true; target = Math.min(target, 4); }
   if (s && !s.surface && !active) { const rr = vnorm(s.r), vv = vnorm(s.v); if (vv > 0) target = Math.min(target, 0.9 * rr / vv); }
   if (performance.now() < STATE.dwellUntil) target = Math.min(target, active ? 2 : 8);
+  for (const [a, b, r] of animWindows(md)) { if (t >= a && t < b) target = Math.min(target, r); else if (a > t) target = Math.min(target, Math.max(r, (a - t) / 4.5)); }
   if (t >= md.M.t0 - 12 && t < md.M.t0) target = 1; // the final countdown runs in real time
   if (md.trav && t >= md.trav.seg.t0) { const p = roverPose(md, t); if (p.driving) target = Math.min(target, 90); } // rover drives: watchable speed
   target = clamp(target, 1, 4e6);

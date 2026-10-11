@@ -198,7 +198,7 @@ function drawTele(T, t) {
   const L = md.L;
   if (cf) {
     if (cf.key === 'launch') cfgTxt = L.sideMount ? ['Orbiter', 'External Tank', cf.boosters ? '2 boosters' : null].filter(Boolean).join(' + ') : L.stages.filter((st, i) => (st.parallel ? cf.boosters : i >= cf.stFrom)).map(st => st.id).join(' + ') + (cf.fairing ? ' + fairing' : '') + (cf.les ? ' + escape tower' : '');
-    else if (cf.sc === 'shuttle') cfgTxt = ['Orbiter', cf.docked ? 'docked to the ISS' : null, cf.bay === 'open' ? 'payload bay open' : 'bay doors closed', cf.payArm ? 'payload on the arm' : null, cf.gear ? 'gear down' : null, cf.dragChute ? 'drag chute' : null].filter(Boolean).join(' · ');
+    else if (cf.sc === 'shuttle') cfgTxt = ['Orbiter', cf.docked ? 'docked to the ISS' : null, cf.bay === 'open' ? 'payload bay open' : 'bay doors closed', cf.payArm || (cf.armPay && cf.armT && t >= cf.armT.un) ? 'payload on the arm' : cf.armPay && cf.armT && t >= cf.armT.gr ? 'arm on the payload' : null, cf.gear ? 'gear down' : null, cf.dragChute ? 'drag chute' : null].filter(Boolean).join(' · ');
     else if (cf.sc === 'iss') cfgTxt = 'International Space Station' + (cf.mplm ? ' + logistics module' : '');
     else if (cf.key === 'stack') cfgTxt = `${L.stages[cf.stage].id} + spacecraft`;
     else if (cf.key === 'stage') cfgTxt = L.stages[cf.stage].name;

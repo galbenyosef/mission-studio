@@ -105,7 +105,7 @@ function shuttleBayDoor(side, open) {
   for (let k = 0; k < n; k++) { const a = k, b = k + 1, c = n + 1 + k, d = c + 1; if (side > 0) { outer.push(a, c, b, b, c, d); inner.push(a, b, c, b, d, c); } else { outer.push(a, b, c, b, d, c); inner.push(a, c, b, b, c, d); } }
   const mk = (ix, m) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(ix); g.computeVertexNormals(); return new THREE.Mesh(g, m); };
   const grp = new THREE.Group(); grp.add(mk(outer, mat(SH_COL.white, 'paint'))); grp.add(mk(inner, mat(SH_COL.rad, 'metal')));
-  grp.position.set(side * hx, 0, hz); if (open) grp.rotation.y = -side * 175.5 * DEG;
+  grp.position.set(side * hx, 0, hz); if (open) grp.rotation.y = -side * SH_DOOR.open;
   return grp;
 }
 // The payload bay's geometry: the door hinges (x, z) on the sills, the side walls, the floor and, for the scan, the arch of
@@ -168,24 +168,79 @@ function shuttleChute() { // 40-ft (12 m) ring-sail drag chute trailing behind t
   g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.85 })));
   return g;
 }
-// robot arm (Canadarm) on the port sill: shoulder near the front of the bay; two booms reaching a wrist point
-function shuttleRMS(pose, B = SH_BAY_BUILTIN) {
-  const g = new THREE.Group(), m = mat('#ecebe5', 'paint'), jm = mat('#9aa0a6', 'metal');
-  const S = new THREE.Vector3(-B.wall + 0.22, 22.9, B.hz + 0.25); // on the port sill, under the closed door
-  const W = pose === 'raised' ? new THREE.Vector3(0.4, 14.5, 11.6) : pose === 'grapple' ? new THREE.Vector3(0, 11.3, 3.0) : new THREE.Vector3(S.x, 8.9, S.z);
-  const l1 = 6.37, l2 = 7.06, d = Math.min(S.distanceTo(W), l1 + l2 - 0.01);
-  const u = W.clone().sub(S).normalize();
-  let E;
-  if (pose === 'stowed' || !pose) E = S.clone().add(u.clone().multiplyScalar(l1));
-  else { const up = new THREE.Vector3(0, 0, 1), side = new THREE.Vector3().crossVectors(u, up); if (side.lengthSq() < 1e-6) side.set(1, 0, 0); side.normalize();
-    const perp = new THREE.Vector3().crossVectors(side, u).normalize(); if (perp.z < 0) perp.negate();
-    const a = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1)); E = S.clone().add(u.clone().multiplyScalar(l1 * Math.cos(a))).add(perp.multiplyScalar(l1 * Math.sin(a))); }
-  const seg = (A, B, r) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 12), m); c.scale.y = A.distanceTo(B); c.position.copy(A).add(B).multiplyScalar(0.5); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize()); return c; };
-  g.add(seg(S, E, 0.19)); g.add(seg(E, W, 0.17));
-  for (const P of [S, E, W]) { const j = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8), jm); j.position.copy(P); g.add(j); }
-  g.userData.wrist = W; return g;
+// Robot arm (Canadarm) on the port sill: the shoulder near the front of the bay, the upper boom 6.37 m and the lower boom
+// 7.06 m to the wrist, then the wrist joints and end effector, 1.6 m, on to a grapple fixture. armRig(B): userData.pose(W,
+// dir) bends it to put the wrist at W (or as near as it reaches), elbow up, the end effector along dir (else on along the
+// lower boom). shuttleRMS: the arm in a fixed pose.
+const RMS = { l1: 6.37, l2: 7.06, ee: 1.6 };
+function rmsShoulder(B) { return new THREE.Vector3(-B.wall + 0.22, 22.9, B.hz + 0.25); } // on the port sill, under the closed door
+function armRig(B = SH_BAY_BUILTIN) {
+  const g = new THREE.Group(), m = mat('#ecebe5', 'paint'), jm = mat('#9aa0a6', 'metal'), S = rmsShoulder(B);
+  const rod = (r, mm) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 12), mm); g.add(c); return c; };
+  const up = rod(0.19, m), lo = rod(0.17, m), ee = rod(0.2, jm);
+  const J = [0, 1, 2].map(() => { const j = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8), jm); g.add(j); return j; });
+  const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1), u = new THREE.Vector3(), side = new THREE.Vector3(), perp = new THREE.Vector3();
+  const E = new THREE.Vector3(), Wr = new THREE.Vector3(), Tip = new THREE.Vector3(), d0 = new THREE.Vector3();
+  const place = (c, A, P) => { c.scale.y = Math.max(A.distanceTo(P), 1e-3); c.position.copy(A).add(P).multiplyScalar(0.5); c.quaternion.setFromUnitVectors(Y, d0.copy(P).sub(A).normalize()); };
+  g.userData.pose = (W, dir) => {
+    u.copy(W).sub(S); const d = Math.min(u.length(), RMS.l1 + RMS.l2 - 0.005); u.normalize();
+    side.crossVectors(u, Z); if (side.lengthSq() < 1e-6) side.set(1, 0, 0); side.normalize(); perp.crossVectors(side, u).normalize(); if (perp.z < 0) perp.negate();
+    const a = Math.acos(clamp((RMS.l1 * RMS.l1 + d * d - RMS.l2 * RMS.l2) / (2 * RMS.l1 * d), -1, 1));
+    E.copy(S).addScaledVector(u, RMS.l1 * Math.cos(a)).addScaledVector(perp, RMS.l1 * Math.sin(a));
+    Wr.copy(S).addScaledVector(u, d); // the wrist, where the arm reaches
+    Tip.copy(Wr).addScaledVector(dir ? d0.copy(dir).normalize() : d0.copy(Wr).sub(E).normalize(), RMS.ee);
+    place(up, S, E); place(lo, E, Wr); place(ee, Wr, Tip); J[0].position.copy(S); J[1].position.copy(E); J[2].position.copy(Wr);
+    g.userData.wrist = Wr;
+  };
+  return g;
 }
-// Hubble Space Telescope: +Y toward the aperture; origin at the middle of the 13.2 m body
+function shuttleRMS(pose, B = SH_BAY_BUILTIN) {
+  const g = armRig(B), S = rmsShoulder(B);
+  g.userData.pose(pose === 'raised' ? new THREE.Vector3(0.4, 14.5, 11.6) : pose === 'grapple' ? new THREE.Vector3(0, 11.3, 3.0) : new THREE.Vector3(S.x, 8.9, S.z));
+  g.userData.wrist = g.userData.wrist.clone(); return g;
+}
+// The Hubble deploy in motion (STS-31), from the mission's timeline: flags.armT, absolute times of the grapple (gr), the
+// unberth (un), the arrays (arr) and the release (rel). Over the 25 minutes before the grapple the arm unstows and reaches
+// down to the telescope's grapple fixture. From the unberth it lifts the telescope straight up out of the bay, 2.8 m in
+// 8 minutes, clear of the sills (a few centimetres to spare), then in 20 minutes swings it upright above the bay, aperture
+// to space. The solar arrays and antennas unfurl over 12 minutes from the arrays time. After the release the end effector
+// backs off along the fixture and, half an hour later, the arm folds back onto the sill. The telescope is drawn here until
+// the release (flags.armPay); from then on it flies on its own.
+const HST_BAY = { p: new THREE.Vector3(0, 14.3, -0.05), q: new THREE.Quaternion() }; // in the bay, aperture forward
+const HST_LIFT = { p: new THREE.Vector3(0, 14.3, 2.75), q: new THREE.Quaternion() };
+const HST_UP = { p: new THREE.Vector3(0, 17.5, 12.0), q: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2) }; // released here
+const HST_GRASP = new THREE.Vector3(0, -3.0, 4.15); // the wrist, in the telescope's frame: out along the grapple fixture at (0, −3.0, 2.3)
+function deployRig(flags, B) {
+  const T = flags.armT, g = new THREE.Group(), arm = armRig(B); g.add(arm);
+  const S = rmsShoulder(B), Wst = new THREE.Vector3(S.x, 8.9, S.z), V = () => new THREE.Vector3();
+  const hub = flags.armPay ? hubbleModel({ arrays: true, deployable: true }) : null; if (hub) g.add(hub);
+  const grasp = (P, out) => out.copy(HST_GRASP).applyQuaternion(P.q).add(P.p);
+  const Wgr = grasp(HST_BAY, V()), Whov = Wgr.clone().add(new THREE.Vector3(0, 0, 1.5)), Wup = grasp(HST_UP, V());
+  const fixUp = new THREE.Vector3(0, 0, 1).applyQuaternion(HST_UP.q), Wback = Wup.clone().addScaledVector(fixUp, 1.6);
+  const P = { p: V(), q: new THREE.Quaternion() }, W = V(), dir = V(), lift = V();
+  const sm = (t, a, b) => smoothstep(clamp((t - a) / (b - a), 0, 1));
+  const arc = (A, Bv, f, h, out) => out.lerpVectors(A, Bv, f).add(lift.set(0, 0, h * Math.sin(Math.PI * f))); // up over the sill on the way
+  g.userData.update = t => {
+    if (t < T.un + 480) { P.p.lerpVectors(HST_BAY.p, HST_LIFT.p, sm(t, T.un, T.un + 480)); P.q.copy(HST_BAY.q); }
+    else { const f = sm(t, T.un + 480, T.un + 1680); P.p.lerpVectors(HST_LIFT.p, HST_UP.p, f); P.q.slerpQuaternions(HST_LIFT.q, HST_UP.q, f); }
+    if (hub) { hub.position.copy(P.p); hub.quaternion.copy(P.q); hub.userData.deploy(clamp((t - T.arr) / 720, 0, 1)); }
+    let reach = true; // the end effector lined up on the fixture (reaching for it, holding it, just let go of it)
+    if (t < T.gr - 1500) { W.copy(Wst); reach = false; }
+    else if (t < T.gr - 300) { arc(Wst, Whov, sm(t, T.gr - 1500, T.gr - 300), 3.0, W); reach = false; }
+    else if (t < T.gr) W.lerpVectors(Whov, Wgr, sm(t, T.gr - 300, T.gr));
+    else if (t < T.rel) grasp(P, W);
+    else if (t < T.rel + 180) W.lerpVectors(Wup, Wback, sm(t, T.rel, T.rel + 180));
+    else { arc(Wback, Wst, sm(t, T.rel + 1800, T.rel + 3000), 2.0, W); reach = false; }
+    arm.userData.pose(W, reach ? dir.set(0, 0, -1).applyQuaternion(t < T.rel ? P.q : HST_UP.q) : null);
+  };
+  g.userData.update(T.gr - 3600);
+  return g;
+}
+// Hubble Space Telescope: +Y toward the aperture; origin at the middle of the 13.2 m body. flags.arrays: the solar array
+// wings and the high-gain antennas, deployed; with flags.deployable, userData.deploy(f) unfurls them, f from 0 to 1: the
+// wings swing out from along the aft shroud (to f 0.25), then their blankets unroll to 12.1 m; the antenna booms swing out
+// (to f 0.4). Without arrays: the wings rolled up on their drums. The aperture door: open with flags.door, opening over a
+// minute from flags.doorT (userData.animate).
 function hubbleModel(flags = {}) {
   const g = new THREE.Group(), foil = mat('#d9dbdd', 'metal'), dark = mat('#2a2b2e', 'dark');
   const tube = cyl(2.1, 2.1, 7.45, foil, 32); tube.position.y = -0.6; g.add(tube); // light shield + forward shell
@@ -193,10 +248,22 @@ function hubbleModel(flags = {}) {
   const aft = cyl(2.15, 2.15, 5.6, mat('#c5c8cb', 'metal'), 32); aft.position.y = -6.2; g.add(aft); // equipment section
   const ring = cyl(2.17, 2.17, 0.35, mat('#9da2a7', 'metal'), 32); ring.position.y = -0.8; g.add(ring);
   const lip = cyl(2.13, 2.13, 0.2, mat('#3a3c40', 'metal', { side: THREE.DoubleSide }), 32, true); lip.position.y = 6.82; g.add(lip);
-  const dg = new THREE.Group(); dg.position.set(0, 7.0, 2.1); const door = new THREE.Mesh(new THREE.CylinderGeometry(2.15, 2.15, 0.12, 32), mat('#e9ebed', 'metal')); door.position.set(0, 0, -2.1); dg.add(door); if (flags.door) dg.rotation.x = -105 * DEG; g.add(dg);
-  if (flags.arrays) for (const s of [-1, 1]) { const w = solarWing(12.1, 2.45, 6, '#2a3a64'); w.position.set(s * 2.3, -2.2, 0); if (s < 0) w.rotation.y = Math.PI; w.rotation.x = Math.PI / 2; g.add(w); }
-  else for (const s of [-1, 1]) { const r = cyl(0.28, 0.28, 4.6, mat('#3b4a6b', 'paint'), 12); r.position.set(s * 2.45, -4.6, 0); g.add(r); }
-  if (flags.arrays) for (const s of [-1, 1]) { const b = cyl(0.05, 0.05, 4.0, mat('#9aa0a6', 'metal'), 6); b.rotation.x = Math.PI / 2; b.position.set(0, -1.6, s * 2.05); b.position.z = s * 4.05; const d2 = dish(0.65); d2.position.set(0, -1.6, s * 6.1); d2.rotation.x = s > 0 ? -Math.PI / 2 : Math.PI / 2; g.add(b); g.add(d2); }
+  const dg = new THREE.Group(); dg.position.set(0, 7.0, 2.1); const door = new THREE.Mesh(new THREE.CylinderGeometry(2.15, 2.15, 0.12, 32), mat('#e9ebed', 'metal')); door.position.set(0, 0, -2.1); dg.add(door); g.add(dg);
+  if (flags.doorT != null) g.userData.animate = t => { dg.rotation.x = -105 * DEG * smoothstep(clamp((t - flags.doorT) / 60, 0, 1)); };
+  else if (flags.door) dg.rotation.x = -105 * DEG;
+  if (flags.arrays) {
+    const wings = [-1, 1].map(s => { const piv = new THREE.Group(); piv.position.set(s * 2.3, -2.2, 0); g.add(piv);
+      const w = solarWing(12.1, 2.45, 6, '#2a3a64'); if (s < 0) w.rotation.y = Math.PI; w.rotation.x = Math.PI / 2; piv.add(w); return { piv, w, s }; });
+    const booms = [-1, 1].map(s => { const piv = new THREE.Group(); piv.position.set(0, -1.6, s * 2.15); g.add(piv);
+      const b = cyl(0.05, 0.05, 3.95, mat('#9aa0a6', 'metal'), 6); b.rotation.x = s * Math.PI / 2; piv.add(b); // out along ±Z
+      const d2 = dish(0.65); d2.position.set(0, 0, s * 3.95); d2.rotation.x = s > 0 ? -Math.PI / 2 : Math.PI / 2; piv.add(d2); return { piv, s }; });
+    g.userData.deploy = f => {
+      const sw = smoothstep(clamp(f / 0.25, 0, 1)), un = smoothstep(clamp((f - 0.25) / 0.75, 0, 1)), bm = smoothstep(clamp(f / 0.4, 0, 1));
+      for (const { piv, w, s } of wings) { piv.rotation.z = -s * Math.PI / 2 * (1 - sw); w.scale.x = 0.06 + 0.94 * un; } // stowed along the shroud, pointing aft
+      for (const { piv, s } of booms) piv.rotation.x = s * Math.PI / 2 * (1 - bm); // folded aft along the body
+    };
+    g.userData.deploy(flags.deployable ? 0 : 1);
+  } else for (const s of [-1, 1]) { const r = cyl(0.28, 0.28, 4.6, mat('#3b4a6b', 'paint'), 12); r.position.set(s * 2.45, -4.6, 0); g.add(r); }
   const fix = cyl(0.25, 0.25, 0.5, mat('#e0e0e0', 'metal'), 10); fix.rotation.x = Math.PI / 2; fix.position.set(0, -3.0, 2.3); g.add(fix); // grapple fixture
   g.userData.len = 13.2; g.userData.yc0 = 0; return g;
 }
@@ -218,47 +285,68 @@ function shuttlePayload(kind, flags = {}, B = SH_BAY_BUILTIN) {
 function buildOrbiter(flags = {}) {
   const fb = orbiterBuiltIn(flags), open = flags.bay === 'open';
   const g = detailPart('orbiter', 'body', fb, { extra: d => {
-    const P = DETAIL.ready.orbiter;
-    for (const [k, side] of [['doorL', -1], ['doorR', 1]]) if (P[k]) { const n = P[k].clone(); if (open) n.rotation.y = -side * 175.5 * DEG; d.add(n); }
+    const P = DETAIL.ready.orbiter, doors = {};
+    for (const [k, side] of [['doorL', -1], ['doorR', 1]]) if (P[k]) { const n = P[k].clone(); if (open) n.rotation.y = -side * SH_DOOR.open; d.add(n); doors[k] = n; }
     if (flags.gear && P.gear) d.add(P.gear.clone()); else if (!flags.gear) d.add(shuttleWellCovers());
-    orbiterFittings(d, flags, SH_BAY_SCAN);
+    d.userData.doors = doors; d.userData.rig = orbiterFittings(d, flags, SH_BAY_SCAN);
   } });
+  // doors and arm in motion (bay doors opening or closing from flags.bayT, the deploy from flags.armT)
+  if (flags.bayT != null || flags.armT) g.userData.animate = t => {
+    const D = g.userData.doors, [aL, aR] = bayDoorAngles(flags, t);
+    if (D && flags.bayT != null) { if (D.doorL) D.doorL.rotation.y = aL; if (D.doorR) D.doorR.rotation.y = -aR; }
+    if (g.userData.rig) g.userData.rig.userData.update(t);
+  };
   return g;
+}
+// Payload bay doors in motion. The right door's edge laps over the left's on the centreline, so the right door opens first
+// and closes last. Opening, from bayT: the latches let go (60 s), the right door swings open (63 s), and 15 s later the
+// left; closing, from bayT: the left door, then the right, then the latches. The angles [left, right] at t (0 = shut).
+const SH_DOOR = { latch: 60, swing: 63, gap: 15, open: 175.5 * DEG };
+function bayDoorAngles(flags, t) {
+  const A = SH_DOOR.open, sw = x => smoothstep(clamp(x / SH_DOOR.swing, 0, 1));
+  if (flags.bayT == null) return flags.bay === 'open' ? [A, A] : [0, 0];
+  const d = t - flags.bayT;
+  if (flags.bay === 'open') return [A * sw(d - SH_DOOR.latch - SH_DOOR.swing - SH_DOOR.gap), A * sw(d - SH_DOOR.latch)];
+  return [A * (1 - sw(d)), A * (1 - sw(d - SH_DOOR.swing - SH_DOOR.gap))];
 }
 function orbiterBuiltIn(flags) {
   const g = new THREE.Group(), open = flags.bay === 'open';
   g.add(shuttleFuselage());
   g.add(shuttleWing(1)); g.add(shuttleWing(-1)); g.add(shuttleFin()); g.add(shuttleOmsPod(1)); g.add(shuttleOmsPod(-1));
-  g.add(shuttleBayDoor(1, open)); g.add(shuttleBayDoor(-1, open));
+  const doorR = shuttleBayDoor(1, open), doorL = shuttleBayDoor(-1, open); g.add(doorR); g.add(doorL);
   const flap = new THREE.Mesh(new THREE.BoxGeometry(6.3, 2.6, 0.42), vcMat()); paintGeo(flap.geometry, (x, y, z, nx, ny, nz) => nz > 0.5 ? SH_COL.white : SH_COL.black); flap.position.set(0, -1.3, -2.38); g.add(flap); // body flap
   g.add(shuttleMainEngines());
   for (const [x, ey, z] of SH_OMSE) { const b = bell(1.45, 0.58, mat('#5a5d62', 'metal', { side: THREE.DoubleSide })); b.position.set(x, ey, z); g.add(b); }
   g.add(shuttleGear(!!flags.gear));
-  orbiterFittings(g, flags, SH_BAY_BUILTIN);
+  const rig = orbiterFittings(g, flags, SH_BAY_BUILTIN);
   // mounts: three main engines (used by the launch stack) and the two OMS engines; plumes along −Y
   const mounts = SH_SSME.map(([x, y, z]) => ({ y, x, z, r: 1.145, tag: 'ssme' })).concat(SH_OMSE.map(([x, y, z]) => ({ y, x, z, r: 0.58, tag: 'OMS' })));
-  g.userData = { len: 32.75, mounts, nose: true, yc0: 14.7, capsuleR: 5 };
+  g.userData = { len: 32.75, mounts, nose: true, yc0: 14.7, capsuleR: 5, doors: { doorL, doorR }, rig };
   return g;
 }
 // what goes in and on the payload bay, for a bay of geometry B: lining, payloads, the robot arm (and Hubble on it), drag chute
+// (returns the deploy rig when the arm is in motion)
 function orbiterFittings(g, flags, B) {
   g.add(shuttleBayInterior(B));
   if (flags.pay) g.add(shuttlePayload(flags.pay, {}, B));
   if (flags.orbiter === 'OV-104' || flags.pay === 'mplm' || flags.ods) g.add(shuttlePayload(null, { ods: true, obss: true }, B));
-  const arm = shuttleRMS(flags.rms || 'stowed', B); g.add(arm);
-  if (flags.payArm) { const h = hubbleModel({ arrays: !!flags.payArrays }); h.rotation.x = Math.PI / 2; h.position.copy(arm.userData.wrist).add(new THREE.Vector3(0, 1.8, 3.0)); g.add(h); } // held upright, aperture away from the bay
+  let rig = null;
+  if (flags.armT) { rig = deployRig(flags, B); g.add(rig); }
+  else { const arm = shuttleRMS(flags.rms || 'stowed', B); g.add(arm);
+    if (flags.payArm) { const h = hubbleModel({ arrays: !!flags.payArrays }); h.rotation.x = Math.PI / 2; h.position.copy(arm.userData.wrist).add(new THREE.Vector3(0, 1.8, 3.0)); g.add(h); } } // held upright, aperture away from the bay
   if (flags.dragChute) g.add(shuttleChute());
+  return rig;
 }
 // the stack on the pad and during ascent: tank in the middle, boosters on its sides (±X), orbiter on −Z
 const SH_STACK = { orbY: -1.0, orbZ: -8.55 }; // orbiter reference plane 336.5 in from the tank's
 function buildShuttleStack(L, c) {
   const g = new THREE.Group(), mounts = [], ET = L.stages[1], SRB = L.stages[0];
   const white = c.variant === 'sts1';
-  const etStage = buildStage(white ? { ...ET, geom: ET.geom.map(p => [p[0], p[1], p[2], p[3] === '#4a4a4a' ? p[3] : '#e9e7e0', p[4]]) } : ET);
+  const etStage = buildStage(white ? { ...ET, geom: ET.geom.map(p => [p[0], p[1], p[2], p[3] === '#4a4a4a' ? p[3] : '#e9e7e0', p[4]]) } : ET, { white });
   g.add(etStage.group);
   for (const s of [-1, 1]) { const bp = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 2.0, 8), mat('#9aa0a6', 'metal')); bp.rotation.x = Math.PI / 2; bp.rotation.y = s * 0.35; bp.position.set(s * 0.35, SH_STACK.orbY + 28.6, -5.1); g.add(bp); } // forward bipod
   if (c.boosters) for (const s of [-1, 1]) {
-    const b = buildStage(SRB); b.group.position.set(s * SRB.booster.offset, SRB.booster.y0, 0); g.add(b.group);
+    const b = buildStage(SRB); b.group.position.set(s * SRB.booster.offset, SRB.booster.y0, 0); if (s < 0) b.group.scale.x = -1; g.add(b.group); // the left booster is the right one's mirror image
     mounts.push({ y: SRB.booster.y0 - SRB.eng.len, x: s * SRB.booster.offset, z: 0, r: 1.5, tag: 'stage:SRB', prop: 'solid', idx: 0 });
   }
   const orb = buildOrbiter({ bay: 'closed', gear: false, orbiter: c.orbiter }); orb.rotation.y = Math.PI; orb.position.set(0, SH_STACK.orbY, SH_STACK.orbZ); g.add(orb);

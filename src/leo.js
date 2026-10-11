@@ -133,7 +133,7 @@ function planLEO(cfg, progress = () => { }) {
   const tIns = t;
   // payload bay doors open about 1½ hours after launch: the radiators on their inner faces must dump the orbiter's heat
   const tBay = t0 + (cfg.bayOpenMET ?? 1.5) * H;
-  ship.setConfig(tBay, 'sc', { ...orbiterCfg(cfg), bay: 'open' });
+  ship.setConfig(tBay, 'sc', { ...orbiterCfg(cfg), bay: 'open', bayT: tBay }); // the doors swing open over the next three minutes (app/32_shuttle.js)
   M.ev(tBay, 'ship', 'Payload bay doors open', 'The two 18-m doors swing open. Their inner faces are the radiators that carry the orbiter’s heat away — without opening them the crew would have to come home within hours.', 'info');
   // ---------------- orbit operations ----------------
   const ops = { M, cfg, SC, P, ship, L, t0, H, omsBurn, coast, dvToApsis, get t() { return t; }, set t(v) { t = v; }, get y() { return y; }, set y(v) { y = v; }, st, tBay, rwy, progress };
@@ -306,21 +306,22 @@ function payloadDeploy(o) {
   const tRel = isoToT(d.t), tGr = tRel - (d.grapple ?? 8) * H, tUn = tRel - (d.unberth ?? 6.4) * H, tArr = tRel - (d.arrays ?? 2.6) * H;
   o.progress('Payload deploy…');
   o.coast(tGr - 0.5 * H, 'in orbit');
-  ship.setConfig(tGr - 0.5 * H, 'sc', { ...orbiterCfg(cfg), bay: 'open', att: 'deploy' });
-  ship.setConfig(tGr, 'sc', { ...orbiterCfg(cfg), bay: 'open', att: 'deploy', rms: 'grapple' });
-  ship.setConfig(tUn, 'sc', { ...orbiterCfg(cfg), pay: null, payArm: d.model, bay: 'open', att: 'deploy', rms: 'raised' });
-  ship.setConfig(tArr, 'sc', { ...orbiterCfg(cfg), pay: null, payArm: d.model, payArrays: true, bay: 'open', att: 'deploy', rms: 'raised' });
-  ship.setConfig(tRel, 'sc', { ...orbiterCfg(cfg), pay: null, bay: 'open', att: 'deploy', rms: 'raised' });
+  // the arm and the payload move continuously between these times (the renderer poses them: app/32_shuttle.js deployRig):
+  // the arm unstows and reaches for the grapple fixture in the 25 minutes before the grapple, lifts the payload out at the
+  // unberth, holds it upright over the bay while its arrays unfurl, lets go at the release and is stowed again within the hour
+  const armT = { gr: tGr, un: tUn, arr: tArr, rel: tRel };
+  ship.setConfig(tGr - 0.5 * H, 'sc', { ...orbiterCfg(cfg), pay: null, armPay: d.model, armT, bay: 'open', att: 'deploy' });
+  ship.setConfig(tRel, 'sc', { ...orbiterCfg(cfg), pay: null, armT, bay: 'open', att: 'deploy' });
   ship.setConfig(tRel + 1.2 * H, 'sc', { ...orbiterCfg(cfg), pay: null, bay: 'open' });
   M.ev(tGr, 'ship', `Robot arm grapples ${d.short || d.name}`, `The 15-m Canadarm, flown from the aft flight deck, latches on to the telescope’s grapple fixture. ${d.name} has been running on the orbiter’s power; now it switches to its own batteries.`, 'info');
   M.ev(tUn, 'ship', `${d.short || d.name} lifted out of the bay`, 'Slowly, a few centimetres per second, the arm lifts the 11-tonne telescope clear of the payload bay — clearances along the bay sill were only a few centimetres.', 'info');
   M.ev(tArr, 'ship', 'Solar arrays and antennas unfurl', 'The two 12-m solar array wings roll out from their storage drums and the two high-gain antennas swing out on their booms. One wing stuck partway, and two spacewalkers suited up in the airlock before ground controllers freed it with a software fix.', 'photo');
   // release: the payload becomes its own spacecraft; the orbiter backs away
   o.coast(tRel, 'in orbit — deploy');
-  const s = o.st(); const F = lvlh(s.r, s.v), off = fromLvlh(F, d.armOffset || [0.0016, -0.0004, 0.0146]); // where the arm holds it, upright over the bay
+  const s = o.st(); const F = lvlh(s.r, s.v), off = fromLvlh(F, d.armOffset || [0.0028, 0, 0.012]); // where the arm holds it, upright over the bay (in the orbiter's frame 2.8 m forward of its reference point and 12 m up)
   const pay = M.addObj(new MObject(d.id || 'payload', d.name, { kind: 'craft', model: d.model, color: '#bfe3ff' }));
   pay.setConfig(tRel, 'sc', { key: 'sc', sc: d.model, parts: ['deployed'] });
-  if (d.doorOpen) { const td = isoToT(d.doorOpen); pay.setConfig(td, 'sc', { key: 'sc', sc: d.model, parts: ['deployed'], door: true }); M.ev(td, d.id || 'payload', 'Aperture door opens', 'Two days after the deploy, the telescope’s aperture door swings open; first light follows a month later — and with it the discovery that the main mirror had been ground to the wrong shape.', 'photo'); }
+  if (d.doorOpen) { const td = isoToT(d.doorOpen); pay.setConfig(td, 'sc', { key: 'sc', sc: d.model, parts: ['deployed'], door: true, doorT: td }); M.ev(td, d.id || 'payload', 'Aperture door opens', 'Two days after the deploy, the telescope’s aperture door swings open; first light follows a month later — and with it the discovery that the main mirror had been ground to the wrong shape.', 'photo'); }
   const tPayEnd = isoToT(cfg.landing) + 8 * H;
   const rP = leoInt(tRel, [...vadd(s.r, off), ...s.v, d.mass], tPayEnd, { hmax: 60 });
   pay.add(resToSeg(rP, `${d.short || d.name} in orbit`));
@@ -372,7 +373,7 @@ function shuttleReturn(o, tIns) {
   // payload bay doors close a few hours before the burn
   const tDoors = td - (cfg.doorsCloseBefore ?? 2.8) * H;
   M.ev(tDoors, 'ship', 'Payload bay doors closed', 'The crew stows the cabin, closes the payload bay doors and puts on launch and entry suits.', 'info');
-  ship.setConfig(tDoors, 'sc', { ...orbiterCfg(cfg), pay: cfg.bayPayloadReturn !== undefined ? cfg.bayPayloadReturn : cfg.bayPayload || null, bay: 'closed' });
+  ship.setConfig(tDoors, 'sc', { ...orbiterCfg(cfg), pay: cfg.bayPayloadReturn !== undefined ? cfg.bayPayloadReturn : cfg.bayPayload || null, bay: 'closed', bayT: tDoors }); // swinging shut over the next three minutes
   M.phase(tIns, td - 1800, cfg.orbitPhaseName || 'In orbit', '#4ea8de');
   // deorbit burn
   o.progress('Deorbit burn and entry…');

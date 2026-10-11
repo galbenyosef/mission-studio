@@ -186,10 +186,15 @@ const STAGE_D = {
   'saturnv:S-II': { caps: [[5.52, 5.0, 'dark'], [24.87, 5.0, 'metal']], bells: true }, // the heat shield at the base of the aft skirt; the forward bulkhead inside the cone
   'saturnv:S-IVB': { caps: [[0.3, 3.25, 'dark'], [14.47, 3.25, 'metal']], bells: true }, // the thrust structure above the cone; the top of the instrument unit
 };
+// Space Shuttle: the external tank and the boosters of a CC BY model of the stack (paburoviii, credited in the README and the
+// app), scaled to their published sizes by tools/models; the orbiter is the Smithsonian's scan. STS-1 and STS-2 flew tanks
+// painted white (opts.white): the foam's colour map gives way to white paint.
+const ET_WHITE = () => MATS.etWhite || (MATS.etWhite = new THREE.MeshStandardMaterial({ color: '#e6e4dc', roughness: 0.6, metalness: 0, side: THREE.DoubleSide }));
 function stageD(st, fallback, opts) {
   const D = STAGE_D[st.detail + ':' + st.id] || {};
   return detailPart(st.detail, st.id, fallback, { extra: g => {
     const P = DETAIL.ready[st.detail];
+    if (opts.white) g.traverse(o => { if (o.isMesh && o.material && o.material.map && /Orange/.test(o.material.name)) o.material = ET_WHITE(); });
     if (P.IST && st.geom[0][4] && st.geom[0][4].ist && opts.ist !== false) g.add(P.IST.clone());
     for (const [y, r, kind] of D.caps || []) { const c = cyl(r, r, 0.06, kind === 'dark' ? mat('#2e3135', 'dark') : mat('#9a9fa5', 'metal'), 32); c.position.y = y - 0.03; g.add(c); }
     if (D.bells) for (const p of engineLayout(st.eng)) { const b = bell(st.eng.len, st.eng.r); b.position.set(p[0], st.eng.y0, p[1]); g.add(b); }
@@ -275,7 +280,7 @@ function stackParts(list) { // stack groups vertically (each part built from y=0
 function buildSC(model, parts, flags = {}) {
   if (model === 'shuttle') return buildOrbiter(flags);
   if (model === 'iss') return issModel(flags);
-  if (model === 'hubble') return hubbleModel({ arrays: true, door: !!flags.door });
+  if (model === 'hubble') return hubbleModel({ arrays: true, door: !!flags.door, doorT: flags.doorT });
   const P = new Set(parts || []);
   const g = new THREE.Group(); let inner; const mounts = [];
   const has = k => P.has(k);
@@ -443,10 +448,10 @@ function buildLaunchStack(lkey, scModel, c) {
 function buildStageOnly(lkey, idx, withAdapter, variant) {
   const L = LAUNCHERS[lkey]; let s = L.stages[idx];
   if (variant === 'sts1' && lkey === 'shuttle' && idx === 1) s = { ...s, geom: s.geom.map(p => [p[0], p[1], p[2], p[3] === '#4a4a4a' ? p[3] : '#e9e7e0', p[4]]) }; // STS-1's painted (white) tank
-  const st = buildStage(s, { ist: false }); // (a spent stage's aft interstage went long before)
+  const st = buildStage(s, { ist: false, white: variant === 'sts1' && lkey === 'shuttle' && idx === 1 }); // (a spent stage's aft interstage went long before)
   if (s.parallel && s.booster) { // drop all boosters together
     const g = new THREE.Group(); const n = s.booster.count, off = s.booster.offset;
-    for (let k = 0; k < n; k++) { const a = n === 2 ? k * Math.PI : k * Math.PI / 2 + Math.PI / 4; const b = k === 0 ? st : buildStage(s); b.group.position.set(Math.cos(a) * off, 0, Math.sin(a) * off); g.add(b.group); }
+    for (let k = 0; k < n; k++) { const a = n === 2 ? k * Math.PI : k * Math.PI / 2 + Math.PI / 4; const b = k === 0 ? st : buildStage(s); b.group.position.set(Math.cos(a) * off, 0, Math.sin(a) * off); if (n === 2 && k === 1) b.group.scale.x = -1; g.add(b.group); } // a pair: mirror images
     g.userData = { len: st.len, mounts: [] }; return g;
   }
   if (withAdapter) { const sla = cyl(3.3, 3.3, 1.0, mat('#e7e5df')); sla.position.y = st.len; st.group.add(sla); for (let k = 0; k < 4; k++) { const p = box(2.6, 7.0, 0.1, mat('#e7e5df')); const a = k * Math.PI / 2; p.position.set(Math.cos(a) * 4.5, st.len - 1, Math.sin(a) * 4.5); p.rotation.y = -a + Math.PI / 2; p.rotation.x = 0.7; st.group.add(p); } }

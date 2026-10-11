@@ -225,6 +225,7 @@ function shuttleShot(c, t, s, ex, cfgL, L) {
       if (d < 1500 && !(att === 'vbar' && d < 75)) { const v = att === 'vbar' || att === 'fly'; return { key: 'from-iss-' + (v ? 'v' : 'r'), mode: 'from', from: 'obj:iss', off: v ? [23, -7, 5] : [-3, -7, -9], lens: clamp(Math.round(0.24 * d / 5) * 5, 24, 400), dist: L * 3, label: 'Seen from the station', blend: 2500 }; }
     }
     if (cfgL.docked || (att === 'vbar' && iss && iss.P && c.P && vnorm(vsub(c.P, iss.P)) < 0.075)) return { key: 'docked', mode: 'chase', az: 300 * DEG, el: 24 * DEG, dist: 0.21, lens: 35, drift: 0.01, label: 'Docked to the station' };
+    if (cfgL.bayT != null && t >= cfgL.bayT - 30 && t < cfgL.bayT + 240) return { key: 'bay-doors', mode: 'chase', az: 125 * DEG, el: 42 * DEG, dist: Math.max(L * 1.9, 0.055), lens: 35, drift: 0.006, label: cfgL.bay === 'open' ? 'Payload bay doors opening' : 'Payload bay doors closing' };
     if (att === 'deploy') return { key: 'deploy', mode: 'chase', az: 140 * DEG, el: 30 * DEG, dist: Math.max(L * 2.4, 0.07), lens: 35, drift: 0.008, label: 'Payload deploy' };
   }
   if (ph === 'entry' && (ex.heat > 1 || ex.q > 200)) return { key: 'sh-entry', mode: 'chase', az: 112 * DEG, el: -3 * DEG, dist: L * 3.4, lens: 35, label: 'Entry' };

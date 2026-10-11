@@ -149,6 +149,29 @@ const RECIPES = {
     inner: { parts: ['IST'], color: [0.32, 0.33, 0.35], metal: 0.3, rough: 0.6 }, // the interstage is an open ring
     textures: 2048,
   },
+  // Space Shuttle external tank and solid rocket boosters: "Space Shuttle Atlantis" by paburoviii
+  // (https://sketchfab.com/3d-models/space-shuttle-atlantis-2f04130e3c78439d9765b5ac71b333d2), CC BY 4.0, unzipped into
+  // atlantis/. The model is the whole stack, made for display; its orbiter is left out (the app's orbiter is the
+  // Smithsonian's scan of Discovery). In the file's own frame (frame: +Y up the stack, the orbiter on −Z, as the app has
+  // it) the tank is 7.712 units long and 1.440 across, a booster 7.414 long from nozzle to nose and 0.489 across: the
+  // boosters too slender for their tank. Each is scaled to its published size: the tank 46.88 m long and 8.41 m across, a
+  // booster 45.46 m long and 3.71 m across. The two boosters are mirror images, so only the right one (+X) is kept and the
+  // app mirrors it.
+  // Parts: ET (y = 0 at the bottom of its aft dome, on its axis), SRB (y = 0 at the bottom of its aft skirt, on its axis;
+  // the nozzle's exit 0.88 m below).
+  // The model's tank is flat orange and its boosters are coloured like a drawing. They are given the finish of the scanned
+  // orbiter they fly with: the tank's sprayed foam is painted here (mottled, the intertank's darker), the boosters' white
+  // paint weathered, and neither is glossy.
+  shuttle_stack: {
+    dl: 'atlantis/scene.gltf',
+    frame: [1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 5.66, 6.865, 1],
+    triPart: (c, at) => /\/Orange_Parts\//.test(at) ? 'ET' : /\/Small_Rocket_Group_01\//.test(at) ? 'SRB' : null,
+    fit: { ET: { at: [0, 3.2164, 1.7075], scale: [5.8403, 6.0790, 5.8403] }, SRB: { at: [1.0305, 1.74, 1.6855], scale: [7.587, 6.1317, 7.587] } },
+    materials: { Rocket_Material: { metal: 0, rough: 0.55 }, Rocket_Details_Material: { metal: 0, rough: 0.55 }, White_Metal: { metal: 0.2, rough: 0.55 } },
+    foam: { part: 'ET', material: 'Orange_Material', len: 46.88, r: 4.205, size: [1024, 2048], color: [181, 101, 46], bands: [[26.6, 33.6, 0.84]], rough: 0.85 },
+    grime: { materials: ['Rocket_Material', 'Rocket_Details_Material'], amount: 0.1, tint: [0.95, 0.945, 0.93] },
+    textures: { baseColor: 1024, other: 1024, named: { 'ET-foam': 2048 } },
+  },
 };
 
 const args = process.argv.slice(2), opt = k => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
@@ -351,6 +374,7 @@ async function buildScan(name, R, doc) {
   const sel = {}, A = [0, 0, 0], B = [0, 0, 0], C = [0, 0, 0];
   for (const n of root.listNodes()) {
     const mesh = n.getMesh(); if (!mesh) continue;
+    const route = []; for (let x = n; x; x = x.getParentNode()) route.unshift(x.getName()); // the node's path, for triPart
     ownMesh(n, root);
     transformMesh(n.getMesh(), mul(R.frame, n.getWorldMatrix()));
     for (const p of n.getMesh().listPrimitives()) {
@@ -360,7 +384,7 @@ async function buildScan(name, R, doc) {
       for (let t = 0; t < cnt; t += 3) {
         const a = idx ? idx.getScalar(t) : t, b = idx ? idx.getScalar(t + 1) : t + 1, c = idx ? idx.getScalar(t + 2) : t + 2;
         pos.getElement(a, A); pos.getElement(b, B); pos.getElement(c, C);
-        const part = R.triPart([(A[0] + B[0] + C[0]) / 3, (A[1] + B[1] + C[1]) / 3, (A[2] + B[2] + C[2]) / 3]); if (!part) continue;
+        const part = R.triPart([(A[0] + B[0] + C[0]) / 3, (A[1] + B[1] + C[1]) / 3, (A[2] + B[2] + C[2]) / 3], route.join('/')); if (!part) continue;
         ((sel[part] ||= new Map()).get(p) || sel[part].set(p, []).get(p)).push({ a, b, c });
       }
     }
@@ -368,9 +392,12 @@ async function buildScan(name, R, doc) {
   const groups = {};
   for (const [part, byPrim] of Object.entries(sel)) {
     const pv = (R.pivots || {})[part] || [0, 0, 0], oy = R.origins && part in R.origins ? (R.warp ? pwl(R.warp.y, R.origins[part]) : R.origins[part]) : 0;
-    const prims = [...byPrim].map(([p, t]) => subPrimitive(doc, p, t)), j = joinPrimitives(prims); j.setMaterial(prims[0].getMaterial());
-    if (R.warp) warpPrimitive(j, R.warp);
-    const mesh = doc.createMesh(part).addPrimitive(j);
+    const byMat = new Map(); // one primitive per material
+    for (const [p, t] of byPrim) { const m = p.getMaterial(); if (!byMat.has(m)) byMat.set(m, []); byMat.get(m).push(subPrimitive(doc, p, t)); }
+    const mesh = doc.createMesh(part);
+    for (const [m, prims] of byMat) { const j = joinPrimitives(prims); j.setMaterial(m); if (R.warp) warpPrimitive(j, R.warp); mesh.addPrimitive(j); }
+    const F = (R.fit || {})[part]; // a part scaled on its own: about F.at, by F.scale along each axis
+    if (F) transformMesh(mesh, [F.scale[0], 0, 0, 0, 0, F.scale[1], 0, 0, 0, 0, F.scale[2], 0, -F.at[0] * F.scale[0], -F.at[1] * F.scale[1], -F.at[2] * F.scale[2], 1]);
     transformMesh(mesh, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -pv[0], -pv[1] - oy, -pv[2], 1]);
     const g = doc.createNode(part).setTranslation(pv); g.addChild(doc.createNode(part + '-mesh').setMesh(mesh)); scene.addChild(g); groups[part] = g;
   }
@@ -388,6 +415,10 @@ async function buildScan(name, R, doc) {
       for (let t = 0; t < ix.getCount(); t += 3) { const b = ix.getScalar(t + 1); ix.setScalar(t + 1, ix.getScalar(t + 2)); ix.setScalar(t + 2, b); }
       q.setAttribute('POSITION', pos).setAttribute('NORMAL', nor).setIndices(ix); h.getMesh().addPrimitive(q); }
   }
+  for (const m of root.listMaterials()) { const o = (R.materials || {})[m.getName()]; if (!o) continue; // finishes by source material
+    if (o.metal != null) m.setMetallicFactor(o.metal); if (o.rough != null) m.setRoughnessFactor(o.rough); if (o.color) m.setBaseColorFactor([...o.color, 1]); }
+  if (R.foam) await foamPaint(doc, groups, R.foam);
+  if (R.grime) await grimeTextures(doc, R.grime);
   await shrinkTextures(doc, R.textures);
   await doc.transform(prune(), dedup(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const out = path.join(OUT, name + '.glb');
@@ -415,6 +446,54 @@ function sliceY(doc, prim, planes) {
   const iN = sems.indexOf('NORMAL'); if (iN >= 0) for (let i = 0; i < out[iN].length; i += 3) { const l = Math.hypot(out[iN][i], out[iN][i + 1], out[iN][i + 2]) || 1; for (let e = 0; e < 3; e++) out[iN][i + e] /= l; }
   sems.forEach((s, k) => prim.setAttribute(s, doc.createAccessor().setType(acc[k].getType()).setArray(new Float32Array(out[k]))));
   prim.setIndices(doc.createAccessor().setType('SCALAR').setArray(Uint32Array.from({ length: out[iy].length / 3 }, (_, i) => i)));
+}
+// Value noise, smooth and repeatable (no randomness between builds): n3 in [0, 1] at a point of space, fbm3 several octaves.
+function hash3(x, y, z) { let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177); h = Math.imul(h ^ (h >>> 13), 1103515245); return ((h ^ (h >>> 16)) >>> 0) / 4294967295; }
+function n3(x, y, z) {
+  const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z), f = t => t * t * (3 - 2 * t), u = f(x - X), v = f(y - Y), w = f(z - Z);
+  const L = (a, b, t) => a + (b - a) * t, c = (i, j, k) => hash3(X + i, Y + j, Z + k);
+  return L(L(L(c(0, 0, 0), c(1, 0, 0), u), L(c(0, 1, 0), c(1, 1, 0), u), v), L(L(c(0, 0, 1), c(1, 0, 1), u), L(c(0, 1, 1), c(1, 1, 1), u), v), w);
+}
+function fbm3(x, y, z, oct = 5) { let s = 0, a = 0.5, t = 0; for (let o = 0; o < oct; o++) { s += a * n3(x, y, z); t += a; x *= 2.03; y *= 2.03; z *= 2.03; a *= 0.5; } return s / t; }
+// The foam of an external tank (F.material on part F.part, a cylinder along +Y of length F.len): wrapped texture
+// coordinates (around the axis, and along it, top of the image at the top of the tank) and a colour map painted here —
+// the sprayed foam's mottle and its bands, darker where F.bands says (the intertank's foam over its ribs), so it sits
+// beside a scanned orbiter rather than looking like flat paint.
+async function foamPaint(doc, groups, F) {
+  const [W, H] = F.size, img = Buffer.alloc(W * H * 3);
+  for (let j = 0; j < H; j++) {
+    const yM = (1 - (j + 0.5) / H) * F.len; let band = 1; for (const [a, b, k] of F.bands || []) if (yM >= a && yM <= b) band = k;
+    const spray = 1 + 0.025 * Math.sin(yM * 2 * Math.PI / 1.9) + 0.02 * (fbm3(0, yM * 0.35, 7.1, 3) - 0.5);
+    for (let i = 0; i < W; i++) {
+      const th = (i + 0.5) / W * 2 * Math.PI, cx = Math.cos(th) * F.r, cz = Math.sin(th) * F.r; // on the tank's surface, metres: no seam
+      const mot = fbm3(cx * 1.6, yM * 1.6, cz * 1.6, 5), fine = n3(cx * 9, yM * 9, cz * 9), streak = fbm3(cx * 0.25, yM * 0.05, cz * 0.25, 3);
+      const k = band * spray * (0.86 + 0.24 * mot + 0.05 * fine) * (0.95 + 0.1 * streak), o = 3 * (j * W + i);
+      for (let c = 0; c < 3; c++) img[o + c] = Math.max(0, Math.min(255, Math.round(F.color[c] * k * (c === 0 ? 1 : 1 - 0.06 * (mot - 0.5)))));
+    }
+  }
+  const png = await sharp(img, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer();
+  const tex = doc.createTexture(F.part + '-foam').setImage(new Uint8Array(png)).setMimeType('image/png');
+  const P = [0, 0, 0];
+  for (const h of groups[F.part].listChildren()) for (const prim of h.getMesh().listPrimitives()) {
+    const m = prim.getMaterial(); if (!m || m.getName() !== F.material) continue;
+    const pos = prim.getAttribute('POSITION'), uv = new Float32Array(pos.getCount() * 2);
+    for (let i = 0; i < pos.getCount(); i++) { pos.getElement(i, P); uv[2 * i] = (Math.atan2(P[2], P[0]) / (2 * Math.PI) + 1) % 1; uv[2 * i + 1] = 1 - P[1] / F.len; }
+    prim.setAttribute('TEXCOORD_0', doc.createAccessor().setType('VEC2').setArray(uv));
+    m.setBaseColorTexture(tex).setBaseColorFactor([1, 1, 1, 1]).setMetallicFactor(0).setRoughnessFactor(F.rough ?? 0.85);
+  }
+}
+// Weather the colour maps of the materials named in G.materials: tint them (G.tint) and darken them a little in a mottle
+// (G.amount), as paint left out in the sun and salt looks next to a scan.
+async function grimeTextures(doc, G) {
+  for (const m of doc.getRoot().listMaterials()) {
+    if (!G.materials.includes(m.getName())) continue; const t = m.getBaseColorTexture(); if (!t) continue;
+    const { data, info } = await sharp(Buffer.from(t.getImage())).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    for (let j = 0; j < info.height; j++) for (let i = 0; i < info.width; i++) {
+      const u = i / info.width * 24, v = j / info.height * 24, k = 1 - G.amount * fbm3(u, v, 3.3, 5) - 0.03 * n3(u * 8, v * 8, 1.1), o = 3 * (j * info.width + i);
+      for (let c = 0; c < 3; c++) data[o + c] = Math.round(data[o + c] * G.tint[c] * k);
+    }
+    t.setImage(new Uint8Array(await sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png().toBuffer())).setMimeType('image/png');
+  }
 }
 // piecewise-linear table [[x, y] …], extended past its ends along its first and last pieces
 function pwl(tab, x) {
