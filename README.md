@@ -81,7 +81,7 @@
 Each flight is calculated from physics, not keyframed. The planner solves the mission when you press **Fly this mission**, inside a Web Worker. The renderer then plays the result back.
 
 - **Ephemerides.** Planet positions use JPL's approximate Keplerian elements (valid 1800–2050). The Moon uses a truncated Meeus/ELP2000 series. Body orientation uses the IAU WGCCRE rotation models. The frame is J2000 ecliptic.
-- **Ascent.** Each stage is integrated numerically: a gravity turn followed by closed-loop insertion guidance, with the vehicle turning at a finite rate when the guidance takes over. The vehicle data are real: thrust at sea level and in vacuum, Isp, dry mass and propellant. The atmosphere uses the US-1976 model, and drag is modelled for the stack.
+- **Ascent.** Each stage is integrated numerically. The stack flies a gravity turn through the dense atmosphere; after max-Q, closed-loop insertion guidance eases in as the air thins (dynamic pressure × angle of attack is capped), so the vehicle keeps a steady attitude when a stage drops away. The vehicle data are real: thrust at sea level and in vacuum, Isp, dry mass and propellant. The atmosphere uses the US-1976 model, and drag is modelled for the stack.
 - **Earth–Moon flights.** These are integrated with a Dormand–Prince 5(4) integrator in an Earth + Moon + Sun force field. Burns are finite and targeted with Newton iterations.
 - **Interplanetary flights.** These use patched conics. Departures are Lambert solutions and flybys use B-plane targeting. The planet-centred hyperbola and the heliocentric arc join at the sphere of influence.
 - **Space Shuttle flights.**
@@ -100,7 +100,7 @@ Each flight is calculated from physics, not keyframed. The planner solves the mi
 
 This is a storyboard and teaching tool, not mission-design software.
 
-- Trajectories are solved again from the mission inputs, so event times are close to the flown missions but not identical. For example, Apollo 11's touchdown comes out at about 103 h 36 m after liftoff, against 102 h 45 m in reality. The Shuttle landings come within about a minute of the real ones: STS-1, STS-31 and STS-135 each touch down roughly a minute late.
+- Trajectories are solved again from the mission inputs, so event times are close to the flown missions but not identical. For example, Apollo 11's touchdown comes out at about 103 h 37 m after liftoff, against 102 h 45 m in reality. The Shuttle landings come within a few minutes of the real ones: STS-1 about a minute late, STS-135 under two minutes late and STS-31 five and a half minutes early.
 - The International Space Station is placed where Atlantis meets it, at its real altitude and inclination. Its position along the orbit before the rendezvous is not the historical one.
 - After Perseverance's first drive, which matches the real one on 4 March 2021, the rover's daily drives are illustrative.
 - The concept missions follow published architectures and their stated assumptions.

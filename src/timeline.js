@@ -41,6 +41,8 @@ class SampleSeg {
     out.m = this.m[i] + (this.m[j] - this.m[i]) * s;
     out.T = this.T[i];
     out.dir = [this.dir[3 * i], this.dir[3 * i + 1], this.dir[3 * i + 2]];
+    { const d1 = [this.dir[3 * j], this.dir[3 * j + 1], this.dir[3 * j + 2]]; // the attitude turns smoothly between samples (where both have one)
+      if (vnorm(out.dir) > 0.5 && vnorm(d1) > 0.5 && vdot(out.dir, d1) > 0) out.dir = vunit(vlerp(out.dir, d1, s)); }
     out.D = vlerp([this.D[3 * i], this.D[3 * i + 1], this.D[3 * i + 2]], [this.D[3 * j], this.D[3 * j + 1], this.D[3 * j + 2]], s);
     out.extra = s < 0.5 ? this.extra[i] : this.extra[j];
     return out;

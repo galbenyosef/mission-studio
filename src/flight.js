@@ -92,7 +92,9 @@ function simulateAscent(opt) {
   const kick = (opt.kick ?? 2) * DEG, vert = opt.vert ?? 10, kickDur = 8;
   const samples = record ? [] : null, events = [];
   const ev = (name, desc, extra) => events.push({ t: t, name, desc, ...(extra || {}) });
-  let t = t0, phase = 'vertical', closedLoop = false, lastDir = vcopy(lf0.up), stageIdx = 0, prevDir = null;
+  let t = t0, phase = 'vertical', closedLoop = false, lastDir = vcopy(lf0.up), stageIdx = 0, prevDir = null, qPast = false, qOn = 0;
+  const qBlend = body === 'earth' && opt.qBlend !== false, QA = (opt.qAlpha ?? 100000) * DEG; // Pa·rad: dynamic pressure × angle of attack the guidance may use
+  const swingLog = []; let swing10 = 0, swingT = 0; // the most the steering turned within any 10 s after the pitch-over (deg), and when
   const maxTurn = (opt.maxRate ?? 6) * DEG * dt; // attitude control turns the vehicle at most this far per step
   let maxQ = 0, maxQt = t0, maxQlogged = false, maxG = 0, coastUntil = -Infinity, firstStaging = false;
   // ignite first stage(s)
@@ -103,20 +105,38 @@ function simulateAscent(opt) {
   let mdotNow = 0, thrustNow = 0, dragNow = [0, 0, 0], qNow = 0, machNow = 0, thrDir = lf0.up;
   let result = { ok: false };
   const g0 = G0;
+  // time to burn dvKms more with the stages still attached, in order — boosters burning alongside the core first
   function burnTimeFor(dvKms) {
     let dv = dvKms * 1000, m0 = stackMass(stack), tt = 0;
+    const bst = st.filter(s => s.attached && s.parallel && s.ignited && s.propLeft > 0), core0 = st.find(s => s.attached && !s.parallel && s.propLeft > 0);
+    let coreUsed = 0;
+    if (bst.length && core0) {
+      let F = 0, md = 0, tB = Infinity;
+      for (const b of bst) {
+        const ve = b.ispVac * g0, mdB = b._mdot > 0 ? b._mdot : b.thrustVac / ve; // the flow now (solid motors follow their thrust curve)
+        F += mdB * ve; md += mdB;
+        tB = Math.min(tB, b.propLeft / mdB, b.curve ? Math.max(1, b.curve[b.curve.length - 1][0] - (t - b.tIgn)) : Infinity);
+      }
+      const veC = core0.ispVac * g0, mdC = core0.thrustVac / veC * (core0._thr || 1);
+      F += mdC * veC; md += mdC;
+      const ve = F / md, m1 = Math.max(m0 - md * tB, 1), dvB = ve * Math.log(m0 / m1);
+      if (dv <= dvB) return (m0 - m0 * Math.exp(-dv / ve)) / md;
+      tt += tB; dv -= dvB; m0 = m1; coreUsed = mdC * tB;
+      for (const b of bst) m0 -= b.dry + Math.max(0, b.propLeft - (b._mdot > 0 ? b._mdot : b.thrustVac / (b.ispVac * g0)) * tB); // they drop away
+    }
     for (const s of st) {
       if (!s.attached || s.parallel) continue;
-      if (s.propLeft <= 0) continue;
+      const pl = s.propLeft - (s === core0 ? coreUsed : 0);
+      if (pl <= 0) continue;
       const ve = s.ispVac * g0, mdot = s.thrustVac / ve;
-      const dvAv = ve * Math.log(m0 / (m0 - s.propLeft));
+      const dvAv = ve * Math.log(m0 / (m0 - pl));
       if (opt.gTgo && s.maxG) { // engines throttled to hold the g limit once the stack is light enough (Shuttle: 3 g)
         const aMax = s.maxG * g0, mLim = s.thrustVac / aMax;
-        if (mLim < m0) { const dv1 = ve * Math.log(m0 / Math.max(mLim, m0 - s.propLeft)); if (dv <= dv1) { tt += (m0 - m0 * Math.exp(-dv / ve)) / mdot; return tt; }
-          if (mLim > m0 - s.propLeft) { tt += (m0 - mLim) / mdot; const dv2 = Math.min(dv - dv1, ve * Math.log(mLim / (m0 - s.propLeft))); tt += dv2 / aMax; if (dv - dv1 <= dv2 + 1e-9) return tt; dv -= dv1 + dv2; m0 -= s.propLeft + s.dry; continue; } }
+        if (mLim < m0) { const dv1 = ve * Math.log(m0 / Math.max(mLim, m0 - pl)); if (dv <= dv1) { tt += (m0 - m0 * Math.exp(-dv / ve)) / mdot; return tt; }
+          if (mLim > m0 - pl) { tt += (m0 - mLim) / mdot; const dv2 = Math.min(dv - dv1, ve * Math.log(mLim / (m0 - pl))); tt += dv2 / aMax; if (dv - dv1 <= dv2 + 1e-9) return tt; dv -= dv1 + dv2; m0 -= pl + s.dry; continue; } }
       }
       if (dv <= dvAv) { tt += (m0 - m0 * Math.exp(-dv / ve)) / mdot; return tt; }
-      tt += s.propLeft / mdot; dv -= dvAv; m0 -= s.propLeft + s.dry;
+      tt += pl / mdot; dv -= dvAv; m0 -= pl + s.dry;
     }
     return tt + 1e4;
   }
@@ -139,7 +159,7 @@ function simulateAscent(opt) {
     // --- staging
     for (let i = 0; i < st.length; i++) {
       const s = st[i];
-      if (s.attached && s.ignited && s.propLeft <= 0) {
+      if (s.attached && s.ignited && (s.propLeft <= 0 || (s.curve && t - s.tIgn >= s.curve[s.curve.length - 1][0]))) { // spent, or its thrust has tailed off (solid motors)
         s.attached = false; s.tSep = t;
         const kind = s.parallel ? 'Booster separation' : (i === st.length - 1 ? 'Upper stage depletion' : `${s.id} cutoff & separation`);
         ev(kind, s.parallel ? `${s.name} burn out and separate. The core continues alone.` : `${s.name} exhausted its ${Math.round(s.propMass / 1000).toLocaleString()} t of propellant and separates.`, { kind: 'staging', stage: s.id });
@@ -195,53 +215,77 @@ function simulateAscent(opt) {
     // --- guidance
     let dir;
     const tf = t - t0;
-    if (!closedLoop) {
+    { // open loop (and, from Earth, the path the guidance is phased in from)
+      const az = vadd(vscale(lf.north, Math.cos(azR)), vscale(lf.east, Math.sin(azR))); // heading held at the launch azimuth (yaw steering)
       if (tf < vert) { dir = lf.up; phase = 'vertical'; }
       else if (tf < vert + kickDur || vreln < 0.05) {
         const k = kick * clamp((tf - vert) / kickDur, 0, 1);
-        const az = vadd(vscale(lf.north, Math.cos(azR)), vscale(lf.east, Math.sin(azR)));
         dir = vunit(vadd(vscale(lf.up, Math.cos(k)), vscale(az, Math.sin(k)))); phase = 'pitchover';
       } else {
-        // gravity turn: pitch follows the air-relative flight-path angle, heading held at the launch azimuth (yaw steering)
+        // gravity turn: pitch follows the air-relative flight-path angle
         const gam = Math.asin(clamp(vdot(vunit(vrel), lf.up), -1, 1));
-        const az = vadd(vscale(lf.north, Math.cos(azR)), vscale(lf.east, Math.sin(azR)));
         dir = vunit(vadd(vscale(lf.up, Math.sin(gam)), vscale(az, Math.cos(gam)))); phase = 'gravity turn';
       }
       if (opt.closedLoopAt != null && tf >= opt.closedLoopAt) closedLoop = true;
     }
-    if (closedLoop) {
-      phase = 'closed-loop guidance';
+    const dirOL = dir;
+    // closed-loop insertion guidance: radial and out-of-plane acceleration profiles that reach the cutoff state at time-to-go
+    const clCommand = () => {
       const up = vunit(r);
       let ed = vcross(nT, up); ed = vunit(vsub(ed, vscale(up, vdot(ed, up))));
       const vr = vdot(v, up), vd = vdot(v, ed), vn = vdot(v, nT), npos = vdot(r, nT);
       const dvNeed = Math.sqrt((vtCut - vd) ** 2 + (vrCut - vr) ** 2 + vn * vn);
-      let tgo = Math.max(1, burnTimeFor(dvNeed));
+      const tgo = Math.max(1, burnTimeFor(dvNeed));
       const aTh = m > 0 ? Ttot / m / 1000 : 0; // km/s^2
-      if (tgo > 6 && aTh > 0) {
-        const geff = mu / (rn * rn) - (vd * vd + vn * vn) / rn;
-        const tg = Math.max(tgo, 8);
-        let ar = 6 * (rCut - rn - vr * tg) / (tg * tg) - 2 * (vrCut - vr) / tg;
-        if (opt.target.hCut != null && tgo < 45) { // direct insertion: in the last seconds steer only the climb rate, toward the one the target orbit has at this radius
-          const vtr = hAngT / rn, vrNow = Math.sqrt(Math.max(0, 2 * (epsT + mu / rn) - vtr * vtr));
-          ar = 2 * (vrNow - vr) / Math.max(tgo, 4);
-        }
-        ar = ar + geff;
-        let an = 6 * (-npos - vn * tg) / (tg * tg) + 2 * vn / tg;
-        ar = clamp(ar, -0.7 * aTh, 0.95 * aTh);
-        an = clamp(an, -0.3 * aTh, 0.3 * aTh);
-        const ad = Math.sqrt(Math.max(0, aTh * aTh - ar * ar - an * an));
-        dir = vunit(vadd(vadd(vscale(up, ar), vscale(nT, an)), vscale(ed, ad)));
+      if (!(tgo > 6 && aTh > 0)) return null;
+      const geff = mu / (rn * rn) - (vd * vd + vn * vn) / rn;
+      const tg = Math.max(tgo, 8);
+      let ar = 6 * (rCut - rn - vr * tg) / (tg * tg) - 2 * (vrCut - vr) / tg;
+      if (opt.target.hCut != null && tgo < 60) { // direct insertion: over the last minute steer more and more only the climb rate, toward the one the target orbit has at this radius
+        const vtr = hAngT / rn, vrNow = Math.sqrt(Math.max(0, 2 * (epsT + mu / rn) - vtr * vtr)), f = smoothstep((60 - tgo) / 30);
+        ar = ar * (1 - f) + f * 2 * (vrNow - vr) / Math.max(tgo, 4);
+      }
+      ar = ar + geff;
+      let an = 6 * (-npos - vn * tg) / (tg * tg) + 2 * vn / tg;
+      // the attitude splits the thrust between the channels as for the average acceleration still to come (the Δv left over
+      // the time left), so it carries straight through staging instead of jumping with the thrust of the stage now burning
+      const aRef = clamp(dvNeed / tgo, 0.25 * aTh, 4 * aTh);
+      ar = clamp(ar, -0.7 * aRef, 0.95 * aRef);
+      an = clamp(an, -0.3 * aRef, 0.3 * aRef);
+      const ad = Math.sqrt(Math.max(0, aRef * aRef - ar * ar - an * an));
+      return vunit(vadd(vadd(vscale(up, ar), vscale(nT, an)), vscale(ed, ad)));
+    };
+    // From Earth the guidance steers from the end of the pitch-over, held within the angle of attack the air allows: none
+    // before max-Q (the stack flies its gravity turn through the dense atmosphere), then widening from zero as the air
+    // thins (q·α ≤ QA·(1 − q/q₀), q₀ the pressure when it starts, 90% of max-Q, so the allowance opens without a step).
+    // The stack eases onto the guided path while it climbs, and nothing switches when a stage drops away — handing over
+    // at staging made it swing tens of degrees. Elsewhere the guidance takes over at the set time or at the first staging.
+    if (qBlend && tf >= vert + kickDur) {
+      if (!qPast && maxQ > 5000 && qNowPre < 0.9 * maxQ) { qPast = true; qOn = qNowPre; }
+      const cmd = clCommand(), aMax = qPast ? clamp(QA / Math.max(qNowPre, 1) - QA / qOn, 0, Math.PI) : 0;
+      if (cmd) {
+        const th = Math.acos(clamp(vdot(dirOL, cmd), -1, 1));
+        if (th <= aMax) dir = cmd;
+        else if (aMax > 0 && th < Math.PI - 1e-3) { const sn = Math.sin(th); dir = vunit(vadd(vscale(dirOL, Math.sin(th - aMax) / sn), vscale(cmd, Math.sin(aMax) / sn))); }
+        if (aMax > 10 * DEG) phase = 'closed-loop guidance';
         lastDir = dir;
-      } else dir = lastDir;
+      } else if (qPast) { dir = lastDir; phase = 'closed-loop guidance'; }
+      if (opt.debug) opt.debug({ t: tf, q: qNowPre, aMax: aMax * RAD, dirOL, cmd, lf }); // diagnostics
+    } else if (closedLoop) {
+      phase = 'closed-loop guidance';
+      const cmd = clCommand(); dir = cmd || lastDir; lastDir = dir;
     } else lastDir = dir || lastDir;
-    // the vehicle swings round at a finite rate: a new steering command (closed-loop guidance taking over after staging)
-    // is reached over several seconds, not in one step
+    // the vehicle swings round at a finite rate: any jump left in the steering command is flown over several seconds
     if (prevDir && dir && tf > vert) {
       const th = Math.acos(clamp(vdot(prevDir, dir), -1, 1));
       if (th > maxTurn && th < Math.PI - 1e-3) { const sn = Math.sin(th); dir = vunit(vadd(vscale(prevDir, Math.sin(th - maxTurn) / sn), vscale(dir, Math.sin(maxTurn) / sn))); lastDir = dir; }
     }
     if (dir) prevDir = dir;
     thrDir = dir;
+    if (dir && tf > vert + kickDur && Ttot > 0 && (!swingLog.length || t - swingLog[swingLog.length - 1][0] >= 1)) {
+      swingLog.push([t, vcopy(dir)]); while (swingLog.length > 1 && t - swingLog[0][0] > 10) swingLog.shift();
+      const sw = Math.acos(clamp(vdot(swingLog[0][1], dir), -1, 1)) * RAD; if (sw > swing10) { swing10 = sw; swingT = t - t0; }
+    }
     // --- record
     if (q > maxQ) { maxQ = q; maxQt = t; } else if (!maxQlogged && maxQ > 1000 && q < 0.9 * maxQ && body === 'earth') { maxQlogged = true; events.push({ t: maxQt, name: 'Max-Q', desc: `Maximum dynamic pressure ≈ ${(maxQ / 1000).toFixed(1)} kPa — peak aerodynamic stress on the vehicle.`, kind: 'maxq' }); }
     const aProper = (Ttot + Dmag) / m;
@@ -282,7 +326,7 @@ function simulateAscent(opt) {
   const rn = vnorm(r);
   const el = rv2coe(r, v, mu);
   const upper = st.find(s => s.attached && !s.parallel) || null;
-  return { ...result, t, r, v, m: stackMass(stack), samples, events, el, hpAch: el.rp - surfaceRadius(body), haAch: el.ra - surfaceRadius(body), upper, upperProp: upper ? upper.propLeft : 0, maxG: maxG / g0, maxQ, azI: azI * RAD, azR: azR * RAD, stack };
+  return { ...result, t, r, v, m: stackMass(stack), samples, events, el, hpAch: el.rp - surfaceRadius(body), haAch: el.ra - surfaceRadius(body), upper, upperProp: upper ? upper.propLeft : 0, maxG: maxG / g0, maxQ, azI: azI * RAD, azR: azR * RAD, stack, swing10, swingT };
 }
 // optimise pitch-kick for maximum remaining propellant
 function optimizeAscent(base) {
@@ -291,7 +335,7 @@ function optimizeAscent(base) {
     return simulateAscent({ ...base, stack, kick: k, record: rec, dt: rec ? (base.dt || 0.2) : 0.4 });
   };
   const qLim = base.qLimit || 36000;
-  const score = res => (res.ok ? res.upperProp + 1e5 : -1e6 + (res.el && isFinite(res.el.rp) ? res.el.rp : 0)) - Math.max(0, res.maxQ - qLim) * 3;
+  const score = res => (res.ok ? res.upperProp + 1e5 : -1e6 + (res.el && isFinite(res.el.rp) ? res.el.rp : 0)) - Math.max(0, res.maxQ - qLim) * 3 - (base.swingW ?? 30) * Math.max(0, (res.swing10 || 0) - 10) ** 2; // fuel first, but steering that turns more than 10° within 10 s is charged 30 kg per square degree over
   let a = 0.2, b = base.kickMax || 14, gr = (Math.sqrt(5) - 1) / 2;
   // coarse scan first
   let best = { k: base.kickGuess || 2, s: -Infinity };

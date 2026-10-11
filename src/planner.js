@@ -70,19 +70,25 @@ function newtonSolve(F, x0, opt = {}) {
   let x = x0.slice(), Fx = F(x), nf = Math.hypot(...Fx), it = 0;
   const hist = [nf];
   for (; it < maxIt && nf > tol; it++) {
-    const m = Fx.length, J = Array.from({ length: m }, () => new Array(n).fill(0));
-    for (let j = 0; j < n; j++) { const xp = x.slice(); xp[j] += h; const Fp = F(xp); for (let i = 0; i < m; i++) J[i][j] = (Fp[i] - Fx[i]) / h; }
-    // dx = -J^T (J J^T + λI)^-1 F
-    const JJt = Array.from({ length: m }, (_, i) => Array.from({ length: m }, (_, k) => J[i].reduce((s, a, j) => s + a * J[k][j], 0) + (i === k ? (opt.lambda || 0) : 0)));
-    const y = solveLin(JJt, Fx.map(v => -v)); if (!y) break;
-    let dx = new Array(n).fill(0); for (let j = 0; j < n; j++) for (let i = 0; i < m; i++) dx[j] += J[i][j] * y[i];
-    const maxStep = opt.maxStep || Infinity, dn = Math.hypot(...dx);
-    if (dn > maxStep) dx = dx.map(v => v * maxStep / dn);
-    let lam = 1, accepted = false;
-    for (let ls = 0; ls < 8; ls++) {
-      const xn = x.map((v, j) => v + lam * dx[j]); const Fn = F(xn); const nn = Math.hypot(...Fn);
-      if (isFinite(nn) && nn < nf) { x = xn; Fx = Fn; nf = nn; accepted = true; break; }
-      lam *= 0.5;
+    let accepted = false;
+    // A finite-difference step small enough to be lost in the integrators' noise gives a Jacobian that points nowhere
+    // useful (the outcome can then differ between JavaScript engines): when no step along it helps, retry with a larger one.
+    for (const hh of [h, h * 30]) {
+      const m = Fx.length, J = Array.from({ length: m }, () => new Array(n).fill(0));
+      for (let j = 0; j < n; j++) { const xp = x.slice(); xp[j] += hh; const Fp = F(xp); for (let i = 0; i < m; i++) J[i][j] = (Fp[i] - Fx[i]) / hh; }
+      // dx = -J^T (J J^T + λI)^-1 F
+      const JJt = Array.from({ length: m }, (_, i) => Array.from({ length: m }, (_, k) => J[i].reduce((s, a, j) => s + a * J[k][j], 0) + (i === k ? (opt.lambda || 0) : 0)));
+      const y = solveLin(JJt, Fx.map(v => -v)); if (!y) continue;
+      let dx = new Array(n).fill(0); for (let j = 0; j < n; j++) for (let i = 0; i < m; i++) dx[j] += J[i][j] * y[i];
+      const maxStep = opt.maxStep || Infinity, dn = Math.hypot(...dx);
+      if (dn > maxStep) dx = dx.map(v => v * maxStep / dn);
+      let lam = 1;
+      for (let ls = 0; ls < 8; ls++) {
+        const xn = x.map((v, j) => v + lam * dx[j]); const Fn = F(xn); const nn = Math.hypot(...Fn);
+        if (isFinite(nn) && nn < nf) { x = xn; Fx = Fn; nf = nn; accepted = true; break; }
+        lam *= 0.5;
+      }
+      if (accepted) break;
     }
     hist.push(nf);
     if (!accepted) break;
@@ -199,7 +205,7 @@ function launchPhase(M, cfg, L, scMass, normal, opts = {}) {
     }
   }
   M.phase(t0, asc.t, 'Launch & ascent', '#ff9f43');
-  M.summary.ascent = { maxG: asc.maxG, maxQ: asc.maxQ, tIns: asc.t - t0, hp: asc.hpAch, ha: asc.haAch, kick: asc.kick, az: asc.azI, upperProp: asc.upperProp, upper: asc.upper ? asc.upper.id : null };
+  M.summary.ascent = { maxG: asc.maxG, maxQ: asc.maxQ, tIns: asc.t - t0, hp: asc.hpAch, ha: asc.haAch, kick: asc.kick, az: asc.azI, upperProp: asc.upperProp, upper: asc.upper ? asc.upper.id : null, swing10: asc.swing10, swingT: asc.swingT };
   return { ok: asc.ok, asc, stFrom, fairing, les, boosters };
 }
 function budgetRow(M, b) { M.burn(b); }

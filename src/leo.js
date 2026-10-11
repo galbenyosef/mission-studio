@@ -196,12 +196,21 @@ function issRendezvous(o) {
     return Math.atan2(vdot(vcross(vunit(r), kp), h), vdot(vunit(r), kp)); };
   let ha1 = c.nc1Ha ?? 270;
   if (cfg.landing && !c.nc1Ha) {
-    const lo = 175, hi = 375, e0 = phaseErr(270), e1 = phaseErr(300), k = (e1 - e0) / 30;
-    const cands = [-1, 0, 1].map(m => 270 + (2 * Math.PI * m - e0) / k).filter(x => x >= lo && x <= hi).sort((a, b) => Math.abs(a - 270) - Math.abs(b - 270));
-    if (cands.length) { let x = cands[0], xp = 270, ep = e0 - 2 * Math.PI * Math.round((e0 - 0) / (2 * Math.PI)); const m = Math.round((e0 + k * (x - 270)) / (2 * Math.PI));
-      for (let it = 0; it < 6; it++) { const e = phaseErr(x) - 2 * Math.PI * m; if (Math.abs(e) < 0.004) break; const sl = Math.abs(x - xp) > 1e-6 ? (e - ep) / (x - xp) : k; xp = x; ep = e; x = clamp(x - e / sl, lo, hi); }
-      ha1 = x; }
-    else M.notes.push('The phasing orbit could not be adjusted to match the historical landing time.');
+    // The station takes the altitude the orbiter arrives at, and over the days to the landing a few hundred metres of
+    // altitude add up to a large shift along the orbit, so the error swings through whole turns across the range of
+    // apogees. Scan it, then refine the zero crossing nearest the nominal apogee (Illinois-modified false position).
+    const lo = 175, hi = 375, step = 5, wrap = e => e - 2 * Math.PI * Math.round(e / (2 * Math.PI));
+    const xs = [], es = []; for (let x = lo; x <= hi + 1e-9; x += step) { xs.push(x); es.push(wrap(phaseErr(x))); }
+    const brackets = []; for (let i = 0; i + 1 < xs.length; i++) if (es[i] * es[i + 1] <= 0 && Math.abs(es[i] - es[i + 1]) < Math.PI) brackets.push(i);
+    brackets.sort((i, j) => Math.abs(xs[i] + step / 2 - 270) - Math.abs(xs[j] + step / 2 - 270));
+    if (brackets.length) {
+      const i = brackets[0]; let a = xs[i], b = xs[i + 1], ea = es[i], eb = es[i + 1], x = a, side = 0;
+      for (let it = 0; it < 16; it++) {
+        x = eb !== ea ? b - eb * (b - a) / (eb - ea) : (a + b) / 2; const e = wrap(phaseErr(x)); if (Math.abs(e) < 0.002) break;
+        if ((e < 0) === (eb < 0)) { b = x; eb = e; if (side === -1) ea /= 2; side = -1; } else { a = x; ea = e; if (side === 1) eb /= 2; side = 1; }
+      }
+      ha1 = x;
+    } else M.notes.push('The phasing orbit could not be adjusted to match the historical landing time.');
   }
   // NC-1 raises the apogee early on; NC-2/NC-3 lift the orbit to ~14 km under the station before terminal initiation
   o.omsBurn(tNC1, (r, v) => o.dvToApsis(r, v, R_E + ha1), 'NC-1 — phasing burn', b => `The first of the phasing burns that set how fast the orbiter catches up with the station, ${Math.round(c.hp)} km up and thousands of kilometres ahead: the lower the orbit, the faster it goes around. Δv ${Math.round(b.dv)} m/s; orbit ${Math.round(b.hp)} × ${Math.round(b.ha)} km.`, 'in orbit — catching up');
