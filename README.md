@@ -88,7 +88,7 @@ Each flight is calculated from physics, not keyframed. The planner solves the mi
   - Orbits include Earth's oblateness (J2), which swings a low orbit's plane several degrees a day.
   - The ascent follows the main engines' throttle schedule and the 3 g limit, and cuts off on the flight's real MECO orbit; the OMS burns are finite.
   - For the ISS, the phasing burns are solved so that docking and landing fall at the historical times.
-  - Entry guidance steers by bank angle, with roll reversals, toward the runway. The approach then flies the heading alignment cone, the steep outer glideslope and the flare onto the runway.
+  - Entry guidance steers by bank angle, with roll reversals, toward the runway. The approach then flies the heading alignment cone, the steep outer glideslope and the flare onto the runway. After the main wheels touch, the nose comes down until the nose wheels touch: on its gear the orbiter stands 4.4° nose down, as the scan of Discovery shows.
 - **Landing.**
   - Mars entry has a parachute and a sky crane.
   - Capsules fly a lifting entry.
@@ -135,7 +135,7 @@ src/      flight engine (plain JavaScript; also runs in a Web Worker)
 app/      renderer and UI (ES module), markup and styles
 assets/   planet textures, the star catalogue and the detailed vehicle models
 vendor/   three.js r160 with its glTF loader and the meshopt decoder (MIT)
-tools/models/  builds the detailed models in assets/ from NASA 3D Resources (see its README)
+tools/models/  builds the detailed models in assets/ from NASA 3D Resources and the Smithsonian's scans (see its README)
 test/     Node tests for the engine
 media/    screenshots for this README
 ```
@@ -144,6 +144,8 @@ media/    screenshots for this README
 
 - **three.js** r160 ([MIT](vendor/three.LICENSE)), included in `vendor/` with its glTF loader. The meshopt decoder in `vendor/` is from [meshoptimizer](https://github.com/zeux/meshoptimizer) (MIT).
 - **Apollo lunar module and Mars 2020 Perseverance:** 3D models from [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), prepared by `tools/models`. The lunar module is split into its ascent and descent stages. Perseverance's six wheels and its mast are split off so the wheels turn and the mast stands up on the surface. Both are simplified and compressed.
+- **Space Shuttle orbiter:** the Smithsonian's [3D scan of Discovery](https://sketchfab.com/3d-models/orbiter-space-shuttle-ov-103-discovery-5f7176a2ae284d6b99fc970c9d265c04) (OV-103) at the National Air and Space Museum's Udvar-Hazy Center, released under [CC0](https://creativecommons.org/publicdomain/zero/1.0/). `tools/models` cuts it into the body, the two payload bay doors and the landing gear, so the doors open in orbit and the gear comes down for landing. The payload bay's lining, the robot arm and the payloads are drawn in code.
+- **Apollo command and service modules, launch vehicles:** drawn in code from published dimensions.
 - **Earth day, night and cloud maps:** [Solar System Scope](https://www.solarsystemscope.com/textures/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). They are taken from the three.js examples, which resized and merged them.
 - **Moon map:** `moon_1024.jpg` from the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets).
 - **Mars, Venus, Jupiter and Saturn maps:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), resized.

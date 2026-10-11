@@ -5,12 +5,21 @@
 // fuselage (the base heat shield), Z = 0 at the payload bay centreline (structural plane Zo 400).
 // Dimensions follow the orbiter structure: mid fuselage 18.4 m long, 5.2 m wide; aft fuselage 6.7 m wide and
 // 6.1 m high; OMS pods 6.6 m long; wing root chord 18 m; vertical tail 8 m tall, swept 45°.
+// The orbiter is drawn with the Smithsonian's 3D scan of Discovery (assets/orbiter.glb, built by tools/models: the body,
+// the two payload bay doors and the landing gear apart). The built-in model below stands in while it loads; the landing
+// gear, the engine nozzles and the payload bay follow the scan's measurements in both.
 // ============================================================================
 const SH_COL = { white: '#efede7', black: '#141517', rcc: '#3c3d41', grey: '#a3a8ae', bay: '#d4d7da', rad: '#e6ebf0', gold: '#c8a24a', base: '#2c2e31' };
-const SH_GEAR_H = 5.6; // m: fuselage reference plane (Z = 0) above the wheel bottoms with the gear down (the flight planner's gear height)
+// Where the tyres touch the ground with the gear down, [Y, Z] (from the scan). The nose wheels touch 1.55 m higher than the
+// main wheels, so the orbiter stands 4.4° nose down on its gear.
+const SH_MAIN_CONTACT = [8.8, -6.03], SH_NOSE_CONTACT = [29.0, -4.48], SH_MAIN_TRACK = 3.72; // main wheels ±3.72 m out
+const SH_GEAR_H = -SH_MAIN_CONTACT[1]; // m: the reference plane (Z = 0) above the main wheels' contact, wings level (the flight planner's gear height)
+const SH_STANCE = -Math.atan2(SH_NOSE_CONTACT[1] - SH_MAIN_CONTACT[1], SH_NOSE_CONTACT[0] - SH_MAIN_CONTACT[0]); // rad: the attitude on the ground, −4.4°
+// engine nozzle exits (from the scan): [x, exit Y, z]; three RS-25s (2.29 m exits) and the two OMS engines
+const SH_SSME = [[0.02, -1.81, 1.96], [-1.56, -2.49, -0.95], [1.58, -2.47, -1.01]], SH_OMSE = [[-2.97, -1.0, 2.28], [2.97, -1.0, 2.28]];
 const SH_BAY = [5.6, 23.9]; // payload bay doors, Y range
 const SH_HINGE = 24 * DEG; // door hinge on the fuselage section (superellipse angle)
-const SH_OMS_X = 1.75; // OMS pod centrelines
+const SH_OMS_X = 2.6; // OMS pod centrelines
 const SH_E = 2 / 2.6, SH_EB = 2 / 4.5; // superellipse exponents: rounded-square top, flat belly
 function vcMat(extra = {}) { return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.66, metalness: 0.03, ...extra }); }
 // colour every vertex of a geometry from its position and normal
@@ -85,7 +94,7 @@ function shuttleOmsPod(side) { // OMS/RCS pod: 6.6 m long, 2.6 m wide in front, 
   paintGeo(g, (x, y, z, nx, ny, nz) => (nz > 0.15 && y > -0.4 && y < 5.4) ? SH_COL.white : (y <= -0.6 ? SH_COL.base : SH_COL.grey));
   const grp = new THREE.Group(); grp.add(new THREE.Mesh(g, vcMat()));
   grp.add(new THREE.Mesh(capGeo([-0.75, 0.0, 1.45, 1.05, 1.0], 32, true), mat(SH_COL.base, 'dark'))); // aft end around the OMS engine
-  grp.position.set(side * SH_OMS_X, 0, 3.0); return grp;
+  grp.position.set(side * SH_OMS_X, 0, 2.6); return grp;
 }
 // one payload bay door, built at its hinge so it can swing open (175.5° when fully open); white outside, radiators inside
 function shuttleBayDoor(side, open) {
@@ -99,34 +108,55 @@ function shuttleBayDoor(side, open) {
   grp.position.set(side * hx, 0, hz); if (open) grp.rotation.y = -side * 175.5 * DEG;
   return grp;
 }
-function shuttleBayInterior() {
+// The payload bay's geometry: the door hinges (x, z) on the sills, the side walls, the floor and, for the scan, the arch of
+// the fuselage's top (an ellipse over the walls) that the end bulkheads fill when the doors are open
+const SH_BAY_BUILTIN = (() => { const H = shRing(SH_STATIONS[2], SH_HINGE); return { hx: H[0], hz: H[2], wall: H[0] - 0.12, floor: -2.25 }; })();
+const SH_BAY_SCAN = { hx: 2.70, hz: 0.60, wall: 2.47, floor: -2.30, arch: [0.95, 1.40] }; // the scan's skin is 2.67–2.72 m out; arch: centre z, height
+function shuttleBayInterior(B = SH_BAY_BUILTIN) {
   const g = new THREE.Group(), m = mat(SH_COL.bay, 'paint', { side: THREE.DoubleSide }), L = SH_BAY[1] - SH_BAY[0], yc = (SH_BAY[0] + SH_BAY[1]) / 2;
-  const H = shRing(SH_STATIONS[2], SH_HINGE);
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(4.7, L, 0.1), m); floor.position.set(0, yc, -2.25); g.add(floor);
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(2 * B.wall + 0.1, L, 0.1), m); floor.position.set(0, yc, B.floor); g.add(floor);
   for (const s of [-1, 1]) {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.1, L, H[2] + 2.25), m); wall.position.set(s * (H[0] - 0.08), yc, (H[2] - 2.25) / 2); g.add(wall);
-    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.35, L, 0.18), mat('#b8bdc2', 'metal')); sill.position.set(s * (H[0] - 0.1), yc, H[2] - 0.05); g.add(sill);
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.1, L, B.hz - B.floor), m); wall.position.set(s * B.wall, yc, (B.hz + B.floor) / 2); g.add(wall);
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.2, L, 0.16), mat('#b8bdc2', 'metal')); sill.position.set(s * (B.wall + 0.05), yc, B.hz - 0.04); g.add(sill); // the sill longeron, inside the skin
   }
-  const bulk = (y, col, kind) => { const st = SH_STATIONS[2]; const b = new THREE.Mesh(capGeo([0, st[1], st[2] * 0.985, st[3] * 0.985, st[4] * 0.985], 48, false), mat(col, kind, { side: THREE.DoubleSide })); b.position.y = y; g.add(b); };
+  const bulk = (y, col, kind) => {
+    let geo;
+    if (B.arch) { // the walls, then the arch of the fuselage's top
+      const [zc, b] = B.arch, sh = new THREE.Shape(); sh.moveTo(-B.wall, B.floor); sh.lineTo(B.wall, B.floor); sh.lineTo(B.wall, zc);
+      for (let k = 1; k <= 24; k++) { const t = k / 24 * Math.PI; sh.lineTo(B.wall * Math.cos(t), zc + b * Math.sin(t)); } sh.lineTo(-B.wall, B.floor);
+      geo = new THREE.ShapeGeometry(sh); geo.rotateX(Math.PI / 2);
+    } else { const st = SH_STATIONS[2]; geo = capGeo([0, st[1], st[2] * 0.985, st[3] * 0.985, st[4] * 0.985], 48, false); }
+    const b = new THREE.Mesh(geo, mat(col, kind, { side: THREE.DoubleSide })); b.position.y = y; g.add(b);
+  };
   bulk(SH_BAY[0] + 0.06, SH_COL.gold, 'gold'); bulk(SH_BAY[1] - 0.06, '#dfe2e5', 'paint');
   return g;
 }
-function shuttleMainEngines() { // three RS-25s in a triangle, nozzles pointing aft (−Y)
-  const g = new THREE.Group(), pos = [[0, 1.75], [-1.35, -0.6], [1.35, -0.6]], len = 3.1;
-  for (const [x, z] of pos) { const b = bell(len, 1.15, mat('#4d5055', 'metal', { side: THREE.DoubleSide })); b.position.set(x, 0.25 - len, z); g.add(b); }
-  return { g, pos, exitY: 0.25 - len };
+function shuttleMainEngines() { // three RS-25s in a triangle, nozzles pointing aft (−Y), throats just inside the base
+  const g = new THREE.Group();
+  for (const [x, ey, z] of SH_SSME) { const len = 0.3 - ey, b = bell(len, 1.145, mat('#4d5055', 'metal', { side: THREE.DoubleSide })); b.position.set(x, ey, z); g.add(b); }
+  return g;
 }
-function shuttleGear(down) {
+function shuttleGear(down) { // two-wheel main gears (1.13 m tyres) and the nose gear (0.81 m), tyres touching at the scan's contact points
   const g = new THREE.Group(); if (!down) return g;
   const strutM = mat('#b9bec4', 'metal'), tyre = mat('#1a1a1a', 'dark');
   const wheel = (r, w) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 22), tyre); c.rotation.z = Math.PI / 2; return c; };
   const strut = (x, y, z0, z1, r) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, z0 - z1, 10), strutM); c.rotation.x = Math.PI / 2; c.position.set(x, y, (z0 + z1) / 2); return c; };
+  const [ym, zm] = SH_MAIN_CONTACT, [yn, zn] = SH_NOSE_CONTACT, rw = 0.565, rn = 0.405;
   for (const s of [-1, 1]) {
-    const x = s * 3.45, y = 7.0, rw = 0.565; g.add(strut(x, y, -2.55, -SH_GEAR_H + rw, 0.17));
-    for (const dx of [-0.38, 0.38]) { const w = wheel(rw, 0.4); w.position.set(x + dx, y, -SH_GEAR_H + rw); g.add(w); }
+    const x = s * SH_MAIN_TRACK; g.add(strut(x, ym, -3.5, zm + rw, 0.17));
+    for (const dx of [-0.4, 0.4]) { const w = wheel(rw, 0.4); w.position.set(x + dx, ym, zm + rw); g.add(w); }
   }
-  const rn = 0.4; g.add(strut(0, 29.0, -2.2, -SH_GEAR_H + rn, 0.13));
-  for (const dx of [-0.26, 0.26]) { const w = wheel(rn, 0.3); w.position.set(dx, 29.0, -SH_GEAR_H + rn); g.add(w); }
+  g.add(strut(0, yn, -3.1, zn + rn, 0.13));
+  for (const dx of [-0.26, 0.26]) { const w = wheel(rn, 0.3); w.position.set(dx, yn, zn + rn); g.add(w); }
+  return g;
+}
+// The scan's wheel wells with their doors closed: plates on the belly's tiles (the scan has the doors open, hanging beside
+// the gear). Corners [x, y, z]: the main wells under the wing roots and the nose well.
+function shuttleWellCovers() {
+  const g = new THREE.Group(), m = mat('#17181a', 'tile', { side: THREE.DoubleSide });
+  const quad = c => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(c.flat(), 3)); geo.setIndex([0, 1, 2, 0, 2, 3]); geo.computeVertexNormals(); return new THREE.Mesh(geo, m); };
+  for (const s of [-1, 1]) g.add(quad([[s * 2.42, 7.8, -3.57], [s * 4.68, 7.8, -3.33], [s * 4.68, 12.6, -3.11], [s * 2.42, 12.6, -3.44]]));
+  g.add(quad([[-0.82, 28.2, -3.2], [0.82, 28.2, -3.2], [0.82, 31.3, -3.18], [-0.82, 31.3, -3.18]]));
   return g;
 }
 function shuttleChute() { // 40-ft (12 m) ring-sail drag chute trailing behind the tail on a long riser
@@ -139,11 +169,10 @@ function shuttleChute() { // 40-ft (12 m) ring-sail drag chute trailing behind t
   return g;
 }
 // robot arm (Canadarm) on the port sill: shoulder near the front of the bay; two booms reaching a wrist point
-function shuttleRMS(pose) {
+function shuttleRMS(pose, B = SH_BAY_BUILTIN) {
   const g = new THREE.Group(), m = mat('#ecebe5', 'paint'), jm = mat('#9aa0a6', 'metal');
-  const H = shRing(SH_STATIONS[2], SH_HINGE);
-  const S = new THREE.Vector3(-H[0] - 0.05, 22.9, H[2] + 0.45);
-  const W = pose === 'raised' ? new THREE.Vector3(0.4, 14.5, 11.6) : pose === 'grapple' ? new THREE.Vector3(0, 11.3, 3.0) : new THREE.Vector3(-H[0] - 0.05, 8.9, H[2] + 0.45);
+  const S = new THREE.Vector3(-B.wall + 0.22, 22.9, B.hz + 0.25); // on the port sill, under the closed door
+  const W = pose === 'raised' ? new THREE.Vector3(0.4, 14.5, 11.6) : pose === 'grapple' ? new THREE.Vector3(0, 11.3, 3.0) : new THREE.Vector3(S.x, 8.9, S.z);
   const l1 = 6.37, l2 = 7.06, d = Math.min(S.distanceTo(W), l1 + l2 - 0.01);
   const u = W.clone().sub(S).normalize();
   let E;
@@ -171,7 +200,7 @@ function hubbleModel(flags = {}) {
   const fix = cyl(0.25, 0.25, 0.5, mat('#e0e0e0', 'metal'), 10); fix.rotation.x = Math.PI / 2; fix.position.set(0, -3.0, 2.3); g.add(fix); // grapple fixture
   g.userData.len = 13.2; g.userData.yc0 = 0; return g;
 }
-function shuttlePayload(kind, flags = {}) {
+function shuttlePayload(kind, flags = {}, B = SH_BAY_BUILTIN) {
   const g = new THREE.Group();
   if (kind === 'dfi') { const p = box(3.6, 3.0, 1.6, mat('#c9c6bd', 'metal')); p.position.set(0, 8.4, -2.2); g.add(p); const t = cyl(0.5, 0.5, 1.6, mat('#d8d4c8', 'paint')); t.rotation.x = Math.PI / 2; t.position.set(1.1, 12.2, -1.4); g.add(t); }
   if (kind === 'hst') { const h = hubbleModel({ arrays: false }); h.position.set(0, 14.3, -0.05); g.add(h); }
@@ -181,28 +210,44 @@ function shuttlePayload(kind, flags = {}) {
     const al = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 2.9, 24), mat('#e9e7e1', 'paint')); al.rotation.x = Math.PI / 2; al.position.set(0, 21.5, -0.65); g.add(al);
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.8, 24), mat('#a6abb1', 'metal')); ring.rotation.x = Math.PI / 2; ring.position.set(0, 21.5, 1.2); g.add(ring);
     const tr = new THREE.Mesh(new THREE.BoxGeometry(4.6, 2.4, 0.2), mat('#c4c8cc', 'metal')); tr.position.set(0, 21.5, 0.75); g.add(tr); }
-  if (flags.obss) { const b = cyl(0.2, 0.2, 15.2, mat('#d8d6cf', 'paint'), 10); b.position.set(2.62, 6.9, 1.6); g.add(b); }
+  if (flags.obss) { const b = cyl(0.2, 0.2, 15.2, mat('#d8d6cf', 'paint'), 10); b.position.set(B.wall - 0.22, 6.9, B.hz + 0.25); g.add(b); } // the boom on the starboard sill
   return g;
 }
+// The orbiter: the scan's body, doors (swung open 175.5° in orbit) and landing gear, with the payload bay's lining, the robot
+// arm and the payloads; the built-in model until the scan arrives (or if it cannot be loaded).
 function buildOrbiter(flags = {}) {
+  const fb = orbiterBuiltIn(flags), open = flags.bay === 'open';
+  const g = detailPart('orbiter', 'body', fb, { extra: d => {
+    const P = DETAIL.ready.orbiter;
+    for (const [k, side] of [['doorL', -1], ['doorR', 1]]) if (P[k]) { const n = P[k].clone(); if (open) n.rotation.y = -side * 175.5 * DEG; d.add(n); }
+    if (flags.gear && P.gear) d.add(P.gear.clone()); else if (!flags.gear) d.add(shuttleWellCovers());
+    orbiterFittings(d, flags, SH_BAY_SCAN);
+  } });
+  return g;
+}
+function orbiterBuiltIn(flags) {
   const g = new THREE.Group(), open = flags.bay === 'open';
   g.add(shuttleFuselage());
   g.add(shuttleWing(1)); g.add(shuttleWing(-1)); g.add(shuttleFin()); g.add(shuttleOmsPod(1)); g.add(shuttleOmsPod(-1));
-  g.add(shuttleBayInterior());
   g.add(shuttleBayDoor(1, open)); g.add(shuttleBayDoor(-1, open));
   const flap = new THREE.Mesh(new THREE.BoxGeometry(6.3, 2.6, 0.42), vcMat()); paintGeo(flap.geometry, (x, y, z, nx, ny, nz) => nz > 0.5 ? SH_COL.white : SH_COL.black); flap.position.set(0, -1.3, -2.38); g.add(flap); // body flap
-  const se = shuttleMainEngines(); g.add(se.g);
-  const omsExit = -2.05; for (const s of [-1, 1]) { const b = bell(1.45, 0.58, mat('#5a5d62', 'metal', { side: THREE.DoubleSide })); b.position.set(s * SH_OMS_X, omsExit, 3.0); g.add(b); }
-  if (flags.pay) g.add(shuttlePayload(flags.pay));
-  if (flags.orbiter === 'OV-104' || flags.pay === 'mplm' || flags.ods) g.add(shuttlePayload(null, { ods: true, obss: true }));
-  const arm = shuttleRMS(flags.rms || 'stowed'); g.add(arm);
-  if (flags.payArm) { const h = hubbleModel({ arrays: !!flags.payArrays }); h.rotation.x = Math.PI / 2; h.position.copy(arm.userData.wrist).add(new THREE.Vector3(0, 1.8, 3.0)); g.add(h); } // held upright, aperture away from the bay
+  g.add(shuttleMainEngines());
+  for (const [x, ey, z] of SH_OMSE) { const b = bell(1.45, 0.58, mat('#5a5d62', 'metal', { side: THREE.DoubleSide })); b.position.set(x, ey, z); g.add(b); }
   g.add(shuttleGear(!!flags.gear));
-  if (flags.dragChute) g.add(shuttleChute());
+  orbiterFittings(g, flags, SH_BAY_BUILTIN);
   // mounts: three main engines (used by the launch stack) and the two OMS engines; plumes along −Y
-  const mounts = se.pos.map(([x, z]) => ({ y: se.exitY, x, z, r: 1.15, tag: 'ssme' })).concat([-1, 1].map(s => ({ y: omsExit, x: s * SH_OMS_X, z: 3.0, r: 0.58, tag: 'OMS' })));
+  const mounts = SH_SSME.map(([x, y, z]) => ({ y, x, z, r: 1.145, tag: 'ssme' })).concat(SH_OMSE.map(([x, y, z]) => ({ y, x, z, r: 0.58, tag: 'OMS' })));
   g.userData = { len: 32.75, mounts, nose: true, yc0: 14.7, capsuleR: 5 };
   return g;
+}
+// what goes in and on the payload bay, for a bay of geometry B: lining, payloads, the robot arm (and Hubble on it), drag chute
+function orbiterFittings(g, flags, B) {
+  g.add(shuttleBayInterior(B));
+  if (flags.pay) g.add(shuttlePayload(flags.pay, {}, B));
+  if (flags.orbiter === 'OV-104' || flags.pay === 'mplm' || flags.ods) g.add(shuttlePayload(null, { ods: true, obss: true }, B));
+  const arm = shuttleRMS(flags.rms || 'stowed', B); g.add(arm);
+  if (flags.payArm) { const h = hubbleModel({ arrays: !!flags.payArrays }); h.rotation.x = Math.PI / 2; h.position.copy(arm.userData.wrist).add(new THREE.Vector3(0, 1.8, 3.0)); g.add(h); } // held upright, aperture away from the bay
+  if (flags.dragChute) g.add(shuttleChute());
 }
 // the stack on the pad and during ascent: tank in the middle, boosters on its sides (±X), orbiter on −Z
 const SH_STACK = { orbY: -1.0, orbZ: -8.55 }; // orbiter reference plane 336.5 in from the tank's

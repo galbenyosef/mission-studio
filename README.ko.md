@@ -110,6 +110,7 @@
   - 국제우주정거장 임무는 도킹과 착륙이 실제 시각에 맞도록 위상 조정 분사를 풀어요.
   - 재진입 유도는 기울기(뱅크)와 롤 리버설로 활주로를 향해 방향을 잡아요.
   - 그 뒤 진입 정렬 원뿔(HAC)을 돌아 가파른 활강 경로로 내려가고, 기수를 들어 활주로에 내려앉아요.
+  - 주 바퀴가 닿으면 앞바퀴가 닿을 때까지 기수를 내려요. 디스커버리 스캔에서 보듯 궤도선은 착륙 기어 위에서 기수가 4.4° 숙여진 자세로 서요.
 - **착륙:** 화성 낙하산과 스카이 크레인, 캡슐 대기권 진입, 동력 하강 유도를 모델링했어요. 스타십은 배를 앞세워 대기권에 들어온 뒤, 최대한 늦게 엔진을 켜고 몸을 세워 내려앉아요. 화성은 공기가 희박해 그때도 음속의 몇 배로 날고 있어서, 꼬리를 앞세워 엔진으로 먼저 감속(초음속 역추진)한 다음 몸을 세워요.
 
 ### 정확도
@@ -140,6 +141,8 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 - **코드:** [MIT 라이선스](LICENSE)
 - **three.js:** r160, MIT (`vendor/`에 glTF 로더와 함께 포함). `vendor/`의 meshopt 디코더는 [meshoptimizer](https://github.com/zeux/meshoptimizer)(MIT)에서 가져왔어요.
 - **아폴로 달착륙선과 마스 2020 퍼서비어런스:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)의 3D 모델을 `tools/models`로 손봤어요. 달착륙선은 상승단과 하강단으로 나눴어요. 퍼서비어런스는 바퀴 6개와 마스트를 따로 떼어서 바퀴가 구르고 표면에서 마스트가 서게 했어요. 둘 다 면을 줄이고 압축했어요.
+- **우주왕복선 궤도선:** 스미스소니언이 국립항공우주박물관 우드바-헤이지 센터에 있는 디스커버리(OV-103)를 [3D 스캔한 모델](https://sketchfab.com/3d-models/orbiter-space-shuttle-ov-103-discovery-5f7176a2ae284d6b99fc970c9d265c04)이에요([CC0](https://creativecommons.org/publicdomain/zero/1.0/)). `tools/models`로 본체, 화물칸 문 두 짝, 착륙 기어를 나눠서 궤도에서는 문이 열리고 착륙할 때는 기어가 내려와요. 화물칸 내부, 로봇 팔, 탑재물은 코드로 그렸어요.
+- **아폴로 사령·기계선, 발사체:** 공개된 치수를 바탕으로 코드로 그렸어요.
 - **지구 지도:** [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0, three.js 예제를 거쳐 받았어요.
 - **달 지도:** three.js 예제
 - **화성·금성·목성·토성 지도:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)

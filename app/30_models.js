@@ -108,8 +108,9 @@ function lmAscent() {
   const b = bell(0.9, 0.45); b.position.y = -0.85; g.add(b);
   g.userData.len = 3.1; g.userData.engineY = -0.85; g.userData.engineR = 0.45; return g;
 }
-// ---------------- detailed models (NASA 3D Resources) ----------------
-// Vehicles NASA publishes 3D models of — free and without copyright — are drawn with them: assets/<name>.glb, built from
+// ---------------- detailed models ----------------
+// Vehicles with a 3D model that may be used freely — NASA 3D Resources (free and without copyright), the Smithsonian's
+// scans (CC0), models under CC BY (credited in the README and the app) — are drawn with them: assets/<name>.glb, built from
 // the originals by tools/models, one node per part the app moves on its own. A file loads the first time a mission needs
 // it (preloadDetailedModels at the start of a mission); until it arrives, or if it cannot be loaded, the craft shows its
 // built-in model.
@@ -146,6 +147,7 @@ function preloadDetailedModels(md) {
     const L = cf.label || {}, sc = L.sc || o.model, parts = L.parts || [];
     if ((sc === 'apollo' || sc === 'apolloCSM') && parts.some(p => p === 'lander' || p === 'descent' || p === 'ascent')) want.add('apollo_lm');
     if (sc === 'msl' && parts.includes('lander')) want.add('perseverance');
+    if (o.model === 'shuttle') want.add('orbiter');
   }
   for (const n of want) detailFile(n);
 }

@@ -413,7 +413,7 @@ function shuttleReturn(o, tIns) {
 // TAEM, heading alignment cone, outer and inner glideslopes, flare, touchdown and rollout, flown as a guided path
 // (the orbiter is a glider: speed comes from trading altitude). Returns ECL samples and events.
 function shuttleApproach(start, rwy, opt) {
-  const g = 9.80665, t0 = start.t, Rb = R_E + rwy.elev, gearH = 0.0056, ogs = (opt.ogs || 19) * DEG; // gearH: orbiter reference plane above the wheels
+  const g = 9.80665, t0 = start.t, Rb = R_E + rwy.elev, gearH = 0.00603, ogs = (opt.ogs || 19) * DEG; // gearH: the orbiter's reference plane above the main wheels, wings level
   const omega = bodyOmegaEcl('earth', t0), Mb = bodyFixedToEcl('earth', t0), toBF = v => mvec(mT(Mb), v);
   const rB = toBF(start.r), vB = toBF(vsub(start.v, vcross(omega, start.r)));
   const U = llToBF(rwy.lat, rwy.lon), Tp = vscale(U, Rb), E = vunit(vcross([0, 0, 1], U)), N = vcross(U, E);
@@ -503,7 +503,7 @@ function shuttleApproach(start, rwy, opt) {
     const bankT = s.seg === 'roll' ? 0 : -Math.atan(vms * vms * s.kap / 1000 / g) * RAD;
     bankS += (bankT - bankS) * clamp((tq - lastT) / 2.5, 0, 1); lastT = tq;
     let alpha = mach > 1 ? 9 + 5 * clamp((mach - 1) / 1.5, 0, 1) : s.seg === 'final' ? (s.x > xPf ? 6 + 4 * clamp((s.x - xPf) / (XTD - xPf), 0, 1) : 6) : 8;
-    if (s.seg === 'roll') alpha = 10 * (1 - smoothstep((tq - tTD - 4) / 6));
+    if (s.seg === 'roll') alpha = 10 - (10 + 4.39) * smoothstep((tq - tTD - 4) / 6); // derotation: the nose comes down until the nose wheels touch, the orbiter 4.39° nose down on its gear
     const pB = posBF(s.x, s.y, s.h); const dB = vadd(vscale(f, s.dir[0]), vscale(lf, s.dir[1]));
     const upB = vunit(pB), dBh = vunit(vsub(dB, vscale(upB, vdot(dB, upB))));
     const vBv = vadd(vscale(dBh, Math.sqrt(Math.max(vms * vms - s.vh * s.vh, 0)) / 1000), vscale(upB, s.vh / 1000));

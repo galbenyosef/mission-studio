@@ -243,7 +243,7 @@ function updateCraft(c, t, camPos) {
   c.node.scale.setScalar(sc);
   const ud = model.userData;
   model.position.z = 0;
-  if (c.o.model === 'shuttle' && cfgL && cfgL.key === 'sc') { model.position.y = 0; if (s.surface) model.position.z = SH_GEAR_H; } // standing on its wheels
+  if (c.o.model === 'shuttle' && cfgL && cfgL.key === 'sc') { model.position.y = 0; if (s.surface) { model.position.y = SH_STAND_H * Math.sin(SH_STANCE); model.position.z = SH_STAND_H * Math.cos(SH_STANCE); } } // standing on its wheels, nose down
   else model.position.y = anchorY(c, cfgL, model, s) + stagingShift(c, t, cfgL, model, s);
   c.yOff = model.position.y;
   if (ud.wheels && ud.wheels.length) { const wo = s.rover ? s.rover.wodo : 0; for (const w of ud.wheels) w.rotation.x = -wo / w.userData.wheel; }

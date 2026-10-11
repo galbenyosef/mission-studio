@@ -1,10 +1,15 @@
-// Builds the app's detailed vehicle models (assets/*.glb) from NASA 3D Resources glTF models, which NASA publishes
-// free and without copyright (https://github.com/nasa/NASA-3D-Resources, see its usage guidelines).
+// Builds the app's detailed vehicle models (assets/*.glb) from published 3D models that may be used freely:
+//   - NASA 3D Resources (https://github.com/nasa/NASA-3D-Resources), free and without copyright (see NASA's usage
+//     guidelines);
+//   - models on Sketchfab under CC0 (public domain) or CC BY 4.0 (credit the author: README.md and the app's credits).
+//     Sketchfab asks for a sign-in to download, so these are fetched by hand: each recipe names the model's page; download
+//     the glTF version and unzip it into a folder of its own under the --dl directory.
 //
 // Each recipe below
 //   - splits a model into the parts the app moves on their own (a lunar module's ascent and descent stages, a rover's
-//     wheels, …): one node per part, holding a child node with the part's mesh, so the part's own transform stays free
-//     for the app (a wheel turns about its pivot) while the mesh node carries meshopt's dequantisation;
+//     wheels, an orbiter's payload bay doors …): one node per part, holding a child node with the part's mesh, so the
+//     part's own transform stays free for the app (a wheel turns about its pivot) while the mesh node carries meshopt's
+//     dequantisation;
 //   - scales it to metres and puts each part's origin where the app's own model of that part has it, so the parts
 //     drop into every configuration (docked, landed, lifting off) unchanged;
 //   - drops parts too small to ever see, merges meshes by material (a few draw calls per part) and simplifies them;
@@ -14,8 +19,9 @@
 //
 //   git clone --filter=blob:none https://github.com/nasa/NASA-3D-Resources <dir> && git -C <dir> checkout 11ebb4ee
 //   npm install
-//   node build.mjs --nasa <dir> [recipe …]        → ../../assets/<recipe>.glb
-//   node inspect.mjs <file.glb> [scale]           → every mesh with its bounds, to write a recipe
+//   node build.mjs --nasa <dir> --dl <dir> [recipe …]   → ../../assets/<recipe>.glb (recipes whose source is missing are skipped)
+//   node inspect.mjs <file.glb> [scale]                  → every mesh with its bounds, to write a recipe
+//   node frame.mjs <file.gltf>                           → a model's principal axes, to find a scan's own frame
 import { NodeIO, getBounds } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { transformMesh, prune, dedup, joinPrimitives, weld, meshopt, simplifyPrimitive, textureCompress } from '@gltf-transform/functions';
@@ -35,7 +41,7 @@ const RECIPES = {
   // Descent stage: feet at y = −1.8 like the app's own model. Ascent stage: origin at the interstage plane, the top of the
   // descent stage (2.42 in model units), which sits at y = 1.455 in the descent stage's frame.
   apollo_lm: {
-    src: '3D Models/Apollo Lunar Module/Apollo Lunar Module.glb',
+    nasa: '3D Models/Apollo Lunar Module/Apollo Lunar Module.glb',
     scale: 7.04 / (5.115 - 0.103),
     parts: { descent: { from: 0.103, to: -1.8 }, ascent: { from: 2.42, to: 0 } },
     // Everything wholly above the descent stage's top deck belongs to the ascent stage, except the RCS plume deflectors and
@@ -56,7 +62,7 @@ const RECIPES = {
   // the app's rover. Its six wheels are one mesh: split into one part each with its pivot on the axle, so they can turn
   // (the app reads the radius from the node's extras). The source's materials are physically based already.
   perseverance: {
-    src: '3D Models/Mars 2020 Perseverance Rover/Mars 2020 Perseverance Rover.glb',
+    nasa: '3D Models/Mars 2020 Perseverance Rover/Mars 2020 Perseverance Rover.glb',
     scale: 1,
     parts: { body: { from: 0, to: 0 } },
     part: () => 'body',
@@ -70,11 +76,38 @@ const RECIPES = {
     strip: ['KHR_materials_transmission', 'KHR_materials_clearcoat', 'KHR_materials_ior', 'KHR_materials_specular'],
     textures: 512,
   },
+  // Space Shuttle orbiter: the Smithsonian's 3D scan of Discovery (OV-103) at the Steven F. Udvar-Hazy Center, CC0
+  // (https://sketchfab.com/3d-models/orbiter-space-shuttle-ov-103-discovery-5f7176a2ae284d6b99fc970c9d265c04, unzipped into
+  // discovery/). The scan stands on its landing gear, payload bay doors closed, in an arbitrary orientation; frame (world →
+  // the app's orbiter axes, metres): +Y nose, +Z up, +X starboard, Y = 0 at the aft end of the fuselage (Xo 1528), Z = 0 at
+  // the payload bay centreline (Zo 400). Found from the scan's shape (frame.mjs and a few profiles): the crown of the bay
+  // doors is a straight line parallel to Xo, the wing tips are level, the nose tip is at Xo 238 and the crown 2.4 m above
+  // Zo 400. In this frame the wings span 23.80 m (23.79 m published), the tail stands 17.24 m above the ground (17.25 m), the
+  // main wheels touch at Y 8.8, 6.01 m below Zo 400, and the nose wheels at Y 29.0, 4.46 m below: on its gear the orbiter
+  // sits 4.4° nose down.
+  orbiter: {
+    dl: 'discovery/scene.gltf',
+    frame: [-0.999884, -0.00391, 0.014697, 0, 0.014988, -0.08955, 0.995865, 0, -0.002578, 0.99597, 0.089598, 0, 0.018859, 14.111534, 1.609725, 1],
+    // The payload bay doors (Xo 576–1307), cut along their hinge line on the sills (Z 0.6) so the app can swing them open;
+    // the landing gear, with its open doors, below the wheel wells (the app shows it only when the gear is down and closes
+    // the wells otherwise). By triangle centre.
+    triPart: ([x, y, z]) => {
+      if (y > 5.61 && y < 24.18 && z > 0.6 && z < 2.6) return x < 0 ? 'doorL' : 'doorR';
+      if (Math.abs(x) > 1.9 && Math.abs(x) < 5.0 && y > 7.4 && y < 12.8 && z < -3.72) return 'gear';
+      if (Math.abs(x) < 1.3 && y > 27.8 && y < 31.6 && z < -3.45) return 'gear';
+      return 'body';
+    },
+    pivots: { doorL: [-2.70, 0, 0.6], doorR: [2.70, 0, 0.6] },
+    inner: { parts: ['doorL', 'doorR'], color: [0.86, 0.88, 0.9], metal: 0.35, rough: 0.4 }, // the doors' inner faces: radiator panels
+    simplify: 0.001, // 3.7 cm on the body
+    textures: { baseColor: 2048, other: 1024 }, // the colour map at 2048 px; the normal and occlusion-roughness-metalness maps at 1024
+  },
 };
 
-const args = process.argv.slice(2), at = args.indexOf('--nasa');
-if (at < 0 || !args[at + 1]) { console.error('usage: node build.mjs --nasa <NASA-3D-Resources clone> [recipe …]'); process.exit(1); }
-const NASA = args[at + 1], names = args.filter((a, i) => i !== at && i !== at + 1);
+const args = process.argv.slice(2), opt = k => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
+const SRC = { nasa: opt('--nasa'), dl: opt('--dl') };
+const names = args.filter((a, i) => !a.startsWith('--') && !['--nasa', '--dl'].includes(args[i - 1]));
+if (!SRC.nasa && !SRC.dl) { console.error('usage: node build.mjs [--nasa <NASA-3D-Resources clone>] [--dl <downloads>] [recipe …]'); process.exit(1); }
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
   'draco3d.decoder': await draco3d.createDecoderModule(), 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder,
 });
@@ -82,7 +115,10 @@ await MeshoptEncoder.ready; await MeshoptDecoder.ready; await MeshoptSimplifier.
 
 for (const name of names.length ? names : Object.keys(RECIPES)) {
   const R = RECIPES[name]; if (!R) throw new Error('no recipe ' + name);
-  const doc = await io.read(path.join(NASA, R.src)), root = doc.getRoot(), scene = root.listScenes()[0];
+  const kind = R.nasa ? 'nasa' : 'dl', dir = SRC[kind];
+  if (!dir) { if (names.length) throw new Error(`${name}: needs --${kind}`); console.log(`${name}: skipped (no --${kind})`); continue; }
+  const doc = await io.read(path.join(dir, R.nasa || R.dl)), root = doc.getRoot(), scene = root.listScenes()[0];
+  if (R.frame) { await buildScan(name, R, doc); continue; }
   // drop the source's compression (the output is compressed again with meshopt) and the material extensions not wanted
   for (const e of root.listExtensionsUsed()) if (e.extensionName === 'KHR_draco_mesh_compression' || (R.strip || []).includes(e.extensionName)) e.dispose();
   for (const a of root.listAnimations()) a.dispose(); // the app poses parts itself; rigs and their animations go
@@ -160,7 +196,7 @@ for (const name of names.length ? names : Object.keys(RECIPES)) {
     const err = typeof R.simplify === 'number' ? R.simplify : (Object.entries(R.simplify).find(([k]) => k !== 'default' && p.startsWith(k)) || [0, R.simplify.default])[1];
     for (const h of g.listChildren()) for (const prim of h.getMesh().listPrimitives()) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: 0, error: err, lockBorder: true });
   }
-  if (R.textures) await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [R.textures, R.textures], quality: 82 }));
+  await shrinkTextures(doc, R.textures);
   await doc.transform(prune(), dedup(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const out = path.join(OUT, name + '.glb');
   await io.write(out, doc);
@@ -169,6 +205,71 @@ for (const name of names.length ? names : Object.keys(RECIPES)) {
   console.log(`${name}: ${(fs.statSync(out).size / 1024).toFixed(0)} KB, parts ${Object.keys(groups).join(' ')}, ${prims} draw calls, ${tri} triangles, ${root.listTextures().length} textures, ${dropped} parts dropped → ${path.relative(process.cwd(), out)}`);
 }
 
+// A scan or any single-mesh model: bake it into the vehicle's frame (R.frame, world → vehicle, column-major), cut its
+// triangles into parts by where they lie (R.triPart), put each part's origin at its pivot (R.pivots), give listed parts an
+// inner face of their own (R.inner: a thin shell such as a door seen from inside), simplify, shrink the textures, compress.
+async function buildScan(name, R, doc) {
+  const root = doc.getRoot(), scene = root.listScenes()[0];
+  for (const a of root.listAnimations()) a.dispose();
+  for (const k of root.listSkins()) k.dispose();
+  for (const m of root.listMaterials()) { // one set of texture coordinates (a scan's texture sets are often copies of one)
+    for (const ti of [m.getBaseColorTextureInfo(), m.getNormalTextureInfo(), m.getOcclusionTextureInfo(), m.getMetallicRoughnessTextureInfo(), m.getEmissiveTextureInfo()]) if (ti) ti.setTexCoord(0);
+    m.setDoubleSided(true); // the cuts open the shell
+  }
+  const sel = {}, A = [0, 0, 0], B = [0, 0, 0], C = [0, 0, 0];
+  for (const n of root.listNodes()) {
+    const mesh = n.getMesh(); if (!mesh) continue;
+    if (mesh.listParents().filter(x => x !== root).length > 1) n.setMesh(mesh.clone());
+    transformMesh(n.getMesh(), mul(R.frame, n.getWorldMatrix()));
+    for (const p of n.getMesh().listPrimitives()) {
+      for (const s of p.listSemantics()) if (!['POSITION', 'NORMAL', 'TEXCOORD_0'].includes(s)) p.setAttribute(s, null);
+      const pos = p.getAttribute('POSITION'), idx = p.getIndices(), cnt = idx ? idx.getCount() : pos.getCount();
+      for (let t = 0; t < cnt; t += 3) {
+        const a = idx ? idx.getScalar(t) : t, b = idx ? idx.getScalar(t + 1) : t + 1, c = idx ? idx.getScalar(t + 2) : t + 2;
+        pos.getElement(a, A); pos.getElement(b, B); pos.getElement(c, C);
+        const part = R.triPart([(A[0] + B[0] + C[0]) / 3, (A[1] + B[1] + C[1]) / 3, (A[2] + B[2] + C[2]) / 3]); if (!part) continue;
+        ((sel[part] ||= new Map()).get(p) || sel[part].set(p, []).get(p)).push({ a, b, c });
+      }
+    }
+  }
+  const groups = {};
+  for (const [part, byPrim] of Object.entries(sel)) {
+    const pv = (R.pivots || {})[part] || [0, 0, 0];
+    const prims = [...byPrim].map(([p, t]) => subPrimitive(doc, p, t)), j = joinPrimitives(prims); j.setMaterial(prims[0].getMaterial());
+    const mesh = doc.createMesh(part).addPrimitive(j);
+    transformMesh(mesh, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -pv[0], -pv[1], -pv[2], 1]);
+    const g = doc.createNode(part).setTranslation(pv); g.addChild(doc.createNode(part + '-mesh').setMesh(mesh)); scene.addChild(g); groups[part] = g;
+  }
+  for (const n of scene.listChildren()) if (!Object.values(groups).includes(n)) scene.removeChild(n);
+  const keep = new Set(Object.values(groups).flatMap(g => [g, ...g.listChildren()]));
+  for (const n of root.listNodes()) if (!keep.has(n)) n.dispose();
+  await doc.transform(prune({ keepLeaves: false }));
+  if (R.simplify) for (const g of Object.values(groups)) for (const h of g.listChildren()) for (const prim of h.getMesh().listPrimitives()) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: 0, error: R.simplify, lockBorder: true });
+  if (R.inner) { // a copy facing inward, 1.5 cm in, in a plain material of its own
+    const I = R.inner, m = doc.createMaterial(name + '-inner').setBaseColorFactor([...I.color, 1]).setMetallicFactor(I.metal).setRoughnessFactor(I.rough);
+    for (const part of I.parts) { const h = groups[part] && groups[part].listChildren()[0]; if (!h) continue;
+      const src = h.getMesh().listPrimitives()[0], q = src.clone().setMaterial(m); q.setAttribute('TEXCOORD_0', null);
+      const pos = q.getAttribute('POSITION').clone(), nor = q.getAttribute('NORMAL').clone(), ix = q.getIndices().clone(), P = [0, 0, 0], N = [0, 0, 0];
+      for (let i = 0; i < pos.getCount(); i++) { pos.getElement(i, P); nor.getElement(i, N); pos.setElement(i, [P[0] - 0.015 * N[0], P[1] - 0.015 * N[1], P[2] - 0.015 * N[2]]); nor.setElement(i, [-N[0], -N[1], -N[2]]); }
+      for (let t = 0; t < ix.getCount(); t += 3) { const b = ix.getScalar(t + 1); ix.setScalar(t + 1, ix.getScalar(t + 2)); ix.setScalar(t + 2, b); }
+      q.setAttribute('POSITION', pos).setAttribute('NORMAL', nor).setIndices(ix); h.getMesh().addPrimitive(q); }
+  }
+  await shrinkTextures(doc, R.textures);
+  await doc.transform(prune(), dedup(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  const out = path.join(OUT, name + '.glb');
+  await io.write(out, doc);
+  const tri = root.listMeshes().reduce((a, m) => a + m.listPrimitives().reduce((s, p) => s + p.getIndices().getCount() / 3, 0), 0);
+  const parts = Object.entries(groups).map(([p, g]) => p + ' ' + g.listChildren()[0].getMesh().listPrimitives().reduce((s, q) => s + q.getIndices().getCount() / 3, 0)).join(', ');
+  console.log(`${name}: ${(fs.statSync(out).size / 1024).toFixed(0)} KB, ${tri} triangles (${parts}), ${root.listTextures().length} textures → ${path.relative(process.cwd(), out)}`);
+}
+
+// textures to WebP: size a number (every map) or { baseColor, other } (the colour maps, and the rest)
+async function shrinkTextures(doc, size) {
+  if (!size) return;
+  const q = 82, enc = (slots, px) => textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [px, px], quality: q, slots });
+  if (typeof size === 'number') return doc.transform(enc(null, size));
+  await doc.transform(enc(/baseColor/, size.baseColor), enc(/^(?!baseColor)/, size.other));
+}
 // Splits a node's mesh by triangle into clusters around the seeds ([x, z] in world space, refined by k-means): one new
 // node per cluster with only the vertices its triangles use, carrying the source node's world transform.
 function splitByClusters(doc, node, seeds) {

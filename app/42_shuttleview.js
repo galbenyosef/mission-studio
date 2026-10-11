@@ -6,7 +6,9 @@
 // ============================================================================
 const SHV = { runway: null, lights: null, rwy: null };
 const _qS = new THREE.Quaternion(), _axY = new THREE.Vector3(0, 1, 0), _axX = new THREE.Vector3(1, 0, 0);
-const SH_MAIN_GEAR = [-7.7, -SH_GEAR_H]; // main wheel contact relative to the orbiter's reference point: [along, down] (m)
+const SH_MAIN_GEAR = [SH_MAIN_CONTACT[0] - 14.7, SH_MAIN_CONTACT[1]]; // main wheel contact relative to the orbiter's reference point (Y 14.7): [along, down] (m)
+// the reference point's height above the ground with every wheel down, at the 4.4° nose-down stance
+const SH_STAND_H = -(SH_MAIN_GEAR[0] * Math.sin(SH_STANCE) + SH_MAIN_GEAR[1] * Math.cos(SH_STANCE));
 function isShuttle(md) { return !!(md && md.L && md.L.sideMount); }
 // per mission: launch plane, roll program, deorbit burn, runway
 function shuttlePrep(md) {
@@ -40,7 +42,7 @@ function shuttleAttitude(c, s, t, cfgL) {
   if (c.o.id === 'et') { const A = vunit(vcross(P.h, up)); return { nose: vunit(vD), roll: vunit(vsub(up, A)), spin: P.tHU ? Math.PI : 0 }; } // as it left the stack
   if (cfgL.sc !== 'shuttle') return null;
   const w = bodyOmegaEcl('earth', t), vAir = vsub(vD, vcross(w, rD));
-  if (s.surface) return { nose: P.rwy ? runwayDir(P.rwy, rD, t) : vperp(up), roll: up };
+  if (s.surface) return { nose: P.rwy ? runwayDir(P.rwy, rD, t) : vperp(up), roll: up, pitch: SH_STANCE }; // standing nose down on its gear
   const att = cfgL.att;
   if (att === 'entry') { // along the airflow, raised by the angle of attack, the lift vector banked about the flight path
     let f = vunit(vAir); if (vnorm(vAir) < 0.004 && P.rwy) f = runwayDir(P.rwy, rD, t);
@@ -69,14 +71,16 @@ function applyShuttleSpin(nd, q) {
   if (nd.spin) { _qS.setFromAxisAngle(_axY, nd.spin); q.multiply(_qS); }
   if (nd.pitch) { _qS.setFromAxisAngle(_axX, nd.pitch); q.multiply(_qS); }
 }
-// with the gear down near the runway, keep the main wheels on the ground as the nose rises (the flight path is planned for
-// the reference point at gear height, wings level and nose down)
+// With the gear down near the runway, the main wheels on the ground whatever the pitch: in the flare the reference point is
+// raised where the planned path (for wings level and the reference plane at gear height) would sink them, and on the runway
+// it rides at the height that keeps them on the paint as the nose comes down to the 4.4° stance.
 function shuttleGround(c, s, t) {
   const P = shuttlePrep(MV.md); if (!P || !P.rwy || s.surface) return;
   const cf = c.o.configAt(t), lab = cf && cf.label; if (!lab || !lab.gear) return;
   const Rr = R_E + P.rwy.elev, h = vnorm(s.r) - Rr; if (h > 0.015) return;
   const al = ((s.extra && s.extra.alpha) || 0) * DEG, hMin = (-SH_MAIN_GEAR[0] * Math.sin(al) - SH_MAIN_GEAR[1] * Math.cos(al)) / 1000 + SH_RWY_TOP + 0.00002;
-  if (h < hMin) s.r = vscale(s.r, (Rr + hMin) / vnorm(s.r)); // tyres 2 cm above the paint, as standing craft are
+  const rolling = s.extra && /rollout|wheel stop/.test(s.extra.phase || '');
+  if (h < hMin || rolling) s.r = vscale(s.r, (Rr + hMin) / vnorm(s.r)); // tyres 2 cm above the paint, as standing craft are
 }
 // The runway is drawn on the true sphere, SH_RWY_TOP above its elevation, while the surface patch under it is made of flat
 // facets that sag up to ~0.7 m below the sphere between their corners. Radius (km) of the drawn runway under a direction
