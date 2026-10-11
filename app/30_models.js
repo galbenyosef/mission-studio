@@ -84,29 +84,6 @@ function buildStage(st, opts = {}) {
 }
 
 // ---------------- spacecraft parts ----------------
-function apolloCM(withLES) {
-  const g = new THREE.Group();
-  const cm = cyl(1.96, 0.42, 3.23, mat('#d9dde2', 'foil')); g.add(cm);
-  const hs = cyl(1.98, 1.96, 0.18, mat('#6b4c2e', 'dark')); hs.position.y = -0.18; g.add(hs);
-  const win = box(0.3, 0.25, 0.05, mat('#0a0c10', 'glass')); win.position.set(0.7, 1.3, 1.25); g.add(win);
-  const tun = cyl(0.42, 0.42, 0.45, mat('#cfd3d8', 'metal')); tun.position.y = 3.23; g.add(tun);
-  if (withLES) {
-    const bpc = cyl(2.0, 0.45, 3.4, mat('#ecebe6', 'paint')); bpc.position.y = -0.05; g.add(bpc);
-    const tower = cyl(0.55, 0.35, 3.0, mat('#c43c2c', 'paint'), 4, false); tower.position.y = 3.3; g.add(tower);
-    const motor = cyl(0.33, 0.33, 4.6, mat('#ecebe6')); motor.position.y = 6.3; g.add(motor);
-    const nose = cyl(0.33, 0.05, 1.2, mat('#151515')); nose.position.y = 10.9; g.add(nose);
-  }
-  g.userData.len = withLES ? 12.1 : 3.7; g.userData.r = 1.96; return g;
-}
-function apolloSM(damaged) {
-  const g = new THREE.Group();
-  const body = cyl(1.96, 1.96, 3.9, mat('#cdd1d6', 'metal')); g.add(body);
-  for (let k = 0; k < 4; k++) { const q = box(0.5, 0.7, 0.5, mat('#bfc3c8', 'metal')); const a = k * Math.PI / 2 + 0.3; q.position.set(Math.cos(a) * 2.05, 2.6, Math.sin(a) * 2.05); g.add(q); }
-  const dish = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 8, 0, TAU, 0, Math.PI / 2.4), mat('#e6e6e6', 'paint', { side: THREE.DoubleSide })); dish.position.set(0, -0.6, -2.6); dish.rotation.x = Math.PI / 2; g.add(dish);
-  if (damaged) { const hole = box(1.5, 3.2, 0.6, mat('#2a1d12', 'dark')); hole.position.set(1.45, 0.4, 1.0); hole.rotation.y = 0.8; g.add(hole); }
-  const b = bell(2.8, 1.2, mat('#7a7f86', 'metal', { side: THREE.DoubleSide })); b.position.y = -2.8; g.add(b);
-  g.userData.len = 3.9; g.userData.engineY = -2.8; g.userData.engineR = 1.2; return g;
-}
 function lmDescent(landed) {
   const g = new THREE.Group();
   const body = cyl(2.1, 2.1, 1.65, mat('#c9a043', 'gold'), 8); body.position.y = 0.0; g.add(body);
@@ -283,24 +260,24 @@ function buildSC(model, parts, flags = {}) {
       // the docking ring on top of the ascent stage, above the ascent stage's origin (NASA's model, or the built-in one)
       const ringA = DETAIL.ready.apollo_lm ? 2.924 : 3.1, ringLM = 1.65 + ringA;
       if (has('orbiter') && has('lander')) { // CSM docked nose-to-nose with the LM (LM inverted above the CM)
-        inner = stackParts([{ g: apolloSM(flags.damaged), len: 3.9, mount: 'SM' }, { g: apolloCM(false), len: 3.68 }]);
-        const lm = LM(); lm.rotation.x = Math.PI; lm.position.y = 7.58 + ringLM; inner.add(lm);
-        mounts.push(...inner.userData.mounts, { y: 7.58 + ringLM + 1.4, r: 0.75, tag: 'LMDS', flip: true });
-        inner.userData.len = 7.58 + ringLM + 1.8;
+        inner = stackParts([{ g: apolloSM(flags.damaged), len: SM_LEN, mount: 'SM' }, { g: apolloCM(false), len: CM_TOP }]);
+        const lm = LM(); lm.rotation.x = Math.PI; lm.position.y = SM_LEN + CM_TOP + ringLM; inner.add(lm);
+        mounts.push(...inner.userData.mounts, { y: SM_LEN + CM_TOP + ringLM + 1.4, r: 0.75, tag: 'LMDS', flip: true });
+        inner.userData.len = SM_LEN + CM_TOP + ringLM + 1.8;
       } else if (has('capsule') && has('lander')) {
         inner = new THREE.Group(); inner.add(apolloCM(false));
-        const lm = LM(); lm.rotation.x = Math.PI; lm.position.y = 3.68 + ringLM; inner.add(lm);
-        mounts.push({ y: 3.68 + ringLM + 1.4, r: 0.75, tag: 'LMDS', flip: true });
-        inner.userData.len = 3.68 + ringLM + 1.8;
+        const lm = LM(); lm.rotation.x = Math.PI; lm.position.y = CM_TOP + ringLM; inner.add(lm);
+        mounts.push({ y: CM_TOP + ringLM + 1.4, r: 0.75, tag: 'LMDS', flip: true });
+        inner.userData.len = CM_TOP + ringLM + 1.8;
       } else if (has('orbiter') && has('ascent')) { // the ascent stage back from the surface, docked to the CM's nose until it is jettisoned
-        inner = stackParts([{ g: apolloSM(flags.damaged), len: 3.9, mount: 'SM' }, { g: apolloCM(false), len: 3.68 }]);
-        const a = lmAscentD(); a.rotation.x = Math.PI; a.position.y = 7.58 + ringA; inner.add(a);
-        mounts.push(...inner.userData.mounts); inner.userData.len = 7.58 + ringA + 0.9;
-      } else if (has('orbiter')) { inner = stackParts([{ g: apolloSM(flags.damaged), len: 3.9, mount: model === 'apollo' ? 'SM' : 'SM' }, { g: apolloCM(false), len: 3.7 }]); mounts.push(...inner.userData.mounts); }
+        inner = stackParts([{ g: apolloSM(flags.damaged), len: SM_LEN, mount: 'SM' }, { g: apolloCM(false), len: CM_TOP }]);
+        const a = lmAscentD(); a.rotation.x = Math.PI; a.position.y = SM_LEN + CM_TOP + ringA; inner.add(a);
+        mounts.push(...inner.userData.mounts); inner.userData.len = SM_LEN + CM_TOP + ringA + 0.9;
+      } else if (has('orbiter')) { inner = stackParts([{ g: apolloSM(flags.damaged), len: SM_LEN, mount: 'SM' }, { g: apolloCM(false), len: CM_TOP + 0.25 }]); mounts.push(...inner.userData.mounts); }
       else if (has('lander')) { const ds = lmDescentD(flags.landed); const as = lmAscentD(); as.position.y = 1.65; inner = new THREE.Group(); inner.add(ds); inner.add(as); inner.userData.footY = -1.8; mounts.push({ y: -1.4, r: 0.75, tag: 'LMDS' }); }
       else if (has('descent')) { inner = lmDescentD(true); inner.userData.footY = -1.8; }
       else if (has('ascent')) { inner = lmAscentD(); mounts.push({ y: -0.85, r: 0.45, tag: 'LMAS' }); }
-      else if (has('capsule')) { inner = apolloCM(false); inner.userData.chuteY = 3.6; inner.userData.capsuleR = 1.96; }
+      else if (has('capsule')) { inner = apolloCM(false, false); inner.userData.chuteY = CM_TOP - 0.3; inner.userData.capsuleR = 1.96; } // the probe stayed in the LM
       else if (has('service')) { inner = apolloSM(flags.damaged); }
       break;
     }
@@ -394,9 +371,9 @@ function buildStowed(model, rBelow, fl = {}) {
   const g = new THREE.Group(); let y = 0;
   if (model === 'apollo' || model === 'apolloCSM') {
     const sla = cyl(3.3, 1.96, 8.5, mat('#e7e5df')); g.add(sla); y = 8.5;
-    const sm = apolloSM(); sm.position.y = y; g.add(sm); y += 3.9;
+    const sm = apolloSM(false, true); sm.position.y = y; g.add(sm); y += SM_LEN;
     const cm = apolloCM(les); cm.position.y = y; g.add(cm); y += cm.userData.len;
-    g.userData = { len: y, mounts: [{ y: 8.5 - 2.8, r: 1.2, tag: 'SM' }] }; return g;
+    g.userData = { len: y, mounts: [{ y: 8.5 + sm.userData.engineY, r: sm.userData.engineR, tag: 'SM' }] }; return g;
   }
   if (model === 'orion') {
     const ad = cyl(2.55, 2.05, 1.6, mat('#d9d6cf')); g.add(ad); y = 1.6;
