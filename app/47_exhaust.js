@@ -80,13 +80,15 @@ function initExhaust() {
 }
 const GLSL_EXH_COMMON = `
 uniform sampler2D tNoise; uniform vec3 uSunDir; uniform vec3 uFogCol; uniform float uExpo;
-varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vWP;
+varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vWP; varying float vFade;
 // Smoke of optical depth tau seen at a point where its surface (a column's or a puff's) faces N. Dense smoke scatters like a
 // matt surface (light diffusing through it reaches its far side too); thin smoke glows looking toward the Sun (forward
 // scattering, Henyey–Greenstein g = 0.6). Premultiplied: a thin veil in sunlight against a dark sky (exposed for the dark:
 // uExpo) can outshine its own opacity many times over, so the light is not capped by it.
 vec4 smoke(float tau, float edge, vec3 N, float n) {
-  float a = (1.0 - exp(-tau)) * edge;
+  // out of the flame the smoke billows into view, the bulging parts (n high) first (vFade: 0 at the flame, 1 clear of it)
+  float fd = clamp((vFade - 0.45 * (1.0 - n)) / 0.55, 0.0, 1.0);
+  float a = (1.0 - exp(-tau)) * edge * fd * fd;
   vec3 V = normalize(cameraPosition - vWP);
   float wrap = clamp((dot(N, uSunDir) + 0.8) / 1.8, 0.0, 1.0);
   float ct = dot(-V, uSunDir), hg = 0.64 / pow(1.36 - 1.2 * ct, 1.5);
@@ -100,9 +102,9 @@ float bil(vec2 p) { return texture2D(tNoise, p * vec2(0.37, 0.19) + vec2(0.0, 0.
 const GLSL_EXH_V = `
 #include <common>
 #include <logdepthbuf_pars_vertex>
-attribute vec3 aUV; attribute float aTau; attribute vec3 aSun; attribute vec3 aAmb; attribute float aFog; attribute vec3 aSide;
-varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vSide; varying vec3 vWP;
-void main(){ vUV = aUV; vTau = aTau; vSun = aSun; vAmb = aAmb; vFog = aFog; vSide = aSide;
+attribute vec3 aUV; attribute float aTau; attribute vec3 aSun; attribute vec3 aAmb; attribute float aFog; attribute vec3 aSide; attribute float aFade;
+varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vSide; varying vec3 vWP; varying float vFade;
+void main(){ vUV = aUV; vTau = aTau; vSun = aSun; vAmb = aAmb; vFog = aFog; vSide = aSide; vFade = aFade;
   vec4 wp = modelMatrix * vec4(position, 1.0); vWP = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp;
 #include <logdepthbuf_vertex>
 }`;
@@ -133,9 +135,9 @@ void main(){
 const GLSL_PUFF_V = `
 #include <common>
 #include <logdepthbuf_pars_vertex>
-attribute vec3 aUV; attribute float aTau; attribute vec3 aSun; attribute vec3 aAmb; attribute float aFog;
-varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vWP;
-void main(){ vUV = aUV; vTau = aTau; vSun = aSun; vAmb = aAmb; vFog = aFog;
+attribute vec3 aUV; attribute float aTau; attribute vec3 aSun; attribute vec3 aAmb; attribute float aFog; attribute float aFade;
+varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vWP; varying float vFade;
+void main(){ vUV = aUV; vTau = aTau; vSun = aSun; vAmb = aAmb; vFog = aFog; vFade = aFade;
   vec4 wp = modelMatrix * vec4(position, 1.0); vWP = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp;
 #include <logdepthbuf_vertex>
 }`;
@@ -149,13 +151,16 @@ void main(){
   float rEdge = 0.75 * (0.7 + 0.6 * n), x = length(q) / rEdge; if (x >= 1.0) discard; // the puff's radius is 0.75 of the quad's half-size
   float chord = sqrt(1.0 - x * x);
   vec3 V = normalize(cameraPosition - vWP), right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]), up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-  vec4 c = smoke(vTau * chord * (0.45 + 1.1 * n), 1.0 - smoothstep(0.5, 1.0, x), normalize((right * q.x + up * q.y) / rEdge + V * chord), n);
+  // a soft blob, its outline faded over most of its radius; shaded nearly flat, as the smoke it stands for (a stretch of
+  // column seen end-on, a patch of the wide cloud high up) has no round surface to catch the light
+  vec4 c = smoke(vTau * chord * (0.45 + 1.1 * n), 1.0 - smoothstep(0.25, 1.0, x), normalize(0.4 * (right * q.x + up * q.y) / rEdge + V * chord), n);
   if (max(max(c.r, c.g), c.b) < 0.0015 && c.a < 0.002) discard;
   gl_FragColor = vec4(c.rgb, 1.0);
   #include <colorspace_fragment>
   gl_FragColor.a = c.a;
 }`;
 const EXH_PUFF_H = [50, 68]; // km: the ribbon gives way to puffs between these heights
+const EXH_SUB = 400; // points the ribbon may add between samples near the engines
 function disposeExhaust() {
   for (const k of ['mesh', 'puffs']) if (EXH[k]) { R.scene.remove(EXH[k]); EXH[k].geometry.dispose(); EXH[k].material.dispose(); EXH[k] = null; }
   EXH.n = 0;
@@ -194,20 +199,22 @@ function buildExhaust(md) {
   if (S.length < 2) return;
   EXH.n = S.length; EXH.t0 = t0; EXH.t1 = asc.t1;
   const N = S.length, F = k => new Float64Array(k * N); // the samples as flat arrays, for the work done every frame
-  Object.assign(EXH, { TE: F(1), RX: F(3), DW: F(3), W0: F(1), TAU0: F(1), LIFE: F(1), U: F(1), VX: F(1), H: F(1), COL: F(3), P: new Float64Array(3 * (N + 1)), dH: new Float64Array(N + 1), W: new Float64Array(N + 1), keep: new Int32Array(N + 1) });
+  const NR = N + 1 + EXH_SUB; // the ribbon's points: kept samples and the extra ones near the engines
+  Object.assign(EXH, { TE: F(1), RX: F(3), DW: F(3), W0: F(1), TAU0: F(1), LIFE: F(1), U: F(1), VX: F(1), H: F(1), COL: F(3), P: new Float64Array(3 * (N + 1)), dH: new Float64Array(N + 1), W: new Float64Array(N + 1), keep: new Int32Array(N + 1),
+    ra: new Int32Array(NR), rb: new Int32Array(NR), rf: new Float64Array(NR), rg: new Float64Array(3 * NR) });
   S.forEach((x, i) => { EXH.TE[i] = x.te; EXH.W0[i] = x.w0; EXH.TAU0[i] = x.tau0; EXH.LIFE[i] = x.life; EXH.U[i] = x.u; EXH.VX[i] = x.vx; EXH.H[i] = x.h; for (let k = 0; k < 3; k++) { EXH.RX[3 * i + k] = x.r[k]; EXH.DW[3 * i + k] = x.dW[k]; EXH.COL[3 * i + k] = x.col[k]; } });
-  const cap = S.length + 1;
+  const cap = NR;
   const g = new THREE.BufferGeometry(), A = k => new THREE.BufferAttribute(new Float32Array(2 * cap * k), k).setUsage(THREE.DynamicDrawUsage);
-  g.setAttribute('position', A(3)); g.setAttribute('aUV', A(3)); g.setAttribute('aTau', A(1)); g.setAttribute('aSun', A(3)); g.setAttribute('aAmb', A(3)); g.setAttribute('aFog', A(1)); g.setAttribute('aSide', A(3));
+  g.setAttribute('position', A(3)); g.setAttribute('aUV', A(3)); g.setAttribute('aTau', A(1)); g.setAttribute('aSun', A(3)); g.setAttribute('aAmb', A(3)); g.setAttribute('aFog', A(1)); g.setAttribute('aSide', A(3)); g.setAttribute('aFade', A(1));
   const idx = new Uint32Array(6 * (cap - 1)); for (let i = 0; i < cap - 1; i++) { const a = 2 * i; idx.set([a, a + 1, a + 2, a + 1, a + 3, a + 2], 6 * i); }
   g.setIndex(new THREE.BufferAttribute(idx, 1));
   const U = { tNoise: { value: EXH.tex }, uSunDir: { value: new THREE.Vector3(1, 0, 0) }, uFogCol: { value: new THREE.Color(0, 0, 0) }, uExpo: { value: 1 } }; // shared by both
   const mk = (geo, vs, fs) => { const ms = new THREE.Mesh(geo, new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, transparent: true, premultipliedAlpha: true, depthWrite: false, side: THREE.DoubleSide, uniforms: U }));
     ms.frustumCulled = false; ms.renderOrder = 4; ms.visible = false; R.scene.add(ms); return ms; };
   EXH.mesh = mk(g, GLSL_EXH_V, GLSL_EXH_F);
-  { // the puffs: as many as the trail could need (one per sample at most)
-    const np = S.length, gp = new THREE.BufferGeometry(), B = k => new THREE.BufferAttribute(new Float32Array(4 * np * k), k).setUsage(THREE.DynamicDrawUsage);
-    gp.setAttribute('position', B(3)); gp.setAttribute('aUV', B(3)); gp.setAttribute('aTau', B(1)); gp.setAttribute('aSun', B(3)); gp.setAttribute('aAmb', B(3)); gp.setAttribute('aFog', B(1));
+  { // the puffs: as many as the trail could need (one per ribbon point at most)
+    const np = NR, gp = new THREE.BufferGeometry(), B = k => new THREE.BufferAttribute(new Float32Array(4 * np * k), k).setUsage(THREE.DynamicDrawUsage);
+    gp.setAttribute('position', B(3)); gp.setAttribute('aUV', B(3)); gp.setAttribute('aTau', B(1)); gp.setAttribute('aSun', B(3)); gp.setAttribute('aAmb', B(3)); gp.setAttribute('aFog', B(1)); gp.setAttribute('aFade', B(1));
     const ix = new Uint32Array(6 * np); for (let i = 0; i < np; i++) { const a = 4 * i; ix.set([a, a + 1, a + 2, a, a + 2, a + 3], 6 * i); }
     gp.setIndex(new THREE.BufferAttribute(ix, 1));
     const uvA = gp.attributes.aUV.array; for (let i = 0; i < np; i++) [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([x, y], k) => { uvA[12 * i + 3 * k] = x; uvA[12 * i + 3 * k + 1] = y; });
@@ -252,14 +259,27 @@ function updateExhaust(t) {
   }
   const dc = j => Math.hypot(P[3 * j] - cgx, P[3 * j + 1] - cgy, P[3 * j + 2] - cgz);
   if (dc(m - 1) > 3000 && dc(0) > 3000) { hide(); return; }
-  // distance back from the head (m) and the width now (m): turbulent mixing and, high up, free expansion; near the engines
-  // the plume opens out like a cone
+  // distance back from the head (m) and the width now (m): turbulent mixing and, high up, free expansion. Behind the engines
+  // the plume opens out like a cone, over its own width or twice the flame's length, whichever is longer
+  const Lm = Lf * 1000; // m
   dH[m - 1] = 0; for (let i = m - 2; i >= 0; i--) dH[i] = dH[i + 1] + 1000 * Math.hypot(P[3 * i + 3] - P[3 * i], P[3 * i + 4] - P[3 * i + 1], P[3 * i + 5] - P[3 * i + 2]);
-  for (let i = 0; i < m; i++) { const j = Math.min(i, n - 1), a = Math.max(t - TE[j], 0), w0 = W0[j]; W[i] = w0 * clamp(0.12 + 0.88 * Math.pow(dH[i] / (1.5 * w0), 0.6), 0.12, 1) + 4 * Math.sqrt(a) + 0.25 * a + VX[j] * a; }
+  for (let i = 0; i < m; i++) { const j = Math.min(i, n - 1), a = Math.max(t - TE[j], 0), w0 = W0[j], x = Math.min(dH[i] / Math.max(1.5 * w0, 2 * Lm), 1); W[i] = w0 * (0.25 + 0.75 * x * (2 - x)) + 4 * Math.sqrt(a) + 0.25 * a + VX[j] * a; }
   // the samples the ribbon runs through: one every third of its width or so (or every half degree, seen from afar), and all
-  // of the cone at the head
+  // of them near the engines, where the plume opens and the smoke comes out of the flame
+  const zone = i => Math.max(3 * W[i], 2.5 * Lm);
   let nk = 0; keep[nk++] = 0;
-  for (let i = 1, acc = 0; i < m; i++) { acc += dH[i - 1] - dH[i]; if (i === m - 1 || acc >= Math.max(0.3 * W[i], 8 * dc(i)) || dH[i] < 3 * W[i]) { keep[nk++] = i; acc = 0; } }
+  for (let i = 1, acc = 0; i < m; i++) { acc += dH[i - 1] - dH[i]; if (i === m - 1 || acc >= Math.max(0.3 * W[i], 8 * dc(i)) || dH[i] < zone(i)) { keep[nk++] = i; acc = 0; } }
+  // its points: those samples and, near the engines, more in between (every sixth of the width, every eighth of the flame),
+  // so the cone and the smoke fading in are smooth however far apart the samples were laid. A point lies a fraction f of the
+  // way from point a to point b of P.
+  const { ra, rb, rf, rg } = EXH; let nr = 0, extra = 0;
+  for (let kk = 0; kk < nk; kk++) {
+    const a = keep[kk]; ra[nr] = a; rb[nr] = a; rf[nr] = 0; nr++;
+    const b = keep[kk + 1]; if (kk + 1 >= nk || dH[b] >= zone(b)) continue;
+    const step = Math.max(Lm > 0 ? Math.min(W[b] / 6, Lm / 8) : W[b] / 6, 0.5), ns = Math.min(Math.ceil((dH[a] - dH[b]) / step), 24, EXH_SUB - extra + 1);
+    for (let k = 1; k < ns; k++) { ra[nr] = a; rb[nr] = b; rf[nr] = k / ns; nr++; extra++; }
+  }
+  for (let r = 0; r < nr; r++) { const a = ra[r], b = rb[r], f = rf[r]; for (let k = 0; k < 3; k++) rg[3 * r + k] = P[3 * a + k] + (P[3 * b + k] - P[3 * a + k]) * f; }
   // light
   const sd = vunit(vscale(E, -1)), sun = [1.0, 0.97, 0.92];
   const elS = Math.asin(clamp((cgx * sd[0] + cgy * sd[1] + cgz * sd[2]) / (hc + R0), -1, 1)) * RAD, day = smoothstep((elS + 7) / 17), fill = MV.layers.fill !== false;
@@ -268,21 +288,27 @@ function updateExhaust(t) {
   const dip = Math.acos(clamp(R0 / (R0 + Math.max(hc, 0)), -1, 1)) * RAD;
   const u = mesh.material.uniforms; u.uSunDir.value.set(sd[0], sd[1], sd[2]); u.uExpo.value = Math.pow(10, clamp(-(elS + dip), 0, 11) / 4);
   u.uFogCol.value.copy(R.sky.material.uniforms.uHorizon.value).multiplyScalar(0.25 + 0.75 * day);
-  const G = mesh.geometry.attributes, pos = G.position.array, uv = G.aUV.array, ta = G.aTau.array, su = G.aSun.array, am = G.aAmb.array, fo = G.aFog.array, si = G.aSide.array;
+  const G = mesh.geometry.attributes, pos = G.position.array, uv = G.aUV.array, ta = G.aTau.array, su = G.aSun.array, am = G.aAmb.array, fo = G.aFog.array, si = G.aSide.array, fa = G.aFade.array;
   const PG = pf && pf.geometry.attributes, cap = pf ? PG.aTau.count / 4 : 0;
   const crR = _exhR.set(1, 0, 0).applyQuaternion(R.camera.quaternion), crU = _exhU.set(0, 1, 0).applyQuaternion(R.camera.quaternion);
   const ox = E[0] - O[0], oy = E[1] - O[1], oz = E[2] - O[2]; // geocentric → scene
-  let px0 = 0, py0 = 0, pz0 = 0, hasPs = false, nv = 0, np = 0, pAcc = 0;
-  for (let kk = 0; kk < nk; kk++) {
-    const i = keep[kk], j = Math.min(i, n - 1), a = Math.max(t - TE[j], 0), isHead = i === n, w = W[i];
-    const gx = P[3 * i], gy = P[3 * i + 1], gz = P[3 * i + 2], sx = gx + ox, sy = gy + oy, sz = gz + oz; // geocentric; in the scene
-    let tau = isHead ? 0 : TAU0[j] * (W0[j] / w) * Math.exp(-a / LIFE[j]);
-    if (Lf > 0) tau *= smoothstep((dH[i] / 1000 - 0.3 * Lf) / (0.7 * Lf)); // the smoke shows beyond the bright flame
+  let px0 = 0, py0 = 0, pz0 = 0, hasPs = false, nv = 0, np = 0, pAcc = 0, dPrev = 0;
+  const col = [0, 0, 0];
+  for (let r = 0; r < nr; r++) {
+    const a = ra[r], b = rb[r], f = rf[r], ja = Math.min(a, n - 1), jb = Math.min(b, n - 1), isHead = a === n;
+    const lerp = A => A[ja] + (A[jb] - A[ja]) * f;
+    const age = Math.max(t - lerp(TE), 0), w0 = lerp(W0), dHr = dH[a] + (dH[b] - dH[a]) * f, w = W[a] + (W[b] - W[a]) * f;
+    for (let k = 0; k < 3; k++) col[k] = COL[3 * ja + k] + (COL[3 * jb + k] - COL[3 * ja + k]) * f;
+    const gx = rg[3 * r], gy = rg[3 * r + 1], gz = rg[3 * r + 2], sx = gx + ox, sy = gy + oy, sz = gz + oz; // geocentric; in the scene
+    const tau0 = isHead ? 0 : lerp(TAU0) * (w0 / w) * Math.exp(-age / lerp(LIFE));
+    // the smoke shows beyond the bright flame (from a third of its length, fully past it); with the engines off, the trail's
+    // end thins out over its width
+    const fade = Lm > 0 ? smoothstep((dHr - 0.3 * Lm) / (0.8 * Lm)) : smoothstep(dHr / (0.6 * w));
     // the ribbon's side: across the trail and across the line of sight. Seen end-on that side is ill-defined: it keeps
     // turning smoothly from the last one, and the puffs take over from the ribbon there (as they do high up, where the
     // exhaust spreads into a wide, thin cloud)
-    const ip = keep[Math.max(kk - 1, 0)], iq = keep[Math.min(kk + 1, nk - 1)];
-    const tx = P[3 * iq] - P[3 * ip], ty = P[3 * iq + 1] - P[3 * ip + 1], tz = P[3 * iq + 2] - P[3 * ip + 2], cx = cam.x - sx, cy = cam.y - sy, cz = cam.z - sz;
+    const rp = Math.max(r - 1, 0), rq = Math.min(r + 1, nr - 1);
+    const tx = rg[3 * rq] - rg[3 * rp], ty = rg[3 * rq + 1] - rg[3 * rp + 1], tz = rg[3 * rq + 2] - rg[3 * rp + 2], cx = cam.x - sx, cy = cam.y - sy, cz = cam.z - sz;
     let vx = ty * cz - tz * cy, vy = tz * cx - tx * cz, vz = tx * cy - ty * cx; const sl = Math.hypot(vx, vy, vz), D = Math.hypot(cx, cy, cz), sn = sl / Math.max(Math.hypot(tx, ty, tz) * D, 1e-30);
     if (sl > 1e-15) { vx /= sl; vy /= sl; vz /= sl; } else if (hasPs) { vx = px0; vy = py0; vz = pz0; } else { const q = vperp([cx, cy, cz]); vx = q[0]; vy = q[1]; vz = q[2]; }
     if (hasPs) {
@@ -293,31 +319,34 @@ function updateExhaust(t) {
     px0 = vx; py0 = vy; pz0 = vz; hasPs = true;
     // the ribbon's share: high up, seen end-on or from close by (a camera beside the column would see the ribbon twist round
     // it) the puffs draw the smoke instead
-    const fr = (1 - smoothstep((H[j] - EXH_PUFF_H[0]) / (EXH_PUFF_H[1] - EXH_PUFF_H[0]))) * (pf ? smoothstep((sn - 0.12) / 0.3) * smoothstep((D * 1000 / w - 1.5) / 2) : 1);
-    const Lt = exhSunlight(gx, gy, gz, sd), rg = Math.hypot(gx, gy, gz), hv = rg - R0, mu = (gx * sd[0] + gy * sd[1] + gz * sd[2]) / rg;
+    const fr = (1 - smoothstep((lerp(H) - EXH_PUFF_H[0]) / (EXH_PUFF_H[1] - EXH_PUFF_H[0]))) * (pf ? smoothstep((sn - 0.05) / 0.12) * smoothstep((D * 1000 / w - 0.6) / 0.8) : 1);
+    // seen at an angle to its axis the line of sight crosses more of the column: thicker by 1 / sin of that angle
+    const tau = tau0 / Math.max(sn, 0.17);
+    const Lt = exhSunlight(gx, gy, gz, sd), rgl = Math.hypot(gx, gy, gz), hv = rgl - R0, mu = (gx * sd[0] + gy * sd[1] + gz * sd[2]) / rgl;
     const dayV = smoothstep((mu + 0.1) / 0.3) * (1 - 0.7 * smoothstep((hv - 15) / 50)), amb = 0.42 * dayV + (fill ? 0.035 : 0.012);
-    const fire = lum > 0 ? 0.7 * lum / (1 + Math.pow(dH[i] / 1000 / (0.45 * Lf), 2)) : 0; // the flame lighting the smoke near it
+    const fire = lum > 0 ? 0.7 * lum / (1 + Math.pow(dHr / (0.45 * Lm), 2)) : 0; // the flame lighting the smoke near it
     const h1 = Math.min(hc, hv), h2 = Math.max(hc, hv), air = h2 - h1 > 0.05 ? EXH_H * (Math.exp(-h1 / EXH_H) - Math.exp(-h2 / EXH_H)) / (h2 - h1) : Math.exp(-h1 / EXH_H);
     const fog = 1 - Math.exp(-D * Math.max(air, 0) / 80); // haze between the camera and the smoke
-    const hw = w * 0.000625, lod = Math.max(Math.log2(w / W0[j]), 0); // km: half its width, with a quarter more for the billows
+    const hw = w * 0.000625, lod = Math.max(Math.log2(w / w0), 0), uu = lerp(U); // km: half its width, with a quarter more for the billows
     for (let s = 0; s < 2; s++) {
       const q = 2 * nv + s, sg = s ? hw : -hw;
       pos[3 * q] = sx + vx * sg; pos[3 * q + 1] = sy + vy * sg; pos[3 * q + 2] = sz + vz * sg;
-      uv[3 * q] = U[j]; uv[3 * q + 1] = s ? 1.25 : -1.25; uv[3 * q + 2] = lod; ta[q] = tau * fr; fo[q] = fog; si[3 * q] = vx; si[3 * q + 1] = vy; si[3 * q + 2] = vz;
-      for (let k = 0; k < 3; k++) { su[3 * q + k] = COL[3 * j + k] * sun[k] * Lt[k]; am[3 * q + k] = COL[3 * j + k] * (amb * EXH_TINT[k] + fire * EXH_FIRE[k]); }
+      uv[3 * q] = uu; uv[3 * q + 1] = s ? 1.25 : -1.25; uv[3 * q + 2] = lod; ta[q] = tau * fr; fo[q] = fog; fa[q] = fade; si[3 * q] = vx; si[3 * q + 1] = vy; si[3 * q + 2] = vz;
+      for (let k = 0; k < 3; k++) { su[3 * q + k] = col[k] * sun[k] * Lt[k]; am[3 * q + k] = col[k] * (amb * EXH_TINT[k] + fire * EXH_FIRE[k]); }
     }
     nv++;
     // a puff gathers the trail since the last one (out to a third of its width or so) into a ball as wide as the trail: the
     // same smoke, so seen from the side the puffs add up to the column, and seen end-on they add up along it
-    if (pf && kk > 0) pAcc += (dH[keep[kk - 1]] - dH[i]) * (1 - fr);
-    if (pf && !isHead && pAcc > 0 && (pAcc >= 0.33 * w || kk >= nk - 2) && np < cap) {
-      const rq = 0.000667 * w, tp = 1.5 * tau * pAcc / w * smoothstep((D / rq - 1.2) / 1.5); pAcc = 0; // its half-size (km); τ through its middle, gone once the camera is in it
+    if (pf && r > 0) pAcc += (dPrev - dHr) * (1 - fr);
+    dPrev = dHr;
+    if (pf && !isHead && pAcc > 0 && (pAcc >= 0.33 * w || r >= nr - 2) && np < cap) {
+      const rq2 = 0.000667 * w, tp = 1.5 * tau0 * pAcc / w * smoothstep((D / rq2 - 1.2) / 1.5); pAcc = 0; // its half-size (km); τ through its middle, gone once the camera is in it
       const PP = PG.position.array;
       for (let k = 0; k < 4; k++) {
-        const q = 4 * np + k, ex = k === 1 || k === 2 ? rq : -rq, ey = k >= 2 ? rq : -rq;
+        const q = 4 * np + k, ex = k === 1 || k === 2 ? rq2 : -rq2, ey = k >= 2 ? rq2 : -rq2;
         PP[3 * q] = sx + crR.x * ex + crU.x * ey; PP[3 * q + 1] = sy + crR.y * ex + crU.y * ey; PP[3 * q + 2] = sz + crR.z * ex + crU.z * ey;
-        PG.aUV.array[3 * q + 2] = i % 97; PG.aTau.array[q] = tp; PG.aFog.array[q] = fog;
-        for (let c = 0; c < 3; c++) { PG.aSun.array[3 * q + c] = COL[3 * j + c] * sun[c] * Lt[c]; PG.aAmb.array[3 * q + c] = COL[3 * j + c] * (amb * EXH_TINT[c] + fire * EXH_FIRE[c]); }
+        PG.aUV.array[3 * q + 2] = (7 * a + Math.round(7 * f)) % 97; PG.aTau.array[q] = tp; PG.aFog.array[q] = fog; PG.aFade.array[q] = fade;
+        for (let c = 0; c < 3; c++) { PG.aSun.array[3 * q + c] = col[c] * sun[c] * Lt[c]; PG.aAmb.array[3 * q + c] = col[c] * (amb * EXH_TINT[c] + fire * EXH_FIRE[c]); }
       }
       np++;
     }
