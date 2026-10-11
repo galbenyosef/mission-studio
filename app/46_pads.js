@@ -166,11 +166,19 @@ function padWire(g, a, b, sag) {
 function padGround(g, o = {}) {
   const M = padMats(), R = o.r || 2200;
   const tex = padGround.tex || (padGround.tex = stripeTex((c, w, h) => {
-    const img = c.createImageData(w, h);
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { // tileable value noise: a few octaves of sines
-      const u = i / w * TAU, v = j / h * TAU, n = 0.5 + 0.18 * Math.sin(u * 3 + Math.sin(v * 2) * 1.7) * Math.cos(v * 3 + 0.4) + 0.12 * Math.sin(u * 7 + v * 5 + 1.3) + 0.08 * Math.sin(u * 13 - v * 11) * Math.sin(v * 17 + u * 2) + 0.06 * Math.sin(u * 29 + v * 31);
-      const o4 = 4 * (j * w + i); img.data[o4] = 96 + 60 * n; img.data[o4 + 1] = 104 + 48 * n; img.data[o4 + 2] = 66 + 34 * n; img.data[o4 + 3] = 255;
+    // tileable value noise in five octaves (random lattices that wrap at the edges): scrub, grass and bare patches with no
+    // regular pattern to repeat from tile to tile
+    const rnd = mulberry32(5), v = new Float32Array(w * h);
+    for (const [S, amp] of [[4, 0.34], [8, 0.26], [16, 0.18], [32, 0.13], [64, 0.09]]) {
+      const L = new Float32Array(S * S); for (let i = 0; i < S * S; i++) L[i] = rnd();
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const fx = x / w * S, fy = y / h * S, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+        const a = L[(y0 % S) * S + x0 % S], b = L[(y0 % S) * S + (x0 + 1) % S], c2 = L[((y0 + 1) % S) * S + x0 % S], d = L[((y0 + 1) % S) * S + (x0 + 1) % S];
+        v[y * w + x] += amp * ((a * (1 - sx) + b * sx) * (1 - sy) + (c2 * (1 - sx) + d * sx) * sy);
+      }
     }
+    const img = c.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) { const n = clamp((v[i] - 0.5) * 1.6 + 0.5, 0, 1), o4 = 4 * i; img.data[o4] = 92 + 70 * n; img.data[o4 + 1] = 102 + 54 * n; img.data[o4 + 2] = 64 + 38 * n; img.data[o4 + 3] = 255; }
     c.putImageData(img, 0, 0);
   }, 256, 256));
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -186,7 +194,14 @@ function padGround(g, o = {}) {
     V(...a); V(...d); V(...c); if (j > 0) { V(...a); V(...c); V(...b); }
   }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); geo.computeVertexNormals();
-  const land = new THREE.Mesh(geo, padGround.mat || (padGround.mat = padExactDepth(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0, side: THREE.DoubleSide })))); g.add(land);
+  if (!padGround.mat) { // the texture again at two larger scales, so its 80-m tiles do not show as a grid
+    const m = padGround.mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+    m.onBeforeCompile = s => { s.fragmentShader = s.fragmentShader.replace('#include <logdepthbuf_fragment>', LOGDEPTH_EXACT).replace('#include <map_fragment>', `#include <map_fragment>
+      float pgA = texture2D(map, vMapUv * 0.071 + vec2(0.37, 0.11)).g, pgB = texture2D(map, vMapUv * 0.23 + vec2(0.71, 0.53)).g;
+      diffuseColor.rgb *= 0.45 + 0.55 * (pgA + pgB) / (2.0 * 0.2);`); };
+    m.customProgramCacheKey = () => 'padGround';
+  }
+  const land = new THREE.Mesh(geo, padGround.mat); g.add(land);
   const k = padKit();
   // strips on the land (the beach along the shoreline, the roads), cut into pieces of about 80 m for the same reason
   const strip = (m, e0, n0, e1, n1, w, y) => { const dx = e1 - e0, dn = n1 - n0, l = Math.hypot(dx, dn), px = -dn / l * w / 2, pn = dx / l * w / 2, ns = Math.max(1, Math.ceil(l / 80));
@@ -220,8 +235,8 @@ function ksc39Hardstand(k, h, glow) {
   for (const sd of [-1, 1]) { const e0 = sd * (tw + 1), e1 = sd * (tw + 13); k.quads(M.rock, [[PV(e0, h + 0.05, -D), PV(e1, h + 0.05, -D), PV(e1, 0.05, -D - rl), PV(e0, 0.05, -D - rl)]]); }
 }
 // the land round Pads 39A and 39B: the Atlantic 400 m to the east, the crawlerway from the foot of the ramp south and then
-// west toward the Vehicle Assembly Building
-const KSC_GROUND = h => ({ sea: 75, shore: 420, roads: [[0, -59.5 - 2.5 * h - h / 0.05, 0, -560, 40], [0, -560, -2200, -560, 40]] });
+// west toward the Vehicle Assembly Building; out to 7 km, past the ground observer (6 km south-southwest)
+const KSC_GROUND = h => ({ r: 7000, sea: 75, shore: 420, roads: [[0, -59.5 - 2.5 * h - h / 0.05, 0, -560, 40], [0, -560, -5000, -560, 40]] });
 // ---------------- Apollo: Mobile Launcher with its Launch Umbilical Tower on Pad 39A ----------------
 // The launcher's base 48.8 m (north–south) × 41.1 m × 7.6 m on six 6.7-m pedestals, its deck 14.3 m above the pad, with a
 // 13.7-m square opening for the exhaust; the red umbilical tower, 12.2 m square, rises 115.8 m from the deck at the north

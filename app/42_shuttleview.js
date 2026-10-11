@@ -26,6 +26,48 @@ function shuttlePrep(md) {
   md.shPrep = { h, phi0, deorbit, rwy: RUNWAYS[md.cfg.runway] || null, tHU: md.cfg.headsUpMET ? t0 + md.cfg.headsUpMET : null, t0, tSep };
   return md.shPrep;
 }
+// At tank separation the vehicle stops being drawn as the stack, which stands ahead of its state (the state is its base),
+// and the orbiter (centred on its state) and the tank are drawn on their own. Each starts where it was drawn in the stack
+// and lets that offset go: the part they share over a few seconds, the rest (how far the tank's own state is from where
+// it sat in the stack) over a minute or two, so neither jumps and they do not slide against each other.
+// Returns the offset along the model's axes (model units), or null.
+const SH_SEP_TAU = 12, SH_SEP_DRIFT = 60; // s
+const _vSep = new THREE.Vector3(), _qSep = new THREE.Quaternion();
+function shuttleSepShift(c, t, cfgL, model, s) {
+  const md = MV.md; if (!md || !isShuttle(md) || s.surface || s.pad) return null;
+  const orb = c.o.id === 'ship' && cfgL && cfgL.key === 'sc' && cfgL.sc === 'shuttle', tank = c.o.id === 'et';
+  if (!orb && !tank) return null;
+  const P = shuttlePrep(md); if (!P) return null;
+  const dt = t - P.tSep; if (dt < 0 || dt > 8 * SH_SEP_DRIFT) return null;
+  if (c.sepFor !== P) { c.sepFor = P; c.sepW = shuttleSepWorld(c, P, model); }
+  const W = c.sepW; if (!W) return null;
+  const fo = Math.exp(-dt / SH_SEP_TAU), fr = Math.exp(-dt / SH_SEP_DRIFT);
+  _vSep.set(W[0] * fo + W[3] * fr, W[1] * fo + W[4] * fr, W[2] * fo + W[5] * fr).applyQuaternion(_qSep.copy(c.node.quaternion).invert());
+  return [_vSep.x, _vSep.y, _vSep.z];
+}
+// the offsets at separation, in the scene's axes: [shared part, the tank's remainder]
+function shuttleSepWorld(c, P, model) {
+  const ship = craftById('ship'), tB = P.tSep - 0.05, cfgS = ship && cfgAt(ship, tB); if (!cfgS || cfgS.key !== 'launch') return null;
+  const tmp = { ...ship }; computeCraft(tmp, tB); if (!tmp.s) return null;
+  const sm = craftModel(ship, cfgS), A = anchorY(ship, cfgS, sm, tmp.s) + stagingShift(ship, tB, cfgS, sm, tmp.s) - sm.userData.yc; // the stack's own origin (the tank's) along its axis
+  const qS = craftAttitude(tmp, tmp.s, tB, cfgS, activeMounts(tmp, tmp.s, tB, cfgS, sm), new THREE.Quaternion());
+  const rot = v => new THREE.Vector3(v[0], v[1], v[2]).applyQuaternion(qS).toArray();
+  // the orbiter: its reference point in the stack less where its own model puts it (the model is the stack's turned half
+  // round about Y, which moves neither the origin nor the axis)
+  const ycO = craftModel(ship, cfgAt(ship, P.tSep + 1)).userData.yc, So = rot([0, A + SH_STACK.orbY + ycO, SH_STACK.orbZ]);
+  if (c.o.id === 'ship') return [...So, 0, 0, 0];
+  // the tank: its origin in the stack less where its own state and model put it (it leaves with the stack's attitude)
+  const tA = P.tSep + 0.001, a = { ...ship }, b = { ...c }; computeCraft(a, tA); computeCraft(b, tA); if (!a.P || !b.P) return null;
+  const k = 1 / (c.node.scale.x || 0.001), d = vsub(a.P, b.P), r = rot([0, A - (model.position.y - model.userData.yc), 0]);
+  const Se = [d[0] * k + r[0], d[1] * k + r[1], d[2] * k + r[2]];
+  return [...So, Se[0] - So[0], Se[1] - So[1], Se[2] - So[2]];
+}
+// the orbiter sits in the stack model turned half round about its long axis (buildShuttleStack): going between the two
+// models, its eased attitude takes the half turn too instead of rolling over on screen
+function shuttleHalfTurn(c, a, b) {
+  const st = x => x && x.key === 'launch', ob = x => x && x.key === 'sc' && x.sc === 'shuttle';
+  return c.o.model === 'shuttle' && ((st(a) && ob(b)) || (ob(a) && st(b)));
+}
 function runwayDir(rwy, rD, t) { const lf = localFrame('earth', rD, t), a = rwy.hdg * DEG; return vunit(vadd(vscale(lf.north, Math.cos(a)), vscale(lf.east, Math.sin(a)))); }
 // attitude {nose, roll, spin (about the nose), pitch (about the wings)} or null for the generic rules
 function shuttleAttitude(c, s, t, cfgL) {

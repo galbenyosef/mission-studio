@@ -63,6 +63,7 @@ function cfgAt(c, t) { const x = c.o.configAt(t); if (x) return x.label; return 
 
 // ---------------- crafts ----------------
 const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _axTumble = new THREE.Vector3(0.3, 0.2, 1).normalize();
+const _qHalfY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 function basisQuat(nose, upRef, q) {
   const Y = new THREE.Vector3(nose[0], nose[1], nose[2]).normalize();
   let U = new THREE.Vector3(upRef[0], upRef[1], upRef[2]);
@@ -224,7 +225,8 @@ function updateCraft(c, t, camPos) {
   if (key !== c.curKey) {
     const m = craftModel(c, cfgL);
     if (c.cur) c.node.remove(c.cur);
-    c.node.add(m); c.cur = m; c.curKey = key;
+    if (c.cur && c.qInit && shuttleHalfTurn(c, c.curCfg, cfgL)) c.q.multiply(_qHalfY);
+    c.node.add(m); c.cur = m; c.curKey = key; c.curCfg = cfgL;
   }
   const model = c.cur;
   const act = activeMounts(c, s, t, cfgL, model);
@@ -246,7 +248,8 @@ function updateCraft(c, t, camPos) {
   model.position.z = 0;
   if (c.o.model === 'shuttle' && cfgL && cfgL.key === 'sc') { model.position.y = 0; if (s.surface) { model.position.y = SH_STAND_H * Math.sin(SH_STANCE); model.position.z = SH_STAND_H * Math.cos(SH_STANCE); } } // standing on its wheels, nose down
   else model.position.y = anchorY(c, cfgL, model, s) + stagingShift(c, t, cfgL, model, s);
-  c.yOff = model.position.y;
+  const so = shuttleSepShift(c, t, cfgL, model, s); if (so) { model.position.y += so[1]; model.position.z += so[2]; }
+  c.yOff = model.position.y; c.zOff = model.position.z;
   if (ud.wheels && ud.wheels.length) { const wo = s.rover ? s.rover.wodo : 0; for (const w of ud.wheels) w.rotation.x = -wo / w.userData.wheel; }
   if (ud.animate) ud.animate(t); // parts in motion on their own timeline (the Shuttle's bay doors and robot arm, Hubble's door)
   // plumes
@@ -335,7 +338,7 @@ function updatePlumes(c, s, t, act, model) {
       const r0 = m.r * 0.85, len = Math.max(Lsl * (1 + PLUME.grow * vac * vac + 0.25 * bal), m.r * 1.5);
       shapePlume(p, r0, Math.max(r0 * g1, r0 + (0.06 + 0.12 * vac) * Lsl), len);
       const yc = model.userData.yc || 0;
-      p.position.set(m.x || 0, m.y - yc + (c.yOff || 0), m.z || 0);
+      p.position.set(m.x || 0, m.y - yc + (c.yOff || 0), (m.z || 0) + (c.zOff || 0));
       p.rotation.set(m.flip ? Math.PI : 0, 0, 0);
       const u = p.material.uniforms; u.uColor.value.set(colr); u.uCore.value.set(look[2]);
       u.uI.value = look[0] * (0.35 + 0.65 * (1 - vac * 0.6)) * thr * Math.pow(g0 / g1, 0.7); u.uDiam.value = look[1] * (1 - vac); u.uTime.value = performance.now() / 1000;
