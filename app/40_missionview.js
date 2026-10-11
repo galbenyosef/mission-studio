@@ -229,8 +229,12 @@ function updateCraft(c, t, camPos) {
   const act = activeMounts(c, s, t, cfgL, model);
   craftAttitude(c, s, t, cfgL, act, _q1);
   const realDt = MV.realDt || 0.016; const jump = Math.abs(t - (c.lastT ?? t)) > Math.max(30, (MV.rate || 1) * 0.5) || !c.qInit;
+  // On the ground, ease relative to the turning planet: carry last frame's attitude round with it first. Easing in
+  // inertial space lets the model trail the planet's spin, and under a fast time-warp (a frame can be most of a sol)
+  // a lander standing still would lean and tumble end over end.
+  if (!jump && s.surface && c.qGround === s.ref && t !== c.lastT) { bodyQuat(s.ref, c.lastT, _q2).invert(); c.q.premultiply(_q2).premultiply(bodyQuat(s.ref, t, _q2)); }
   if (jump) c.q.copy(_q1); else c.q.slerp(_q1, 1 - Math.exp(-realDt * 5));
-  c.qInit = true; c.lastT = t;
+  c.qInit = true; c.lastT = t; c.qGround = s.surface ? s.ref : null;
   c.node.quaternion.copy(c.q);
   // scale: metres → km; optionally enlarge distant craft
   const dist = Math.max(1e-9, camPos.distanceTo(c.node.position));

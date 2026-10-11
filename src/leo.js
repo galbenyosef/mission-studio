@@ -490,7 +490,8 @@ function shuttleApproach(start, rwy, opt) {
   const samples = [], events = [];
   const at = tq => { // state on the path at time tq (s after TAEM)
     if (tq >= tTD) { let k = roll.findIndex(r => r.t >= tq); if (k < 0) k = roll.length - 1; const r = roll[k], x0 = r.x; return { x: x0, y: 0, h: gearH, v: r.v, seg: 'roll', dir: [1, 0], vh: 0, kap: 0 }; }
-    let j = P.findIndex(p => p.t >= tq); if (j <= 0) j = 1; const a = P[j - 1], b = P[j], w = clamp((tq - a.t) / Math.max(b.t - a.t, 1e-6), 0, 1);
+    let j = P.findIndex(p => p.t >= tq); if (j < 0) j = P.length - 1; if (j < 1) j = 1; // past the last approach point (touchdown is 0.2 s later): hold it, not the start of TAEM
+    const a = P[j - 1], b = P[j], w = clamp((tq - a.t) / Math.max(b.t - a.t, 1e-6), 0, 1);
     const dl = Math.hypot(b.x - a.x, b.y - a.y) || 1e-9;
     return { x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w, h: a.h + (b.h - a.h) * w, v: a.v + (b.v - a.v) * w, seg: w < 0.5 ? a.seg : b.seg, dir: [(b.x - a.x) / dl, (b.y - a.y) / dl], vh: (b.h - a.h) * 1000 / Math.max(b.t - a.t, 1e-6), kap: curv(j) };
   };

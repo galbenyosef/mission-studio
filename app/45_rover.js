@@ -77,7 +77,7 @@ function groundCraft(c, s, t) {
     s.rover = p; s.extra = { ...(s.extra || {}), phase: p.driving ? (p.kind === 'turn' ? 'driving — turning in place' : 'driving') : 'on surface' };
   } else dLoc = vunit(eclToMesh(body, s.r, t));
   const hit = capHitLocal(body, dLoc);
-  const rad = hit ? Math.hypot(hit[0], hit[1], hit[2]) * b.R : vnorm(s.r);
+  const rad = runwayRadius(body, dLoc) || (hit ? Math.hypot(hit[0], hit[1], hit[2]) * b.R : vnorm(s.r)); // a runway is drawn above the patch's facets
   const up = meshToEcl(body, dLoc, t);
   s.r = vscale(up, rad + 0.00002); // 2 cm: wheels and footpads touch the drawn ground
   const w = bodyOmegaEcl(body, t); s.v = vcross(w, s.r);

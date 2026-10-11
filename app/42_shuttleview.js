@@ -75,8 +75,20 @@ function shuttleGround(c, s, t) {
   const P = shuttlePrep(MV.md); if (!P || !P.rwy || s.surface) return;
   const cf = c.o.configAt(t), lab = cf && cf.label; if (!lab || !lab.gear) return;
   const Rr = R_E + P.rwy.elev, h = vnorm(s.r) - Rr; if (h > 0.015) return;
-  const al = ((s.extra && s.extra.alpha) || 0) * DEG, hMin = (-SH_MAIN_GEAR[0] * Math.sin(al) - SH_MAIN_GEAR[1] * Math.cos(al)) / 1000;
-  if (h < hMin) s.r = vscale(s.r, (Rr + hMin) / vnorm(s.r));
+  const al = ((s.extra && s.extra.alpha) || 0) * DEG, hMin = (-SH_MAIN_GEAR[0] * Math.sin(al) - SH_MAIN_GEAR[1] * Math.cos(al)) / 1000 + SH_RWY_TOP + 0.00002;
+  if (h < hMin) s.r = vscale(s.r, (Rr + hMin) / vnorm(s.r)); // tyres 2 cm above the paint, as standing craft are
+}
+// The runway is drawn on the true sphere, SH_RWY_TOP above its elevation, while the surface patch under it is made of flat
+// facets that sag up to ~0.7 m below the sphere between their corners. Radius (km) of the drawn runway under a direction
+// in the planet's mesh frame, or null off the runway: what an orbiter standing on it rests on.
+const SH_RWY_TOP = 0.00003;
+function runwayRadius(body, dLoc) {
+  const rw = SHV.rwy; if (!rw || body !== 'earth') return null;
+  const b = R.bodies.earth, C = meshDir(rw.lat, rw.lon), { E, N } = meshEN(rw.lat, rw.lon), hd = rw.hdg * DEG;
+  const f = vadd(vscale(E, Math.sin(hd)), vscale(N, Math.cos(hd))), l = vcross(C, f), d = vsub(dLoc, C);
+  const x = vdot(d, f) * b.R, y = vdot(d, l) * b.R; // km along the runway from its threshold, and across
+  if (x < -0.1 || x > rw.len + 0.1 || Math.abs(y) > rw.wid / 2 + 0.05) return null;
+  return b.R + rw.elev + SH_RWY_TOP;
 }
 // ---------------- the runway ----------------
 function runwayTexture(rw) {
@@ -99,7 +111,7 @@ function runwayTexture(rw) {
 function buildRunway(md) {
   disposeRunway();
   const rw = md.cfg.runway && RUNWAYS[md.cfg.runway]; if (!rw) return;
-  const b = R.bodies.earth, Rm = (b.R + rw.elev) * 1000 + 0.03; // m, a few centimetres above the drawn ground
+  const b = R.bodies.earth, Rm = (b.R + rw.elev + SH_RWY_TOP) * 1000; // m, a few centimetres above the sphere
   const C = meshDir(rw.lat, rw.lon), { E, N } = meshEN(rw.lat, rw.lon), hd = rw.hdg * DEG;
   const f = vadd(vscale(E, Math.sin(hd)), vscale(N, Math.cos(hd))), l = vcross(C, f);
   const L = rw.len * 1000, Wd = rw.wid * 1000, nL = 64;
