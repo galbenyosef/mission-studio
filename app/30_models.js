@@ -148,6 +148,7 @@ function preloadDetailedModels(md) {
     if ((sc === 'apollo' || sc === 'apolloCSM') && parts.some(p => p === 'lander' || p === 'descent' || p === 'ascent')) want.add('apollo_lm');
     if (sc === 'msl' && parts.includes('lander')) want.add('perseverance');
     if (o.model === 'shuttle') want.add('orbiter');
+    if (o.model === 'iss') want.add('iss');
   }
   for (const n of want) detailFile(n);
 }

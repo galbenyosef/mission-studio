@@ -266,10 +266,23 @@ function buildShuttleStack(L, c) {
   g.userData = { len: 46.9, mounts };
   return g;
 }
-// International Space Station (July 2011, simplified). Axes: +Y forward (direction of flight), +Z zenith, X along the
-// main truss (+X starboard). Origin near the centre of mass; the docking port (PMA-2 on Harmony) faces +Y.
+// International Space Station as in July 2011. Axes: +Y forward (direction of flight), +Z zenith, X along the main truss
+// (+X starboard). The docking port (PMA-2 on Harmony) faces +Y at ISS_DOCK; the origin is 21.5 m behind it on the axis of
+// the US modules. Drawn with NASA's model (assets/iss.glb: the IGOAL lab's model set back to 2011 by tools/models); the
+// built-in one below stands in while it loads.
 const ISS_DOCK = [0, 21.5, 0]; // m, PMA-2 docking interface
 function issModel(flags = {}) {
+  return detailPart('iss', 'iss', issBuiltIn(flags), { extra: g => { if (flags.mplm) g.add(issMplm()); } });
+}
+// the logistics module (Raffaello on STS-135) on Harmony's nadir port
+function issMplm() {
+  const g = new THREE.Group(), m = mat('#e7e5df', 'paint');
+  const c = cyl(2.25, 2.25, 4.9, m, 32); c.position.y = -4.9 / 2; g.add(c);
+  const a = cyl(2.25, 1.1, 0.8, mat('#d5d3cc', 'paint'), 32); a.position.y = 2.45; g.add(a); // the berthing end, up against Harmony
+  const b = cyl(1.6, 2.25, 0.6, mat('#d5d3cc', 'paint'), 32); b.position.y = -3.05; g.add(b);
+  g.rotation.x = Math.PI / 2; g.position.set(0, 15.0, -2.2 - 3.25); return g;
+}
+function issBuiltIn(flags = {}) {
   const g = new THREE.Group(), white = mat('#e9e8e3', 'paint'), metal = mat('#b8bcc1', 'metal'), arr = mat('#a77a3a', 'solar'), rad = mat('#f2f2ee', 'paint', { side: THREE.DoubleSide });
   const yT = 7.3; // the integrated truss sits on top of the Destiny laboratory
   const T = new THREE.Mesh(new THREE.BoxGeometry(109, 3.6, 3.6), metal); T.position.set(0, yT, 5.6); g.add(T);

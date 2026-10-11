@@ -24,7 +24,7 @@
 //   node frame.mjs <file.gltf>                           → a model's principal axes, to find a scan's own frame
 import { NodeIO, getBounds } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { transformMesh, prune, dedup, joinPrimitives, weld, meshopt, simplifyPrimitive, textureCompress } from '@gltf-transform/functions';
+import { transformMesh, prune, dedup, joinPrimitives, weld, meshopt, simplifyPrimitive, textureCompress, compactPrimitive } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 import draco3d from 'draco3dgltf';
 import sharp from 'sharp';
@@ -102,6 +102,29 @@ const RECIPES = {
     simplify: 0.001, // 3.7 cm on the body
     textures: { baseColor: 2048, other: 1024 }, // the colour map at 2048 px; the normal and occlusion-roughness-metalness maps at 1024
   },
+  // International Space Station: NASA's model by the IGOAL lab at Johnson Space Center (NASA 3D Resources), as it flies
+  // today, set back to July 2011 (STS-135): without Nauka, Prichal, the iROSA arrays, BEAM, the Bishop airlock, the two
+  // docking adapters and Bartolomeo, and with PMA-3 removed (in 2011 it sat on Tranquility, not on Harmony).
+  // The file's root scales by −0.003, a point reflection: undone, its axes are +x forward, +y nadir, −z starboard.
+  // Frame (the app's station axes, metres): +Y forward (the direction of flight), +Z zenith, +X starboard, at 10.85 m per
+  // unit of the file's scene (the truss from tip to tip 109 m), then shifted so that PMA-2's docking face is at
+  // (0, 21.5, 0), the app's docking port.
+  iss: {
+    nasa: '3D Models/International Space Station (ISS) (D) (IGOAL)/International Space Station (ISS).glb',
+    assembly: true,
+    drop: [/^MLM$/, /^Russian_RSNode_DockingModule$/, /^BEAM$/, /^Bishop_Airlock$/, /^PMA3$/, /IROSA/i, /^IDA[23]/, /BARTOLOMEO/i, /GITAI/i, /ColKa/i, /STP-H/i, /SAGE/i],
+    frame: (S => [0, -S, 0, 0, 0, 0, S, 0, S, 0, 0, 0, 0, 0, 0, 1])(10.85),
+    anchor: { node: 'PMA2', at: [0, 21.5, 0] }, // the forward face of PMA-2 (its centre)
+    minSize: 0.3, // m: handrails, bolts and other pieces too small to see
+    simplify: 0.15, // m
+    simplifyNear: [/^(Node2|PMA2|USLab|Node1|Columbus|JEM_PM|JEM_PS|Cupola|Node3|PMM)$/, 0.03], // the modules a docking orbiter sees from close by
+    spare: /^[SP][46]_(\d[AB]_Array|Array_\d[AB])$|Radiator$/, // the solar array blankets (S6_1B_Array, P4_Array_4A …) and the radiators: flat textured panels the simplifier would smear
+    // the source's materials come from Unity (metallic-smoothness maps read as glTF's metallic-roughness turn the arrays into
+    // mirrors, and most are alpha-blended): painted metal and blankets, no metallic maps, alpha as a cut-out
+    pbr: { metal: 0.15, rough: 0.62, dropMetalRough: true, alpha: 'MASK', cutoff: 0.95 }, // translucent glare layers (over the array cells) go; solid stays
+    keepSides: true, // the blankets' two faces are separate surfaces: drawn double-sided they fight
+    textures: { baseColor: 512, other: 256, named: { Truss_Diffuse: 2048 } }, // the truss atlas holds the arrays' cells
+  },
 };
 
 const args = process.argv.slice(2), opt = k => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
@@ -118,6 +141,7 @@ for (const name of names.length ? names : Object.keys(RECIPES)) {
   const kind = R.nasa ? 'nasa' : 'dl', dir = SRC[kind];
   if (!dir) { if (names.length) throw new Error(`${name}: needs --${kind}`); console.log(`${name}: skipped (no --${kind})`); continue; }
   const doc = await io.read(path.join(dir, R.nasa || R.dl)), root = doc.getRoot(), scene = root.listScenes()[0];
+  if (R.assembly) { await buildAssembly(name, R, doc); continue; }
   if (R.frame) { await buildScan(name, R, doc); continue; }
   // drop the source's compression (the output is compressed again with meshopt) and the material extensions not wanted
   for (const e of root.listExtensionsUsed()) if (e.extensionName === 'KHR_draco_mesh_compression' || (R.strip || []).includes(e.extensionName)) e.dispose();
@@ -205,6 +229,84 @@ for (const name of names.length ? names : Object.keys(RECIPES)) {
   console.log(`${name}: ${(fs.statSync(out).size / 1024).toFixed(0)} KB, parts ${Object.keys(groups).join(' ')}, ${prims} draw calls, ${tri} triangles, ${root.listTextures().length} textures, ${dropped} parts dropped → ${path.relative(process.cwd(), out)}`);
 }
 
+// A large assembly kept whole (one part, one primitive per material): drop the subtrees R.drop names, bake the rest into the
+// vehicle's frame (R.frame, column-major, from the file's world frame), shift it so that R.anchor.node's forward (+Y) face
+// lands on R.anchor.at, join by material, simplify, shrink the textures, compress.
+async function buildAssembly(name, R, doc) {
+  const root = doc.getRoot(), scene = root.listScenes()[0];
+  for (const e of root.listExtensionsUsed()) if (e.extensionName === 'KHR_draco_mesh_compression') e.dispose(); // compressed again with meshopt
+  for (const a of root.listAnimations()) a.dispose();
+  for (const k of root.listSkins()) k.dispose();
+  let dropped = 0;
+  for (const n of root.listNodes()) if (n.getName() && R.drop.some(re => re.test(n.getName()))) { const kill = x => { x.listChildren().forEach(kill); x.dispose(); dropped++; }; kill(n); }
+  const isUnder = (n, nm) => { for (let x = n; x; x = x.getParentNode()) if (x.getName() === nm) return true; return false; };
+  const meshes = root.listNodes().filter(n => n.getMesh());
+  const P = [0, 0, 0];
+  let fy = -Infinity; const face = [];
+  for (const n of meshes) {
+    ownMesh(n, root);
+    transformMesh(n.getMesh(), mul(R.frame, n.getWorldMatrix()));
+    if (R.anchor && isUnder(n, R.anchor.node)) for (const p of n.getMesh().listPrimitives()) { const a = p.getAttribute('POSITION'); for (let i = 0; i < a.getCount(); i++) { a.getElement(i, P); face.push([...P]); if (P[1] > fy) fy = P[1]; } }
+  }
+  let shift = [0, 0, 0];
+  if (R.anchor) { const ring = face.filter(q => q[1] > fy - 0.05); const c = [0, 2].map(k => (ring.reduce((a, q) => Math.min(a, q[k]), 1e9) + ring.reduce((a, q) => Math.max(a, q[k]), -1e9)) / 2);
+    shift = [R.anchor.at[0] - c[0], R.anchor.at[1] - fy, R.anchor.at[2] - c[1]]; console.log(`${name}: ${R.anchor.node}'s face at x ${c[0].toFixed(2)} y ${fy.toFixed(2)} z ${c[1].toFixed(2)} → shift ${shift.map(v => v.toFixed(2)).join(' ')}`); }
+  const byMat = new Map(); let small = 0, before = 0, after = 0;
+  for (const n of meshes) for (const p of n.getMesh().listPrimitives()) {
+    if (R.minSize) { const a = p.getAttribute('POSITION'), lo = a.getMin([]), hi = a.getMax([]); if (Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) < R.minSize) { small++; continue; } }
+    for (const s of p.listSemantics()) if (!['POSITION', 'NORMAL', 'TEXCOORD_0'].includes(s)) p.setAttribute(s, null);
+    const m = p.getMaterial(), textured = m && (m.getBaseColorTexture() || m.getNormalTexture() || m.getMetallicRoughnessTexture() || m.getOcclusionTexture() || m.getEmissiveTexture());
+    if (!p.getAttribute('NORMAL') || (textured && !p.getAttribute('TEXCOORD_0'))) continue;
+    if (!textured) p.setAttribute('TEXCOORD_0', null);
+    const spared = R.spare && R.spare.test(n.getName());
+    const err = (R.simplifyNear && (() => { for (let x = n; x; x = x.getParentNode()) if (R.simplifyNear[0].test(x.getName())) return R.simplifyNear[1]; })()) || R.simplify;
+    if (R.simplify && !spared) { before += p.getIndices().getCount() / 3; simplifyLoose(p, err); after += p.getIndices().getCount() / 3; if (!p.getIndices().getCount()) continue; } // pruned away whole
+    const k = m || 'none'; if (!byMat.has(k)) byMat.set(k, []); byMat.get(k).push(p);
+  }
+  if (R.simplify) console.log(`${name}: simplified ${before} → ${after} triangles (meshes named ${R.spare} kept whole)`);
+  const mesh = doc.createMesh(name);
+  for (const [m, prims] of byMat) { const j = joinPrimitives(prims); if (m !== 'none') j.setMaterial(m); mesh.addPrimitive(j); }
+  transformMesh(mesh, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, ...shift, 1]);
+  for (const c of scene.listChildren()) scene.removeChild(c);
+  const g = doc.createNode(name); g.addChild(doc.createNode(name + '-mesh').setMesh(mesh)); scene.addChild(g);
+  for (const n of root.listNodes()) if (n !== g && n.getParentNode() !== g) n.dispose();
+  await doc.transform(prune({ keepLeaves: false })); // (no weld: on tiled texture coordinates its tolerance merges distinct ones)
+
+  for (const m of root.listMaterials()) {
+    if (!R.keepSides) m.setDoubleSided(true);
+    if (R.pbr) { m.setMetallicFactor(R.pbr.metal).setRoughnessFactor(R.pbr.rough); if (R.pbr.dropMetalRough) m.setMetallicRoughnessTexture(null);
+      if (R.pbr.alpha && m.getAlphaMode() === 'BLEND') m.setAlphaMode(R.pbr.alpha).setAlphaCutoff(R.pbr.cutoff ?? 0.5); }
+  }
+  for (const t of root.listTextures()) if (t.getMimeType() === 'image/png' && root.listTextures().some(u => u !== t && u.getName() === t.getName() && u.getMimeType() === 'image/webp')) t.dispose(); // the PNG copies kept for viewers without WebP
+  await shrinkTextures(doc, R.textures);
+  await doc.transform(prune(), dedup(), meshopt({ encoder: MeshoptEncoder, level: R.compress || 'medium' }));
+  const out = path.join(OUT, name + '.glb');
+  await io.write(out, doc);
+  const tri = mesh.listPrimitives().reduce((s, p) => s + p.getIndices().getCount() / 3, 0);
+  const b = getBounds(scene);
+  console.log(`${name}: ${(fs.statSync(out).size / 1024).toFixed(0)} KB, ${tri} triangles, ${mesh.listPrimitives().length} draw calls, ${root.listTextures().length} textures, ${dropped} nodes dropped, ${small} small pieces dropped, bounds ${b.min.map(v => v.toFixed(1)).join(' ')} → ${b.max.map(v => v.toFixed(1)).join(' ')} → ${path.relative(process.cwd(), out)}`);
+}
+
+// Give a node a mesh of its own, down to the vertex data: an instanced model (eight identical solar array wings) shares
+// meshes, primitives and accessors between nodes, and baking each node's transform into shared data would apply them all
+// on top of one another.
+function ownMesh(n, root) {
+  const shared = x => x.listParents().filter(p => p !== root).length > 1;
+  let mesh = n.getMesh(); if (shared(mesh)) { mesh = mesh.clone(); n.setMesh(mesh); }
+  for (const p0 of mesh.listPrimitives()) {
+    const p = shared(p0) ? p0.clone() : p0; if (p !== p0) mesh.removePrimitive(p0).addPrimitive(p);
+    for (const s of p.listSemantics()) { const a = p.getAttribute(s); if (shared(a)) p.setAttribute(s, a.clone()); }
+    const ix = p.getIndices(); if (ix && shared(ix)) p.setIndices(ix.clone());
+  }
+}
+// Simplify a primitive to an absolute error (m), across attribute seams, dropping loose pieces smaller than the error. CAD-style
+// meshes are mostly separate faces (hard edges, a UV island each), which the simplifier otherwise cannot touch.
+function simplifyLoose(prim, err) {
+  const pos = prim.getAttribute('POSITION'), P = pos.getArray(), idx = prim.getIndices(); if (!idx || idx.getCount() < 3) return;
+  const F = P instanceof Float32Array ? P : Float32Array.from(P), I = Uint32Array.from(idx.getArray());
+  const [out] = MeshoptSimplifier.simplify(I, F, 3, 0, err, ['Permissive', 'Prune', 'ErrorAbsolute']);
+  idx.setArray(out.length > 65535 * 3 || pos.getCount() > 65535 ? out : new Uint32Array(out)); compactPrimitive(prim);
+}
 // A scan or any single-mesh model: bake it into the vehicle's frame (R.frame, world → vehicle, column-major), cut its
 // triangles into parts by where they lie (R.triPart), put each part's origin at its pivot (R.pivots), give listed parts an
 // inner face of their own (R.inner: a thin shell such as a door seen from inside), simplify, shrink the textures, compress.
@@ -219,7 +321,7 @@ async function buildScan(name, R, doc) {
   const sel = {}, A = [0, 0, 0], B = [0, 0, 0], C = [0, 0, 0];
   for (const n of root.listNodes()) {
     const mesh = n.getMesh(); if (!mesh) continue;
-    if (mesh.listParents().filter(x => x !== root).length > 1) n.setMesh(mesh.clone());
+    ownMesh(n, root);
     transformMesh(n.getMesh(), mul(R.frame, n.getWorldMatrix()));
     for (const p of n.getMesh().listPrimitives()) {
       for (const s of p.listSemantics()) if (!['POSITION', 'NORMAL', 'TEXCOORD_0'].includes(s)) p.setAttribute(s, null);
@@ -268,7 +370,10 @@ async function shrinkTextures(doc, size) {
   if (!size) return;
   const q = 82, enc = (slots, px) => textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [px, px], quality: q, slots });
   if (typeof size === 'number') return doc.transform(enc(null, size));
-  await doc.transform(enc(/baseColor/, size.baseColor), enc(/^(?!baseColor)/, size.other));
+  const named = Object.keys(size.named || {}), rest = named.length ? new RegExp('^(?!(' + named.join('|') + ')$)') : null;
+  for (const n of named) await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [size.named[n], size.named[n]], quality: q, pattern: new RegExp('^' + n + '$') }));
+  await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [size.baseColor, size.baseColor], quality: q, slots: /baseColor/, pattern: rest }),
+    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [size.other, size.other], quality: q, slots: /^(?!baseColor)/, pattern: rest }));
 }
 // Splits a node's mesh by triangle into clusters around the seeds ([x, z] in world space, refined by k-means): one new
 // node per cluster with only the vertices its triangles use, carrying the source node's world transform.
