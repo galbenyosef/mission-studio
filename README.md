@@ -21,6 +21,7 @@
   - the launch pads as they stood on each launch day: Launch Complex 39A and 39B with their Apollo, Shuttle, Artemis and Falcon Heavy towers, the swing arms pulling away, and SLC-41, LC-12, Wenchang and Starbase
   - liquid engines lighting on the pad before T−0 and the hold-down release
   - the ascent, with the Saturn V's roll program, staging and fairing jettison
+  - the exhaust in the air: the plume swelling as the air thins, and the trail left through the atmosphere, which spreads, drifts and twists on the winds and fades over half an hour. Sunlight reaches it through the air, red at dawn and dusk; after sunset the exhaust high up is still in sunlight and glows against the night sky (the "twilight phenomenon")
   - the parking orbit and the transfer burns
   - flybys and gravity assists
   - entry, parachutes and the sky crane
@@ -96,6 +97,7 @@ Each flight is calculated from physics, not keyframed. The planner solves the mi
   - Starship enters belly-first, then lights its engines as late as it can and flips upright onto them. On Mars the thin air leaves it still moving at several times the speed of sound, so it brakes tail-first into the airflow (supersonic retropropulsion) before the flip.
   - Powered descent uses ZEM/ZEV guidance.
 - **Propellant.** It is tracked with the rocket equation, stage by stage, so the Δv budget always adds up.
+- **Exhaust in the air.** The trail's thickness follows the propellant each stage burns per metre of path (solid boosters leave the most smoke, hydrogen engines the least), its spread the thinning air, and its drift a wind profile drawn for the launch: the jet stream, and winds turning with height higher up. Each part of it is lit by sunlight that has crossed the air on the way, so it reddens near the shadow of the Earth and is dark inside it.
 
 ### Accuracy
 

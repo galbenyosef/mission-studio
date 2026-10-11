@@ -85,7 +85,7 @@ function renderFrame(forCapture) {
   const camD = CAM.camDist || 1;
   if (md) {
     for (const c of MV.crafts) updateCraft(c, t, R.camera.position);
-    updatePad(t); updateRunway(t); updateTrails(t, R.O, camD); updateSmoke(t); updateShadows(t); updateTracks(t);
+    updatePad(t); updateRunway(t); updateTrails(t, R.O, camD); updateExhaust(t); updateShadows(t); updateTracks(t);
   }
   updateOrbits(t, MV.layers.orbits, Math.max(camD, R.camera.position.length()), MV.frame);
   // stars sit at infinity around the camera; dim them when a bright, sunlit body fills the frame
@@ -238,7 +238,7 @@ function onResize() {
 }
 // ---------------- boot ----------------
 function boot() {
-  initScene(); initBodyLabels(); initVectors(); initSmoke(); initCameraInput(); initTimeline(); initUI(); initMinimap(); initSound();
+  initScene(); initBodyLabels(); initVectors(); initExhaust(); initCameraInput(); initTimeline(); initUI(); initMinimap(); initSound();
   $('#app').classList.add('idle');
   onResize();
   STATE.idleT0 = dateToT(new Date());

@@ -63,6 +63,7 @@ void main() {
   col += vec3(1.0, 0.93, 0.80) * spec * 0.55;
   col = mix(col, vec3(0.92, 0.94, 0.97) * (0.012 + 1.05 * diff), cloud * 0.92);
   vec3 lights = pow(night, vec3(1.6)) * vec3(1.0, 0.78, 0.45) * 2.6 * uLights * (1.0 - dayMix) * (1.0 - cloud * 0.75);
+  lights *= smoothstep(5.0, 60.0, length(cameraPosition - vP)); // from close by, a town's glow is its separate lights, not a lit patch of ground
   col += lights;
   col += day * uFill * (1.0 - dayMix); // cinematic night fill near the camera: the ground stays readable after dark
   float mu = max(dot(N, V), 0.0);

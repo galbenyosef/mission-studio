@@ -134,6 +134,11 @@ function poseFor(mode, prm, P, t) {
     const D = vadd(vadd(vscale(Ld, Math.cos(prm.el) * Math.cos(prm.az)), vscale(u2, Math.cos(prm.el) * Math.sin(prm.az))), vscale(u3, Math.sin(prm.el)));
     return { pos: keepAboveGround(P, vscale(D, -dist), t), up: u3, look: vsub(PL, P), center: false };
   }
+  if (mode === 'site') { // a camera on the ground by the launch site, looking up at the target
+    const g = groundSite(t);
+    if (g) { const site = sitePosEcl(g.body, g.lat, g.lon, g.alt, t); return { pos: vsub(vadd(helio(g.body, t).r, site), P), up: localFrame(g.body, site, t).up, look: [0, 0, 0], center: false }; }
+    mode = 'chase';
+  }
   if (mode === 'from') { // a camera on another craft (the station's windows), looking at the target
     const fc = prm.from && craftById(prm.from.slice(4));
     if (fc && fc.P && fc.s) { const F = lvlh(fc.rD || fc.s.r, fc.vD || fc.s.v), off = prm.off || [0, 0, 0], pos = vadd(vsub(fc.P, P), fromLvlh(F, vscale(off, 0.001)));
@@ -194,6 +199,9 @@ function directorShot(c, t) {
     if (f) { shot.dist = f.dist; shot.aimH = f.aimH; }
     return shot;
   }
+  // Launched in twilight: once the vehicle climbs into sunlight over the dark ground, watch from the ground by the launch site
+  // as its exhaust lights up against the sky (app/47_exhaust.js)
+  if (c.o.id === 'ship' && t > md.M.t0 + 75 && t < tIns + 90 && twilightLaunch(md, c, t)) return { key: 'twilight', mode: 'site', az: 0, el: 0, dist: 1, lens: 20, label: 'Exhaust in sunlight over the dark ground', blend: 1 };
   if (c.o.id === 'ship' && t < tIns + 5) {
     let dist = L * (4.5 + 4 * Math.min(Math.max(alt, 0), 100) / 100); const el = 9 * DEG;
     // the camera looks at the engines, so the vehicle stands above the centre of the frame: back off far enough on wide screens to keep its nose below the top bar
@@ -217,6 +225,14 @@ function directorShot(c, t) {
   return { key: 'coast-' + look, mode: 'lookat', look: 'body:' + look, az: 7 * DEG, el: 4 * DEG, dist: Math.max(L * 4, 0.025), lens: 50, drift: 0.006, label: 'Coasting toward ' + BODIES[look].name };
 }
 // Space Shuttle: proximity operations seen from the station, the docked stack, the deploy, the glide to the runway
+// the ground at the launch site in twilight or darkness (the Sun more than 2° below the horizon) while the vehicle, high up, is
+// in sunlight
+function twilightLaunch(md, c, t) {
+  const S = LAUNCH_SITES[md.cfg.site]; if (!S || !c.s || c.dom !== 'earth' || !EXH.mesh) return false;
+  const E = helio('earth', t).r, sd = vunit(vscale(E, -1)), site = sitePosEcl('earth', S.lat, S.lon, 0, t);
+  if (Math.asin(clamp(vdot(vunit(site), sd), -1, 1)) * RAD > -2) return false;
+  const r = c.rD || c.s.r, L = exhSunlight(r[0], r[1], r[2], sd); return L[1] > 0.25;
+}
 function shuttleShot(c, t, s, ex, cfgL, L) {
   if (c.o.id !== 'ship' || !cfgL) return null;
   const ph = ex.phase || '', iss = craftById('iss');
@@ -312,7 +328,7 @@ function updateCamera(t, realDt) {
         else cam.quaternion.slerpQuaternions(DIR.blend.quat, qT, f);
       }
     }
-    CAM.camDist = DIR.prm.dist; return;
+    CAM.camDist = DIR.prm.mode === 'site' ? cam.position.length() : DIR.prm.dist; return;
   }
   const minD = rT > 0 ? rT * 1.003 + 0.002 : 0.004; dist = Math.max(dist, minD); if (!CAM.trans) CAM.dist = Math.max(CAM.dist, minD);
   const mode = CAM.mode === 'auto' ? 'chase' : CAM.mode;

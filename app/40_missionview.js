@@ -2,7 +2,7 @@
 // Mission view: craft nodes (models, plumes, chutes, plasma), trajectory
 // lines in selectable frames, labels, vectors, osculating orbit, surface caps.
 // ============================================================================
-const MV = { md: null, crafts: [], trails: [], caps: [], capInfo: [], frame: 'earth', frameSel: 'auto', layers: {}, labels: [], vecs: [], smoke: null, tNow: 0 };
+const MV = { md: null, crafts: [], trails: [], caps: [], capInfo: [], frame: 'earth', frameSel: 'auto', layers: {}, labels: [], vecs: [], tNow: 0 };
 const PROP_LOOK = { // plume look per propellant: [intensity, diamonds, core]
   kerolox: [1.25, 0.25, '#fff2c8'], solid: [1.5, 0.15, '#fffbe8'], hydrolox: [0.55, 0.9, '#e8f2ff'], methalox: [0.8, 0.6, '#eef0ff'],
   hypergolic: [0.5, 0.0, '#fff0dc'], udmh: [0.6, 0.1, '#fff0dc'], mmh: [0.45, 0.0, '#fff2e6'], hydrazine: [0.3, 0.0, '#f4f8ff'], xenon: [0.4, 0, '#e0e8ff'],
@@ -14,7 +14,7 @@ function clearMissionView() {
   for (const tr of MV.trails) tr.dispose();
   for (const cp of MV.caps) { cp.parent && cp.parent.remove(cp); cp.geometry.dispose(); }
   if (MV.pad) { R.scene.remove(MV.pad); disposeTree(MV.pad); MV.pad = null; }
-  disposeRunway();
+  disposeExhaust(); disposeRunway();
   MV.crafts = []; MV.trails = []; MV.caps = []; MV.capInfo = [];
 }
 function setupMissionView(md) {
@@ -39,6 +39,7 @@ function setupMissionView(md) {
   buildSurfaceCaps(md);
   buildTracks(md);
   buildPad(md);
+  buildExhaust(md); // the trail through the air after liftoff (app/47_exhaust.js)
   MV.frameBuilt = null;
 }
 function craftById(id) { return MV.crafts.find(c => c.o.id === id); }
@@ -283,7 +284,9 @@ function updateCraft(c, t, camPos) {
 // The visible flame of a rocket engine at sea level grows with the square root of the propellant it burns per second
 // (a nozzle's area scales with its flow): about 1.6 m per √(kg/s), so the Saturn V's five F-1s (13 t/s) trail a flame
 // longer than the rocket while a lunar module's descent engine (15 kg/s) shows a few metres. In thinning air the plume
-// lengthens and balloons out.
+// lengthens and balloons out; climbing through Earth's upper atmosphere it keeps swelling (the exhaust leaves the nozzles
+// at far more than the air's pressure and spreads until it matches it) into a glowing envelope many times the vehicle's
+// width, which fades above 100 km, where there is no air left for the exhaust to burn in.
 const PLUME = { k: 1.6, solid: 1.25, grow: 1.6 };
 const stageFlow = st => st.thrustVac / (st.ispVac * G0); // kg/s at full thrust
 function curveAt(curve, x) {
@@ -312,11 +315,13 @@ function mountFlow(c, s, t, m, act, cfgL) {
 function liftoffFlow(L) { return liftoffStages(L).reduce((a, st) => a + stageFlow(st), 0); }
 const blastScale = L => clamp(Math.sqrt(liftoffFlow(L) / 13000), 0.35, 1.35); // 1 for the Saturn V
 function updatePlumes(c, s, t, act, model) {
-  let i = 0;
+  let i = 0; c.flameLen = 0; c.flameLum = 0;
   if (act.length && s.T > 0) {
     const alt = vnorm(s.r) - surfaceRadius(s.ref);
     const pr = s.ref === 'earth' ? Math.exp(-Math.max(alt, 0) / 7.2) : s.ref === 'mars' ? 0.006 * Math.exp(-Math.max(alt, 0) / 11) : 0;
     const vac = 1 - Math.min(1, pr * 1.2);
+    const bal = s.ref === 'earth' ? Math.max(Math.min(Math.pow(1 / Math.max(pr, 1e-12), 0.3), 20) - 3.5, 0) * (1 - smoothstep((alt - 80) / 60)) : 0; // the envelope's swelling, 0 below 30 km
+    const g0 = 1.3 + 5.5 * vac, g1 = g0 + 1.5 * bal;
     const cfgL = cfgAt(c, t);
     for (const m of act) {
       if (i >= c.plumes.length) break;
@@ -327,13 +332,14 @@ function updatePlumes(c, s, t, act, model) {
       const p = c.plumes[i++]; p.visible = true;
       const mf = mountFlow(c, s, t, m, act, cfgL), thr = clamp(mf.f, s.pad ? 0.04 : 0.2, 1);
       const Lsl = PLUME.k * Math.sqrt(Math.max(mf.flow, 0)) * (prop === 'solid' ? PLUME.solid : 1); // m, at sea level
-      const r0 = m.r * 0.85, len = Math.max(Lsl * (1 + PLUME.grow * vac * vac), m.r * 1.5);
-      shapePlume(p, r0, Math.max(r0 * (1.3 + 5.5 * vac), r0 + (0.06 + 0.12 * vac) * Lsl), len);
+      const r0 = m.r * 0.85, len = Math.max(Lsl * (1 + PLUME.grow * vac * vac + 0.25 * bal), m.r * 1.5);
+      shapePlume(p, r0, Math.max(r0 * g1, r0 + (0.06 + 0.12 * vac) * Lsl), len);
       const yc = model.userData.yc || 0;
       p.position.set(m.x || 0, m.y - yc + (c.yOff || 0), m.z || 0);
       p.rotation.set(m.flip ? Math.PI : 0, 0, 0);
       const u = p.material.uniforms; u.uColor.value.set(colr); u.uCore.value.set(look[2]);
-      u.uI.value = look[0] * (0.35 + 0.65 * (1 - vac * 0.6)) * thr; u.uDiam.value = look[1] * (1 - vac); u.uTime.value = performance.now() / 1000;
+      u.uI.value = look[0] * (0.35 + 0.65 * (1 - vac * 0.6)) * thr * Math.pow(g0 / g1, 0.7); u.uDiam.value = look[1] * (1 - vac); u.uTime.value = performance.now() / 1000;
+      c.flameLen = Math.max(c.flameLen, len); c.flameLum = Math.max(c.flameLum, look[0] * thr * (1 - 0.7 * vac)); // for the smoke it lights (app/47_exhaust.js)
       const dl = 5 * m.r; u.uDF.value = 46 * len / dl; u.uDL.value = clamp(dl / len, 0.03, 1); // diamonds as before, within ~5 nozzle radii
       u.uCF.value = clamp(9 * m.r / len * (prop === 'solid' ? 1.8 : 1), 0.12, 0.45); // the white-hot core: a few nozzle diameters long
     }
@@ -842,47 +848,3 @@ function updateLabels(t, focus) {
   }
 }
 
-// ---------------- exhaust smoke (low-altitude ascent) ----------------
-const GLSL_SMOKE_V = `
-#include <common>
-#include <logdepthbuf_pars_vertex>
-attribute float aSize; attribute float aA; varying float vA; uniform float uPx;
-void main(){ vA = aA; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * mv; gl_PointSize = clamp(aSize * uPx / max(-mv.z, 1e-9), 1.0, 900.0);
-#include <logdepthbuf_vertex>
-}`;
-const GLSL_SMOKE_F = `
-#include <common>
-#include <logdepthbuf_pars_fragment>
-uniform vec3 uCol; varying float vA;
-void main(){
-  #include <logdepthbuf_fragment>
-  float d = length(gl_PointCoord - 0.5) * 2.0; float a = (1.0 - smoothstep(0.3, 1.0, d)) * vA; if (a < 0.01) discard;
-  gl_FragColor = vec4(uCol, a);
-}`;
-function initSmoke() {
-  const N = 90; const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * N), 3)); g.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(N), 1)); g.setAttribute('aA', new THREE.BufferAttribute(new Float32Array(N), 1));
-  const m = new THREE.ShaderMaterial({ vertexShader: GLSL_SMOKE_V, fragmentShader: GLSL_SMOKE_F, uniforms: { uPx: { value: 800 }, uCol: { value: new THREE.Color('#d9d4cc') } }, transparent: true, depthWrite: false });
-  MV.smoke = new THREE.Points(g, m); MV.smoke.frustumCulled = false; MV.smoke.renderOrder = 4; R.scene.add(MV.smoke);
-}
-function updateSmoke(t) {
-  const c = craftById('ship'); const sm = MV.smoke; if (!sm) return;
-  const md = MV.md; if (!c || !md || t < md.M.t0 || t > md.M.t0 + 260) { sm.visible = false; return; }
-  const L = md.L; const smoky = L.stages.some(s => (s.prop === 'kerolox' || s.prop === 'solid') && (s.parallel || L.stages.indexOf(s) === 0));
-  if (!smoky) { sm.visible = false; return; }
-  const pos = sm.geometry.attributes.position.array, size = sm.geometry.attributes.aSize.array, al = sm.geometry.attributes.aA.array; const O = R.O; const N = size.length;
-  let k = 0; const sK = 0.45 + 0.55 * blastScale(L); // a thicker trail behind engines that burn more propellant
-  for (let i = 0; i < N; i++) {
-    const age = i * 2.0 + 0.5; const te = t - age; if (te < md.M.t0) { al[i] = 0; continue; }
-    const s = c.o.stateAt(te); if (!s) { al[i] = 0; continue; }
-    const alt = vnorm(s.r) - BODIES.earth.R; if (alt > 45) { al[i] = 0; continue; }
-    const E = helio('earth', t).r;
-    // smoke stays fixed to the rotating Earth: rotate the emission point forward by Earth rotation over its age
-    const w = bodyOmegaEcl('earth', t); const pRot = vrot(s.r, vunit(w), vnorm(w) * age);
-    pos[3 * i] = E[0] + pRot[0] - O[0]; pos[3 * i + 1] = E[1] + pRot[1] - O[1]; pos[3 * i + 2] = E[2] + pRot[2] - O[2];
-    size[i] = (0.04 + 0.012 * age) * (1 + alt / 12) * sK; al[i] = clamp(0.55 * (1 - alt / 45) * Math.exp(-age / 160), 0, 0.6); k++;
-  }
-  sm.geometry.attributes.position.needsUpdate = true; sm.geometry.attributes.aSize.needsUpdate = true; sm.geometry.attributes.aA.needsUpdate = true;
-  sm.material.uniforms.uPx.value = R.height / (2 * Math.tan(R.camera.fov * DEG / 2));
-  sm.visible = k > 0;
-}
