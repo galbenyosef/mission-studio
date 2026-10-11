@@ -7,7 +7,7 @@ const PROP_LOOK = { // plume look per propellant: [intensity, diamonds, core]
   kerolox: [1.25, 0.25, '#fff2c8'], solid: [1.5, 0.15, '#fffbe8'], hydrolox: [0.55, 0.9, '#e8f2ff'], methalox: [0.8, 0.6, '#eef0ff'],
   hypergolic: [0.5, 0.0, '#fff0dc'], udmh: [0.6, 0.1, '#fff0dc'], mmh: [0.45, 0.0, '#fff2e6'], hydrazine: [0.3, 0.0, '#f4f8ff'], xenon: [0.4, 0, '#e0e8ff'],
 };
-function disposeTree(o) { o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material && !Object.values(MATS).includes(n.material) && !Object.values(TEX).includes(n.material)) { if (Array.isArray(n.material)) n.material.forEach(m => m.dispose()); else n.material.dispose(); } }); }
+function disposeTree(o) { o.traverse(n => { if (n.userData.keep) return; if (n.geometry) n.geometry.dispose(); if (n.material && !Object.values(MATS).includes(n.material) && !Object.values(TEX).includes(n.material)) { if (Array.isArray(n.material)) n.material.forEach(m => m.dispose()); else n.material.dispose(); } }); }
 function clearMissionView() {
   for (const c of MV.crafts) { R.scene.remove(c.node); disposeTree(c.node); c.label && c.label.remove(); if (c.shadow) { R.scene.remove(c.shadow); c.shadow.geometry.dispose(); c.shadow.material.dispose(); } }
   if (MV.tracks) { MV.tracks.parent && MV.tracks.parent.remove(MV.tracks); MV.tracks.geometry.dispose(); MV.tracks.material.dispose(); MV.tracks = null; }

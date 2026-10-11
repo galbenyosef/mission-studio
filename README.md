@@ -133,15 +133,17 @@ node test/t_mission.js   # complete missions
 ```
 src/      flight engine (plain JavaScript; also runs in a Web Worker)
 app/      renderer and UI (ES module), markup and styles
-assets/   planet textures and the star catalogue
-vendor/   three.js r160 (MIT)
+assets/   planet textures, the star catalogue and the detailed vehicle models
+vendor/   three.js r160 with its glTF loader and the meshopt decoder (MIT)
+tools/models/  builds the detailed models in assets/ from NASA 3D Resources (see its README)
 test/     Node tests for the engine
 media/    screenshots for this README
 ```
 
 ## Credits
 
-- **three.js** r160 ([MIT](vendor/three.LICENSE)), included in `vendor/`.
+- **three.js** r160 ([MIT](vendor/three.LICENSE)), included in `vendor/` with its glTF loader. The meshopt decoder in `vendor/` is from [meshoptimizer](https://github.com/zeux/meshoptimizer) (MIT).
+- **Apollo lunar module:** the 3D model from [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), split into its ascent and descent stages, simplified and compressed by `tools/models`.
 - **Earth day, night and cloud maps:** [Solar System Scope](https://www.solarsystemscope.com/textures/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). They are taken from the three.js examples, which resized and merged them.
 - **Moon map:** `moon_1024.jpg` from the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets).
 - **Mars, Venus, Jupiter and Saturn maps:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), resized.

@@ -1,0 +1,17 @@
+{
+  "name": "mission-studio-models",
+  "private": true,
+  "description": "Turns NASA 3D Resources glTF models into the app's assets (see README.md).",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "draco3dgltf": "1.5.7",
+    "meshoptimizer": "1.2.0",
+    "sharp": "0.35.5"
+  }
+}

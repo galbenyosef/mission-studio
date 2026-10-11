@@ -6,8 +6,9 @@ const MATS = {};
 function mat(color, kind = 'paint', extra = {}) {
   const key = color + kind + JSON.stringify(extra);
   if (MATS[key]) return MATS[key];
-  // moderate metalness: without an environment map, fully metallic surfaces would render black away from the Sun
-  const p = { paint: [0.55, 0.05], metal: [0.38, 0.45], dark: [0.75, 0.2], gold: [0.32, 0.55], foil: [0.3, 0.5], solar: [0.4, 0.3], fabric: [0.9, 0.0], tile: [0.85, 0.05], glass: [0.1, 0.3] }[kind] || [0.6, 0.1];
+  // [roughness, metalness]. Metals reflect the surround (image-based lighting, 20_scene.js) but keep some diffuse colour:
+  // in deep space the surround is nearly black, and fully metallic surfaces would turn black away from the Sun.
+  const p = { paint: [0.55, 0.05], metal: [0.35, 0.6], dark: [0.75, 0.2], gold: [0.3, 0.7], foil: [0.26, 0.7], solar: [0.4, 0.3], fabric: [0.9, 0.0], tile: [0.85, 0.05], glass: [0.08, 0.45] }[kind] || [0.6, 0.1];
   const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: p[0], metalness: p[1], ...extra });
   MATS[key] = m; return m;
 }
@@ -130,6 +131,56 @@ function lmAscent() {
   const b = bell(0.9, 0.45); b.position.y = -0.85; g.add(b);
   g.userData.len = 3.1; g.userData.engineY = -0.85; g.userData.engineR = 0.45; return g;
 }
+// ---------------- detailed models (NASA 3D Resources) ----------------
+// Vehicles NASA publishes 3D models of — free and without copyright — are drawn with them: assets/<name>.glb, built from
+// the originals by tools/models, one node per part the app moves on its own. A file loads the first time a mission needs
+// it (preloadDetailedModels at the start of a mission); until it arrives, or if it cannot be loaded, the craft shows its
+// built-in model.
+const DETAIL = { lib: null, files: {}, ready: {} };
+function detailFile(name) {
+  if (!DETAIL.files[name]) {
+    DETAIL.lib = DETAIL.lib || Promise.all([import('./' + ASSET('GLTFLoader.js')), import('./' + ASSET('meshopt_decoder.module.js'))])
+      .then(([{ GLTFLoader }, { MeshoptDecoder }]) => { const ld = new GLTFLoader(); ld.setMeshoptDecoder(MeshoptDecoder); return ld; });
+    DETAIL.files[name] = DETAIL.lib.then(ld => ld.loadAsync(ASSET(name + '.glb'))).then(gl => {
+      const parts = {}; for (const n of gl.scene.children) parts[n.name] = n;
+      gl.scene.traverse(o => { if (o.isMesh) o.userData.keep = true; }); // geometry and materials shared by every copy: never disposed with a craft
+      return (DETAIL.ready[name] = parts);
+    }).catch(e => { console.warn(`Detailed model ${name} could not be loaded; using the built-in one.`, e); return (DETAIL.ready[name] = null); });
+  }
+  return DETAIL.files[name];
+}
+// A part of a detailed model in place of a built-in one (the fallback, shown until the file arrives). y: where the part's
+// origin sits in the fallback's frame; extra(group): pieces the source model leaves out, added beside the part.
+function detailPart(name, part, fallback, opt = {}) {
+  const g = new THREE.Group(); g.userData = { ...fallback.userData }; g.add(fallback);
+  const put = parts => {
+    const src = parts && parts[part]; if (!src) return;
+    const m = new THREE.Group(); m.add(src.clone()); m.position.y = opt.y || 0; // (the part's own transform carries the dequantisation of its vertices)
+    g.remove(fallback); g.add(m); if (opt.extra) opt.extra(g);
+    refreshBounds(g);
+  };
+  if (DETAIL.ready[name] !== undefined) put(DETAIL.ready[name]); else detailFile(name).then(put);
+  return g;
+}
+// the detailed models a mission will show, loaded while the countdown runs
+function preloadDetailedModels(md) {
+  const want = new Set();
+  for (const o of md.M.objects) for (const cf of o.configs) { const L = cf.label || {}; if ((L.sc === 'apollo' || L.sc === 'apolloCSM' || o.model === 'apollo') && (L.parts || []).some(p => p === 'lander' || p === 'descent' || p === 'ascent')) want.add('apollo_lm'); }
+  for (const n of want) detailFile(n);
+}
+// a model's bounds after a detailed part replaced its built-in one (the camera frames a standing vehicle with them)
+function refreshBounds(o) {
+  let w = o; while (w && !(w.userData && w.userData.wrapped)) w = w.parent; if (!w) return;
+  w.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(w.matrixWorld).invert(), bb = new THREE.Box3();
+  w.traverse(n => { if (n.isMesh && n.visible && n.geometry) { n.geometry.computeBoundingBox && !n.geometry.boundingBox && n.geometry.computeBoundingBox(); const b = n.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, n.matrixWorld)); bb.union(b); } });
+  if (bb.isEmpty()) return; const sz = new THREE.Vector3(); bb.getSize(sz);
+  w.userData.sizeM = Math.max(sz.x, sz.y, sz.z, 1); w.userData.bbox = { w: sz.x, h: sz.y, d: sz.z }; w.userData.bbY = [bb.min.y, bb.max.y];
+}
+// Apollo lunar module: NASA's model, ascent and descent stages apart. Its descent stage keeps the built-in one's frame (feet
+// at −1.8 m); its ascent stage's origin is the top of the descent stage, 1.455 m up, where the built-in ascent stage sits
+// 1.65 m up. The ascent engine's bell, hidden inside the descent stage in NASA's model, is added for liftoff.
+function lmDescentD(landed) { return detailPart('apollo_lm', 'descent', lmDescent(landed)); }
+function lmAscentD() { return detailPart('apollo_lm', 'ascent', lmAscent(), { y: -0.195, extra: g => { const b = bell(0.75, 0.39); b.position.y = -0.85; g.add(b); } }); }
 function solarWing(len, width, panels, color = '#1b2a4a') {
   const g = new THREE.Group(); const pw = len / panels;
   for (let i = 0; i < panels; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(pw * 0.96, 0.05, width), mat(color, 'solar')); p.position.x = pw * (i + 0.5); g.add(p); }
@@ -215,21 +266,27 @@ function buildSC(model, parts, flags = {}) {
   const has = k => P.has(k);
   switch (model) {
     case 'apollo': case 'apolloCSM': {
-      const LM = () => { const lm = new THREE.Group(); const ds = lmDescent(); const as = lmAscent(); as.position.y = 1.65; lm.add(ds); lm.add(as); return lm; };
+      const LM = () => { const lm = new THREE.Group(); const ds = lmDescentD(); const as = lmAscentD(); as.position.y = 1.65; lm.add(ds); lm.add(as); return lm; };
+      // the docking ring on top of the ascent stage, above the ascent stage's origin (NASA's model, or the built-in one)
+      const ringA = DETAIL.ready.apollo_lm ? 2.924 : 3.1, ringLM = 1.65 + ringA;
       if (has('orbiter') && has('lander')) { // CSM docked nose-to-nose with the LM (LM inverted above the CM)
         inner = stackParts([{ g: apolloSM(flags.damaged), len: 3.9, mount: 'SM' }, { g: apolloCM(false), len: 3.68 }]);
-        const lm = LM(); lm.rotation.x = Math.PI; lm.position.y = 7.58 + 4.75; inner.add(lm);
-        mounts.push(...inner.userData.mounts, { y: 7.58 + 4.75 + 1.4, r: 0.75, tag: 'LMDS', flip: true });
-        inner.userData.len = 7.58 + 4.75 + 1.8;
+        const lm = LM(); lm.rotation.x = Math.PI; lm.position.y = 7.58 + ringLM; inner.add(lm);
+        mounts.push(...inner.userData.mounts, { y: 7.58 + ringLM + 1.4, r: 0.75, tag: 'LMDS', flip: true });
+        inner.userData.len = 7.58 + ringLM + 1.8;
       } else if (has('capsule') && has('lander')) {
         inner = new THREE.Group(); inner.add(apolloCM(false));
-        const lm = LM(); lm.rotation.x = Math.PI; lm.position.y = 3.68 + 4.75; inner.add(lm);
-        mounts.push({ y: 3.68 + 4.75 + 1.4, r: 0.75, tag: 'LMDS', flip: true });
-        inner.userData.len = 3.68 + 4.75 + 1.8;
+        const lm = LM(); lm.rotation.x = Math.PI; lm.position.y = 3.68 + ringLM; inner.add(lm);
+        mounts.push({ y: 3.68 + ringLM + 1.4, r: 0.75, tag: 'LMDS', flip: true });
+        inner.userData.len = 3.68 + ringLM + 1.8;
+      } else if (has('orbiter') && has('ascent')) { // the ascent stage back from the surface, docked to the CM's nose until it is jettisoned
+        inner = stackParts([{ g: apolloSM(flags.damaged), len: 3.9, mount: 'SM' }, { g: apolloCM(false), len: 3.68 }]);
+        const a = lmAscentD(); a.rotation.x = Math.PI; a.position.y = 7.58 + ringA; inner.add(a);
+        mounts.push(...inner.userData.mounts); inner.userData.len = 7.58 + ringA + 0.9;
       } else if (has('orbiter')) { inner = stackParts([{ g: apolloSM(flags.damaged), len: 3.9, mount: model === 'apollo' ? 'SM' : 'SM' }, { g: apolloCM(false), len: 3.7 }]); mounts.push(...inner.userData.mounts); }
-      else if (has('lander')) { const ds = lmDescent(); const as = lmAscent(); as.position.y = 1.65; inner = new THREE.Group(); inner.add(ds); inner.add(as); inner.userData.footY = -1.8; mounts.push({ y: -1.4, r: 0.75, tag: 'LMDS' }); }
-      else if (has('descent')) { inner = lmDescent(true); inner.userData.footY = -1.8; }
-      else if (has('ascent')) { inner = lmAscent(); mounts.push({ y: -0.85, r: 0.45, tag: 'LMAS' }); }
+      else if (has('lander')) { const ds = lmDescentD(flags.landed); const as = lmAscentD(); as.position.y = 1.65; inner = new THREE.Group(); inner.add(ds); inner.add(as); inner.userData.footY = -1.8; mounts.push({ y: -1.4, r: 0.75, tag: 'LMDS' }); }
+      else if (has('descent')) { inner = lmDescentD(true); inner.userData.footY = -1.8; }
+      else if (has('ascent')) { inner = lmAscentD(); mounts.push({ y: -0.85, r: 0.45, tag: 'LMAS' }); }
       else if (has('capsule')) { inner = apolloCM(false); inner.userData.chuteY = 3.6; inner.userData.capsuleR = 1.96; }
       else if (has('service')) { inner = apolloSM(flags.damaged); }
       break;
@@ -385,7 +442,7 @@ function buildStageOnly(lkey, idx, withAdapter, variant) {
 function finishModel(g) {
   const len = g.userData.len || 1; const yc = g.userData.yc0 ?? len * 0.45; // yc0: models whose origin is their reference point (the orbiter's, the ISS's)
   const wrap = new THREE.Group(); g.position.y = -yc; wrap.add(g);
-  wrap.userData = { ...g.userData, yc };
+  wrap.userData = { ...g.userData, yc, wrapped: true };
   wrap.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(wrap); const sz = new THREE.Vector3(); bb.getSize(sz);
   wrap.userData.sizeM = Math.max(sz.x, sz.y, sz.z, 1); // largest dimension in metres (solar arrays included)
   wrap.userData.bbox = { w: sz.x, h: sz.y, d: sz.z };

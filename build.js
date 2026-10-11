@@ -1,7 +1,7 @@
 // Builds the single-page app from src/ (engine) and app/ (renderer + UI) into dist/:
 //
 //   dist/index.html          the page (engine as a classic script, app as an ES module)
-//   dist/assets/*            three.js and the textures, with content hashes in their names
+//   dist/assets/*            three.js, the glTF loader, the textures and the detailed models, with content hashes in their names
 //
 // Every path is relative, so dist/ works from any base path (/, /apps/mission-studio/, …)
 // and the hashed file names are safe to cache forever.
@@ -15,14 +15,24 @@ const ORDER = ['core.js', 'kepler.js', 'integrator.js', 'vehicles.js', 'flight.j
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
 // copy a file into dist/assets/ under a content-hashed name, return that name
-function hashed(src, name) {
-  const buf = fs.readFileSync(src); const h = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 10);
+function hashed(src, name, buf = fs.readFileSync(src)) {
+  const h = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 10);
   const ext = path.extname(name), out = `${path.basename(name, ext)}.${h}${ext}`;
   fs.writeFileSync(path.join(OUT, 'assets', out), buf); return out;
 }
 const assetMap = {};
 for (const f of fs.readdirSync(path.join(ROOT, 'assets')).sort()) assetMap[f] = hashed(path.join(ROOT, 'assets', f), f);
 const threeFile = hashed(path.join(ROOT, 'vendor', 'three.module.min.js'), 'three.module.min.js');
+// the glTF loader and meshopt decoder (three.js r160 examples) for the detailed models, loaded on demand: their imports
+// point at the hashed files
+function vendorModule(name, imports) {
+  let src = fs.readFileSync(path.join(ROOT, 'vendor', name), 'utf8');
+  for (const [from, to] of imports) { if (!src.includes(from)) throw new Error(`${name}: ${from} not found`); src = src.split(from).join(to); }
+  return (assetMap[name] = hashed(null, name, Buffer.from(src)));
+}
+const bguFile = vendorModule('BufferGeometryUtils.js', [["from 'three'", `from './${threeFile}'`]]);
+vendorModule('GLTFLoader.js', [["from 'three'", `from './${threeFile}'`], ["from '../utils/BufferGeometryUtils.js'", `from './${bguFile}'`]]);
+vendorModule('meshopt_decoder.module.js', []);
 
 const engine = ORDER.map(f => `// ---- ${f}\n` + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8')).join('\n');
 const appFiles = fs.readdirSync(path.join(ROOT, 'app')).filter(f => f.endsWith('.js')).sort();

@@ -132,7 +132,7 @@ function updateHUD(t) {
 // ---------------- mission start ----------------
 function startMission(M, scn) {
   const md = new MissionData(M, scn);
-  setupMissionView(md);
+  setupMissionView(md); preloadDetailedModels(md);
   buildTelePanel(); buildEventsPanel(); buildBudgetPanel(); buildInfoPanel(); buildTimelineMap(); TL.bg = null; loadShots();
   $('#missionName').textContent = M.name; $('#app').classList.remove('idle');
   $('#setup').hidden = true; $('#setupClose').hidden = false;

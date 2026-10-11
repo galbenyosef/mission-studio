@@ -198,6 +198,22 @@ function initScene() {
     uniforms: { uUp: { value: new THREE.Vector3(0, 0, 1) }, uSun: { value: new THREE.Vector3(1, 0, 0) }, uDensity: { value: 0 }, uZenith: { value: new THREE.Color('#3a76d6') }, uHorizon: { value: new THREE.Color('#c6dcf2') }, uSunset: { value: new THREE.Color('#ff9a52') }, uHalo: { value: new THREE.Color('#fff2d8') } } }));
   R.sky.renderOrder = 10; R.sky.frustumCulled = false; R.bgScene.add(R.sky);
   R.hemi = new THREE.HemisphereLight(0x9cc3ff, 0x6b5a45, 0); R.scene.add(R.hemi);
+  // Image-based lighting: a small surround of the craft's world (sky and ground inside an atmosphere, the nearest planet's
+  // sunlit disc in space, a faint fill) captured into a cube map, so metal and foil reflect their surroundings and faces
+  // turned away from the Sun pick up light from the ground. 64 px, refreshed every few frames (updateSky).
+  R.envMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
+    uniforms: { uUp: { value: new THREE.Vector3(0, 0, 1) }, uZen: { value: new THREE.Color('#2f6bd0') }, uHor: { value: new THREE.Color('#c3daf3') }, uGnd: { value: new THREE.Color('#5a5040') },
+      uDay: { value: 0 }, uDens: { value: 0 }, uPl: { value: new THREE.Vector3(0, 0, -1) }, uPlCos: { value: 2 }, uPlCol: { value: new THREE.Color('#000000') }, uFill: { value: 0 } },
+    vertexShader: 'varying vec3 vD; void main(){ vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform vec3 uUp, uPl, uZen, uHor, uGnd, uPlCol; uniform float uDay, uDens, uPlCos, uFill; varying vec3 vD;
+      void main(){ vec3 d = normalize(vD); float h = dot(d, uUp);
+        vec3 sky = mix(uHor, uZen, smoothstep(0.0, 0.6, h)) * (0.05 + 0.55 * uDay);
+        vec3 gnd = uGnd * (0.08 + 0.52 * uDay) * (0.7 + 0.3 * smoothstep(-1.0, 0.0, h));
+        float disc = smoothstep(uPlCos - 0.01, uPlCos + 0.01, dot(d, uPl));
+        gl_FragColor = vec4(mix(uPlCol * disc, h > 0.0 ? sky : gnd, uDens) + uFill, 1.0); }` });
+  R.envScene = new THREE.Scene(); R.envScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 48, 24), R.envMat));
+  R.envRT = new THREE.WebGLCubeRenderTarget(64, { type: THREE.HalfFloatType }); R.envCam = new THREE.CubeCamera(0.5, 50, R.envRT); R.envScene.add(R.envCam);
+  R.pmrem = new THREE.PMREMGenerator(renderer); R.envN = 0; R.envPM = null;
   R.loader = new THREE.TextureLoader();
   R.detailTex = makeDetailTexture();
   buildStars();
@@ -420,6 +436,15 @@ function updateSky() {
     }
   }
   R.skyDens = dens * (0.15 + 0.85 * day);
+  { // the surround for image-based lighting
+    const U = R.envMat.uniforms, sunD = vunit(vscale(camH, -1));
+    U.uDens.value = clamp(dens * 4, 0, 1); U.uDay.value = day; U.uFill.value = fillOn ? 0.035 : 0.01;
+    if (best) { const L = SKY_LOOK[best.b]; U.uUp.value.set(...best.up); U.uZen.value.set(L.zen); U.uHor.value.set(L.hor); U.uGnd.value.set(best.b === 'mars' ? '#8a5a3a' : '#6a6050'); }
+    let pl = null; for (const b of ['earth', 'moon', 'mars']) { const d = vsub(helio(b, MV.tNow).r, camH), r = vnorm(d), R0 = surfaceRadius(b); if (r < R0 * 60 && (!pl || r / R0 < pl.k)) pl = { b, d, r, R0, k: r / R0 }; }
+    if (pl) { const dir = vunit(pl.d), lit = clamp(0.5 - 0.5 * vdot(dir, sunD), 0, 1); U.uPl.value.set(...dir); U.uPlCos.value = Math.sqrt(Math.max(0, 1 - (pl.R0 / pl.r) ** 2)); U.uPlCol.value.set(pl.b === 'earth' ? '#6f8fb8' : pl.b === 'mars' ? '#a0704c' : '#8a8680').multiplyScalar(0.2 + 0.7 * lit); }
+    else U.uPlCos.value = 2;
+    if (R.envN++ % 6 === 0) { R.envCam.update(R.renderer, R.envScene); R.envPM = R.pmrem.fromCubemap(R.envRT.texture, R.envPM); R.scene.environment = R.envPM.texture; }
+  }
   // Earth rim highlight fades when the camera is low in the atmosphere
   const eAlt = vnorm(vsub(camH, helio('earth', MV.tNow).r)) - BODIES.earth.R;
   R.bodies.earth.mat.uniforms.uRim.value = smoothstep((eAlt - 30) / 600);

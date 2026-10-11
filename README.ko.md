@@ -138,7 +138,8 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 ## 출처와 라이선스
 
 - **코드:** [MIT 라이선스](LICENSE)
-- **three.js:** r160, MIT (`vendor/`에 포함)
+- **three.js:** r160, MIT (`vendor/`에 glTF 로더와 함께 포함). `vendor/`의 meshopt 디코더는 [meshoptimizer](https://github.com/zeux/meshoptimizer)(MIT)에서 가져왔어요.
+- **아폴로 달착륙선:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)의 3D 모델이에요. `tools/models`가 상승단과 하강단으로 나누고, 면을 줄이고, 압축해요.
 - **지구 지도:** [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0, three.js 예제를 거쳐 받았어요.
 - **달 지도:** three.js 예제
 - **화성·금성·목성·토성 지도:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)
