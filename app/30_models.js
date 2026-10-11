@@ -57,10 +57,12 @@ function engineLayout(eng) {
   }
   return out;
 }
-// one launcher stage: bottom at y = 0 (engine bells hang below), returns {group, len, rTop, rBottom, engLen}
+// one launcher stage: bottom at y = 0, engine bells hanging below (or, eng.y0, inside the interstage below the stage's own
+// structure), returns {group, len, rTop, rBottom, engLen}. opts.ist === false: the aft interstage (geom piece ist) is gone.
 function buildStage(st, opts = {}) {
   const g = new THREE.Group(); let y = 0, rTop = 0, rBottom = st.geom[0][1];
   for (const [len, rb, rt, color, o = {}] of st.geom) {
+    if (o.ist && opts.ist === false) { y += len; rTop = rt; continue; }
     let m;
     if (o.roll === 'sic') m = patternMat('sic', color); else if (o.roll === 'sivb') m = patternMat('sivb', color);
     else if (o.band) m = patternMat('band', color); else if (o.bands) m = patternMat('bands', color); else if (o.tiles) m = patternMat('tiles', color);
@@ -71,7 +73,7 @@ function buildStage(st, opts = {}) {
   }
   const eng = st.eng;
   if (eng) for (const p of engineLayout(eng)) {
-    const big = p[2] ? 1.7 : 1; const b = bell(eng.len * big, eng.r * big); b.position.set(p[0], -eng.len * big, p[1]); g.add(b);
+    const big = p[2] ? 1.7 : 1; const b = bell(eng.len * big, eng.r * big); b.position.set(p[0], eng.y0 ?? -eng.len * big, p[1]); g.add(b);
   }
   if (st.fins) for (let k = 0; k < st.fins.n; k++) {
     const f = box(0.35, st.fins.len, st.fins.span, mat(st.fins.color)); const a = k * Math.PI / 2 + Math.PI / 4;
@@ -80,7 +82,7 @@ function buildStage(st, opts = {}) {
   }
   if (st.gridfins) for (let k = 0; k < 4; k++) { const f = box(3.0, 2.2, 0.3, mat('#2b2d30', 'metal')); const a = k * Math.PI / 2; f.position.set(Math.cos(a) * (rTop + 1.2), y - 4, Math.sin(a) * (rTop + 1.2)); f.rotation.y = -a + Math.PI / 2; g.add(f); }
   if (st.flaps) { for (const [yy, sz] of [[y - 9, 6.5], [6, 9]]) for (const a of [Math.PI / 2, -Math.PI / 2]) { const f = box(0.25, sz, 3.6, mat('#1d1f22', 'tile')); f.position.set(Math.cos(a) * (rTop + 1.0), yy, Math.sin(a) * (rTop + 1.0)); g.add(f); } }
-  return { group: g, len: y, rTop, rBottom, engLen: eng ? eng.len : 0 };
+  return { group: st.detail ? stageD(st, g, opts) : g, len: y, rTop, rBottom, engLen: eng ? -(eng.y0 ?? -eng.len) : 0 };
 }
 
 // ---------------- spacecraft parts ----------------
@@ -149,6 +151,7 @@ function preloadDetailedModels(md) {
     if (sc === 'msl' && parts.includes('lander')) want.add('perseverance');
     if (o.model === 'shuttle') want.add('orbiter');
     if (o.model === 'iss') want.add('iss');
+    if (L.launcher && LAUNCHERS[L.launcher]) for (const st of LAUNCHERS[L.launcher].stages) if (st.detail) want.add(st.detail); // launch stacks and spent stages
   }
   for (const n of want) detailFile(n);
 }
@@ -173,6 +176,25 @@ function roverD(landed) {
   } });
 }
 function lmDescentD(landed) { return detailPart('apollo_lm', 'descent', lmDescent(landed)); }
+// Saturn V: a textured model (CC BY: BoldlyBuilding, credited in the README and the app), cut into its stages and stretched
+// to their published lengths by tools/models; a stage of a launcher with detail: <file> is its part of that file, named
+// after the stage, in the stage's own frame. The S-II's aft interstage is a part of its own, there until it is dropped.
+// The model is a shell: where it is cut the stages are open, and the J-2s inside the interstages are not in it. These are
+// added: a bulkhead or heat shield across each open end ([y, r, kind]) and the bells.
+const STAGE_D = {
+  'saturnv:S-IC': { caps: [[38.6, 5.0, 'metal']] }, // the forward bulkhead, under the top of the forward skirt
+  'saturnv:S-II': { caps: [[5.52, 5.0, 'dark'], [24.87, 5.0, 'metal']], bells: true }, // the heat shield at the base of the aft skirt; the forward bulkhead inside the cone
+  'saturnv:S-IVB': { caps: [[0.3, 3.25, 'dark'], [14.47, 3.25, 'metal']], bells: true }, // the thrust structure above the cone; the top of the instrument unit
+};
+function stageD(st, fallback, opts) {
+  const D = STAGE_D[st.detail + ':' + st.id] || {};
+  return detailPart(st.detail, st.id, fallback, { extra: g => {
+    const P = DETAIL.ready[st.detail];
+    if (P.IST && st.geom[0][4] && st.geom[0][4].ist && opts.ist !== false) g.add(P.IST.clone());
+    for (const [y, r, kind] of D.caps || []) { const c = cyl(r, r, 0.06, kind === 'dark' ? mat('#2e3135', 'dark') : mat('#9a9fa5', 'metal'), 32); c.position.y = y - 0.03; g.add(c); }
+    if (D.bells) for (const p of engineLayout(st.eng)) { const b = bell(st.eng.len, st.eng.r); b.position.set(p[0], st.eng.y0, p[1]); g.add(b); }
+  } });
+}
 function lmAscentD() { return detailPart('apollo_lm', 'ascent', lmAscent(), { y: -0.195, extra: g => { const b = bell(0.75, 0.39); b.position.y = -0.85; g.add(b); } }); }
 function solarWing(len, width, panels, color = '#1b2a4a') {
   const g = new THREE.Group(); const pw = len / panels;
@@ -397,7 +419,7 @@ function buildLaunchStack(lkey, scModel, c) {
   const core = L.stages.map((s, i) => ({ s, i })).filter(o => !o.s.parallel && o.i >= (c.stFrom || 0));
   let y = 0, firstCoreY = null, rCore = 1;
   for (const { s, i } of core) {
-    const st = buildStage(s); st.group.position.y = y; g.add(st.group);
+    const st = buildStage(s, { ist: c.ist }); st.group.position.y = y; g.add(st.group);
     mounts.push({ y: y - st.engLen, r: Math.max(s.geom[0][1] * 0.75, s.eng ? s.eng.r * 1.2 : 1), tag: 'stage:' + s.id, prop: s.prop, idx: i });
     if (firstCoreY == null) { firstCoreY = y; rCore = s.geom[0][1]; }
     y += st.len;
@@ -421,7 +443,7 @@ function buildLaunchStack(lkey, scModel, c) {
 function buildStageOnly(lkey, idx, withAdapter, variant) {
   const L = LAUNCHERS[lkey]; let s = L.stages[idx];
   if (variant === 'sts1' && lkey === 'shuttle' && idx === 1) s = { ...s, geom: s.geom.map(p => [p[0], p[1], p[2], p[3] === '#4a4a4a' ? p[3] : '#e9e7e0', p[4]]) }; // STS-1's painted (white) tank
-  const st = buildStage(s);
+  const st = buildStage(s, { ist: false }); // (a spent stage's aft interstage went long before)
   if (s.parallel && s.booster) { // drop all boosters together
     const g = new THREE.Group(); const n = s.booster.count, off = s.booster.offset;
     for (let k = 0; k < n; k++) { const a = n === 2 ? k * Math.PI : k * Math.PI / 2 + Math.PI / 4; const b = k === 0 ? st : buildStage(s); b.group.position.set(Math.cos(a) * off, 0, Math.sin(a) * off); g.add(b.group); }
@@ -430,6 +452,13 @@ function buildStageOnly(lkey, idx, withAdapter, variant) {
   if (withAdapter) { const sla = cyl(3.3, 3.3, 1.0, mat('#e7e5df')); sla.position.y = st.len; st.group.add(sla); for (let k = 0; k < 4; k++) { const p = box(2.6, 7.0, 0.1, mat('#e7e5df')); const a = k * Math.PI / 2; p.position.set(Math.cos(a) * 4.5, st.len - 1, Math.sin(a) * 4.5); p.rotation.y = -a + Math.PI / 2; p.rotation.x = 0.7; st.group.add(p); } }
   st.group.userData = { len: st.len, mounts: [{ y: -st.engLen, r: s.geom[0][1] * 0.6, tag: 'upper', prop: s.prop }] };
   return st.group;
+}
+// a launcher's aft interstage after it has been dropped (the S-II's): the first piece of its stage's geometry, an open ring
+function buildInterstage(lkey) {
+  const st = LAUNCHERS[lkey].stages.find(s => s.geom[0][4] && s.geom[0][4].ist), [len, rb, rt, color] = st.geom[0];
+  const ring = cyl(rb, rt, len, patternMat('band', color), 48, true); ring.material = ring.material.clone(); ring.material.side = THREE.DoubleSide;
+  const g = st.detail ? detailPart(st.detail, 'IST', ring) : ring;
+  g.userData = { len, mounts: [] }; return g;
 }
 // center a model on its bounding-box centre along Y and record offsets
 function finishModel(g) {
@@ -451,6 +480,7 @@ function modelForConfig(cfgL, objModel) {
     if (c.launcher !== 'starship') { const st = buildStowed(c.sc, L.stages[c.stage].geom.slice(-1)[0][2], {}); st.position.y = y; gg.add(st); for (const m of st.userData.mounts) mounts.push({ ...m, y: m.y + y }); y += st.userData.len; }
     gg.userData = { len: y, mounts }; g = gg; }
   else if (c.key === 'stage') g = buildStageOnly(c.launcher, c.stage, c.withAdapter, c.variant);
+  else if (c.key === 'ist') g = buildInterstage(c.launcher);
   else if (c.key === 'capsule') g = buildSC(c.sc, ['capsule'], {});
   else g = buildSC(c.sc || objModel, c.parts, c);
   return finishModel(g);

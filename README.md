@@ -135,7 +135,7 @@ src/      flight engine (plain JavaScript; also runs in a Web Worker)
 app/      renderer and UI (ES module), markup and styles
 assets/   planet textures, the star catalogue and the detailed vehicle models
 vendor/   three.js r160 with its glTF loader and the meshopt decoder (MIT)
-tools/models/  builds the detailed models in assets/ from NASA 3D Resources and the Smithsonian's scans (see its README)
+tools/models/  builds the detailed models in assets/ from NASA 3D Resources and free Sketchfab models (see its README)
 test/     Node tests for the engine
 media/    screenshots for this README
 ```
@@ -146,7 +146,8 @@ media/    screenshots for this README
 - **Apollo lunar module and Mars 2020 Perseverance:** 3D models from [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), prepared by `tools/models`. The lunar module is split into its ascent and descent stages. Perseverance's six wheels and its mast are split off so the wheels turn and the mast stands up on the surface. Both are simplified and compressed.
 - **Space Shuttle orbiter:** the Smithsonian's [3D scan of Discovery](https://sketchfab.com/3d-models/orbiter-space-shuttle-ov-103-discovery-5f7176a2ae284d6b99fc970c9d265c04) (OV-103) at the National Air and Space Museum's Udvar-Hazy Center, released under [CC0](https://creativecommons.org/publicdomain/zero/1.0/). `tools/models` cuts it into the body, the two payload bay doors and the landing gear, so the doors open in orbit and the gear comes down for landing. The payload bay's lining, the robot arm and the payloads are drawn in code.
 - **International Space Station:** NASA's model by the IGOAL lab at Johnson Space Center, from [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources). `tools/models` sets it back to July 2011 for STS-135, without the modules and arrays added since (Nauka, Prichal, the iROSA arrays, BEAM, the Bishop airlock and the docking adapters), and simplifies it.
-- **Apollo command and service modules, launch vehicles:** drawn in code from published dimensions.
+- **Saturn V:** based on ["Saturn V"](https://sketchfab.com/3d-models/saturn-v-88f68de3b3e9435582560e02a52b325d) by [BoldlyBuilding](https://sketchfab.com/TitanicKyle), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). `tools/models` cuts it into the S-IC, the S-II's aft interstage, the S-II and the S-IVB, and stretches each to its published length and diameter. The interstage drops away 30 s after staging, as on the real flights. The model's own spacecraft is replaced by the app's Apollo spacecraft.
+- **Apollo command and service modules, other launch vehicles:** drawn in code from published dimensions.
 - **Earth day, night and cloud maps:** [Solar System Scope](https://www.solarsystemscope.com/textures/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). They are taken from the three.js examples, which resized and merged them.
 - **Moon map:** `moon_1024.jpg` from the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets).
 - **Mars, Venus, Jupiter and Saturn maps:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), resized.

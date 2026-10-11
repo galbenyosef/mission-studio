@@ -46,14 +46,18 @@ const LAUNCHERS = {
     name: 'Saturn V', org: 'NASA (USA)', years: '1967–1973', height: 110.6, diameter: 10.1, crewRated: true,
     blurb: 'Three-stage super heavy-lift rocket of the Apollo program. Still the most powerful rocket ever to fly crews to the Moon.',
     stages: [
+      // Lengths as stacked (the S-IC with its engines 42.06 m, the S-II with its aft interstage 24.87 m, the S-IVB with the
+      // cone to the S-II 17.86 m, the instrument unit 0.91 m; 110.6 m with the Apollo spacecraft). geom starts at the base of
+      // each stage's structure; eng.y0: the nozzles' exit plane from there (the S-II's and S-IVB's J-2s hang inside the
+      // interstage below them). Drawn with the detailed model 'saturnv' (app/30_models.js) once it has loaded.
       { id: 'S-IC', name: 'S-IC first stage', prop: 'kerolox', engine: 'F-1', n: 5, thrustSL: 5 * 6770e3, thrustVac: 5 * 7770e3, ispSL: 263, ispVac: 304, dry: 130000, propMass: 2077000, maxG: 4.0, minThr: 0.8,
-        geom: [[42.1, 5.05, 5.05, C.white, { roll: 'sic' }]], eng: { n: 5, len: 5.8, r: 1.85, layout: 'cross', spread: 3.4 }, fins: { n: 4, len: 9.0, span: 3.4, color: C.white } },
+        geom: [[38.82, 5.05, 5.05, C.white, { roll: 'sic' }]], eng: { n: 5, len: 3.24, r: 1.85, layout: 'cross', spread: 4.7 }, fins: { n: 4, len: 9.0, span: 3.4, color: C.white }, detail: 'saturnv' },
       { id: 'S-II', name: 'S-II second stage', prop: 'hydrolox', engine: 'J-2', n: 5, thrustSL: 5 * 486e3, thrustVac: 5 * 1033e3, ispSL: 200, ispVac: 421, dry: 36200, propMass: 443000,
-        geom: [[19.7, 5.05, 5.05, C.white, { band: true }], [5.2, 5.05, 3.3, C.white]], eng: { n: 5, len: 3.4, r: 1.0, layout: 'cross', spread: 2.4 } },
+        geom: [[5.49, 5.05, 5.05, C.white, { band: true, ist: true }], [19.38, 5.05, 5.05, C.white], [4.2, 5.05, 3.3, C.white]], eng: { n: 5, len: 3.0, r: 1.0, layout: 'cross', spread: 3.0, y0: 2.5 }, detail: 'saturnv' },
       { id: 'S-IVB', name: 'S-IVB third stage', prop: 'hydrolox', engine: 'J-2', n: 1, thrustSL: 486e3, thrustVac: 1033e3, ispSL: 200, ispVac: 421, dry: 11300, propMass: 107000, restart: true,
-        geom: [[17.8, 3.3, 3.3, C.white, { roll: 'sivb' }], [0.9, 3.3, 3.3, C.grey]], eng: { n: 1, len: 3.4, r: 1.0, layout: 'single' } },
+        geom: [[13.66, 3.3, 3.3, C.white, { roll: 'sivb' }], [0.91, 3.3, 3.3, C.grey]], eng: { n: 1, len: 3.0, r: 1.0, layout: 'single', y0: -3.0 }, detail: 'saturnv' },
     ],
-    jettison: [{ name: 'S-II aft interstage', mass: 5200, afterStage: 0, delay: 30 }, { name: 'Launch Escape System', mass: 4170, afterStage: 0, delay: 35, part: 'LES' }],
+    jettison: [{ name: 'S-II aft interstage', mass: 5200, afterStage: 0, delay: 30, part: 'IST' }, { name: 'Launch Escape System', mass: 4170, afterStage: 0, delay: 35, part: 'LES' }],
     payloadFairing: null, ascent: { hp: 185, ha: 190, vert: 12, kickGuess: 1.5 },
     roll: { padAz: 90, t: [13.2, 31.1] }, // roll program: from the pad azimuth (90°) to the flight azimuth, T+13.2 s to T+31.1 s (Apollo 11)
   },

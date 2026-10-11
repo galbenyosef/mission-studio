@@ -162,7 +162,7 @@ function launchPhase(M, cfg, L, scMass, normal, opts = {}) {
   const nSt = L.stages.length;
   const cfgAt = (stFrom, boosters, fairing, les, sac) => ({ key: 'launch', stFrom, boosters, fairing, les, sac: sac ?? true, launcher: cfg.launcher, variant: cfg.lvVariant });
   ship.setConfig(t0 - 7200, 'launch', cfgAt(0, true, true, true));
-  let stFrom = 0, boosters = L.stages[0].parallel, fairing = !!L.payloadFairing, les = L.jettison.some(j => j.part === 'LES'), saj = L.jettison.some(j => j.part === 'SAJ');
+  let stFrom = 0, boosters = L.stages[0].parallel, fairing = !!L.payloadFairing, les = L.jettison.some(j => j.part === 'LES'), saj = L.jettison.some(j => j.part === 'SAJ'), ist = L.jettison.some(j => j.part === 'IST');
   const lit = liftoffStages(L), liq = lit.filter(s => s.prop !== 'solid'), sol = lit.filter(s => s.prop === 'solid'); const IG = L.ign || { t: 3, ramp: 1.5 };
   const nm = engineCounts;
   if (IG.t > 0 && liq.length) M.ev(t0 - IG.t, 'ship', 'Ignition sequence start', `${nm(liq)} ignite on the pad${IG.seq ? ' — ' + IG.seq : ''}. Hold-down clamps keep the ${L.name} in place while the engines build up to full thrust and the computers check every engine; water floods the pad to soak up heat and sound.${sol.length ? ` The ${nm(sol)} solid boosters wait for T−0: once lit they cannot be shut down.` : ''}`, 'launch', { ign: true });
@@ -173,7 +173,7 @@ function launchPhase(M, cfg, L, scMass, normal, opts = {}) {
     if (e.kind === 'staging') {
       const idx = L.stages.findIndex(s => s.id === e.stage);
       if (L.stages[idx].parallel) boosters = false; else stFrom = idx + 1;
-      ship.setConfig(e.t, 'launch', { ...cfgAt(stFrom, boosters, fairing, les), saj });
+      ship.setConfig(e.t, 'launch', { ...cfgAt(stFrom, boosters, fairing, les), saj, ist });
       desc += ' ' + EXPLAIN.staging;
       // debris object
       const st = ship.stateAt(e.t);
@@ -184,7 +184,13 @@ function launchPhase(M, cfg, L, scMass, normal, opts = {}) {
         deb.add(new ConicSeg('earth', e.t, e.t + 900, st.r, vSep, L.stages[idx].dry, { extra: { phase: 'spent stage' } }));
       }
     }
-    if (e.kind === 'jettison') { if (e.part === 'fairing') fairing = false; if (e.part === 'LES') les = false; if (e.part === 'SAJ') saj = false; ship.setConfig(e.t, 'launch', { ...cfgAt(stFrom, boosters, fairing, les), saj }); }
+    if (e.kind === 'jettison') { if (e.part === 'fairing') fairing = false; if (e.part === 'LES') les = false; if (e.part === 'SAJ') saj = false; if (e.part === 'IST') ist = false; ship.setConfig(e.t, 'launch', { ...cfgAt(stFrom, boosters, fairing, les), saj, ist }); }
+    if (e.kind === 'jettison' && e.part === 'IST') { // the aft interstage, the ring the S-II's engines have fired through since staging, falls behind
+      const st = ship.stateAt(e.t), j = L.jettison.find(j => j.part === 'IST');
+      if (st) { const deb = M.addObj(new MObject('debris-IST', j.name, { kind: 'debris', model: 'stage', color: '#888', trail: false }));
+        deb.setConfig(e.t, 'stage', { key: 'ist', launcher: cfg.launcher });
+        deb.add(new ConicSeg('earth', e.t, e.t + 900, st.r, vadd(st.v, vscale(vunit(st.v), -0.002)), j.mass, { extra: { phase: 'jettisoned' } })); }
+    }
     if (e.kind === 'maxq') desc = e.desc + ' ' + EXPLAIN.maxq;
     if (e.kind === 'insertion') desc = e.desc + ' ' + EXPLAIN.insertion;
     M.ev(e.t, 'ship', e.name, desc, e.kind);
@@ -198,7 +204,7 @@ function launchPhase(M, cfg, L, scMass, normal, opts = {}) {
       asc.m -= dropped; asc.upper.attached = false;
       asc.upper = nxt; asc.upperProp = nxt.propLeft;
       stFrom = idx + 1;
-      ship.setConfig(asc.t, 'launch', { ...cfgAt(stFrom, false, fairing, les), saj });
+      ship.setConfig(asc.t, 'launch', { ...cfgAt(stFrom, false, fairing, les), saj, ist });
       M.ev(asc.t + 1, 'ship', `${L.stages[idx].id} separation`, `The ${L.stages[idx].name} has done its job and separates; the ${nxt.name} will perform the upcoming burns.`, 'staging');
       const st = ship.stateAt(asc.t);
       if (st) { const deb = M.addObj(new MObject('debris-' + L.stages[idx].id, L.stages[idx].name, { kind: 'debris', model: 'stage', color: '#888', trail: false })); deb.setConfig(asc.t, 'stage', { key: 'stage', launcher: cfg.launcher, stage: idx }); deb.add(new ConicSeg('earth', asc.t, asc.t + 1500, st.r, vadd(st.v, vscale(vunit(st.v), -0.003)), L.stages[idx].dry, { extra: { phase: 'spent stage' } })); }

@@ -24,7 +24,7 @@
 //   node frame.mjs <file.gltf>                           → a model's principal axes, to find a scan's own frame
 import { NodeIO, getBounds } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { transformMesh, prune, dedup, joinPrimitives, weld, meshopt, simplifyPrimitive, textureCompress, compactPrimitive } from '@gltf-transform/functions';
+import { transformMesh, prune, dedup, joinPrimitives, weld, meshopt, simplifyPrimitive, textureCompress, compactPrimitive, metalRough } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 import draco3d from 'draco3dgltf';
 import sharp from 'sharp';
@@ -124,6 +124,30 @@ const RECIPES = {
     pbr: { metal: 0.15, rough: 0.62, dropMetalRough: true, alpha: 'MASK', cutoff: 0.95 }, // translucent glare layers (over the array cells) go; solid stays
     keepSides: true, // the blankets' two faces are separate surfaces: drawn double-sided they fight
     textures: { baseColor: 512, other: 256, named: { Truss_Diffuse: 2048 } }, // the truss atlas holds the arrays' cells
+  },
+  // Saturn V: "Saturn V" by BoldlyBuilding (https://sketchfab.com/3d-models/saturn-v-88f68de3b3e9435582560e02a52b325d),
+  // CC BY 4.0, unzipped into saturnv/. One textured mesh in metres, +Y up, 110.53 m from the F-1 nozzles (y = 0) to the
+  // tip of the escape tower. Where its texture puts the joints: the S-IC's forward skirt meets the aft interstage at 43.73,
+  // the interstage meets the S-II's aft skirt at 49.96; the S-II's forward skirt ends at 65.89, where the S-IVB's aft
+  // interstage (the cone) begins; the cone ends at 70.33 and the instrument unit at 85.72. The whole is close to the real
+  // vehicle, the stages less so: its S-IC is 1.7 m too long, its S-II 3.4 m too short, its diameters 4 % (10.48 m) and 8 %
+  // (7.12 m) too large. So each stretch between two joints is scaled to its published length — the S-IC 42.06 m to the top
+  // of its forward skirt (nozzles included), the S-II 24.87 m with its 18 ft (5.49 m) aft interstage, the S-IVB 17.86 m
+  // with its cone, the instrument unit 0.91 m — and to the diameters of 10.1 m and 6.60 m, the texture moving with it. The spacecraft (adapter, service and command modules, escape tower) is
+  // left out: the app draws its own Apollo spacecraft.
+  // Parts in the stages' frames, as the app stacks them: S-IC from the base of its thrust structure (the F-1 nozzles 3.24 m
+  // below), IST (the aft interstage, dropped 30 s after staging) and S-II from the bottom of the interstage, S-IVB (with the
+  // instrument unit) from the top of the cone.
+  saturnv: {
+    dl: 'saturnv/scene.gltf',
+    specGloss: true, // the source's specular-glossiness material, to metal-roughness
+    frame: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], // the file's scene is the rocket's frame already
+    slice: [43.73, 49.96], // the S-IC and S-II are one cylinder in the source, cut at their joints
+    triPart: ([, y]) => y < 43.73 ? 'S-IC' : y < 49.96 ? 'IST' : y < 70.2 ? 'S-II' : y < 85.8 ? 'S-IVB' : null,
+    warp: { y: [[0, 0], [3.24, 3.24], [43.73, 42.06], [49.96, 47.55], [65.89, 66.93], [85.72, 85.70]], r: [[65.89, 5.05 / 5.242], [70.33, 3.302 / 3.56]] },
+    origins: { 'S-IC': 3.24, IST: 43.73, 'S-II': 43.73, 'S-IVB': 70.33 }, // heights in the source; each part's y = 0
+    inner: { parts: ['IST'], color: [0.32, 0.33, 0.35], metal: 0.3, rough: 0.6 }, // the interstage is an open ring
+    textures: 2048,
   },
 };
 
@@ -308,12 +332,18 @@ function simplifyLoose(prim, err) {
   idx.setArray(out.length > 65535 * 3 || pos.getCount() > 65535 ? out : new Uint32Array(out)); compactPrimitive(prim);
 }
 // A scan or any single-mesh model: bake it into the vehicle's frame (R.frame, world → vehicle, column-major), cut its
-// triangles into parts by where they lie (R.triPart), put each part's origin at its pivot (R.pivots), give listed parts an
-// inner face of their own (R.inner: a thin shell such as a door seen from inside), simplify, shrink the textures, compress.
+// triangles along planes (R.slice: heights where one surface spans two parts) and into parts by where they lie (R.triPart),
+// stretch the parts (R.warp), put each part's origin at its pivot (R.pivots) or at a height of its own (R.origins), give
+// listed parts an inner face of their own (R.inner: a thin shell such as a door seen from inside), simplify, shrink the
+// textures, compress.
 async function buildScan(name, R, doc) {
   const root = doc.getRoot(), scene = root.listScenes()[0];
   for (const a of root.listAnimations()) a.dispose();
   for (const k of root.listSkins()) k.dispose();
+  if (R.specGloss) { // to metal-roughness; the specular colour and index of refraction that keep the old look in full are dropped
+    await doc.transform(metalRough());
+    for (const e of root.listExtensionsUsed()) if (['KHR_materials_specular', 'KHR_materials_ior'].includes(e.extensionName)) e.dispose();
+  }
   for (const m of root.listMaterials()) { // one set of texture coordinates (a scan's texture sets are often copies of one)
     for (const ti of [m.getBaseColorTextureInfo(), m.getNormalTextureInfo(), m.getOcclusionTextureInfo(), m.getMetallicRoughnessTextureInfo(), m.getEmissiveTextureInfo()]) if (ti) ti.setTexCoord(0);
     m.setDoubleSided(true); // the cuts open the shell
@@ -325,6 +355,7 @@ async function buildScan(name, R, doc) {
     transformMesh(n.getMesh(), mul(R.frame, n.getWorldMatrix()));
     for (const p of n.getMesh().listPrimitives()) {
       for (const s of p.listSemantics()) if (!['POSITION', 'NORMAL', 'TEXCOORD_0'].includes(s)) p.setAttribute(s, null);
+      if (R.slice) sliceY(doc, p, R.slice);
       const pos = p.getAttribute('POSITION'), idx = p.getIndices(), cnt = idx ? idx.getCount() : pos.getCount();
       for (let t = 0; t < cnt; t += 3) {
         const a = idx ? idx.getScalar(t) : t, b = idx ? idx.getScalar(t + 1) : t + 1, c = idx ? idx.getScalar(t + 2) : t + 2;
@@ -336,10 +367,11 @@ async function buildScan(name, R, doc) {
   }
   const groups = {};
   for (const [part, byPrim] of Object.entries(sel)) {
-    const pv = (R.pivots || {})[part] || [0, 0, 0];
+    const pv = (R.pivots || {})[part] || [0, 0, 0], oy = R.origins && part in R.origins ? (R.warp ? pwl(R.warp.y, R.origins[part]) : R.origins[part]) : 0;
     const prims = [...byPrim].map(([p, t]) => subPrimitive(doc, p, t)), j = joinPrimitives(prims); j.setMaterial(prims[0].getMaterial());
+    if (R.warp) warpPrimitive(j, R.warp);
     const mesh = doc.createMesh(part).addPrimitive(j);
-    transformMesh(mesh, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -pv[0], -pv[1], -pv[2], 1]);
+    transformMesh(mesh, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -pv[0], -pv[1] - oy, -pv[2], 1]);
     const g = doc.createNode(part).setTranslation(pv); g.addChild(doc.createNode(part + '-mesh').setMesh(mesh)); scene.addChild(g); groups[part] = g;
   }
   for (const n of scene.listChildren()) if (!Object.values(groups).includes(n)) scene.removeChild(n);
@@ -365,6 +397,45 @@ async function buildScan(name, R, doc) {
   console.log(`${name}: ${(fs.statSync(out).size / 1024).toFixed(0)} KB, ${tri} triangles (${parts}), ${root.listTextures().length} textures → ${path.relative(process.cwd(), out)}`);
 }
 
+// Cut a primitive's triangles along the planes y = c: a triangle across one becomes two polygons, fanned into triangles,
+// whose new corners interpolate every attribute. Leaves the primitive unindexed in effect (no vertex shared).
+function sliceY(doc, prim, planes) {
+  const sems = prim.listSemantics(), acc = sems.map(s => prim.getAttribute(s)), iy = sems.indexOf('POSITION'), idx = prim.getIndices();
+  const n = idx ? idx.getCount() : acc[iy].getCount(), vert = i => acc.map(a => a.getElement(i, [])), out = sems.map(() => []);
+  const mix = (p, q, t) => p.map((a, k) => a.map((x, e) => x + (q[k][e] - x) * t));
+  const side = (poly, c, below) => { const r = []; // the polygon's part on one side of y = c (Sutherland–Hodgman)
+    poly.forEach((p, i) => { const q = poly[(i + 1) % poly.length], yp = p[iy][1], yq = q[iy][1], inP = below ? yp <= c : yp >= c, inQ = below ? yq <= c : yq >= c;
+      if (inP) r.push(p); if (inP !== inQ) r.push(mix(p, q, (c - yp) / (yq - yp))); });
+    return r; };
+  for (let t = 0; t < n; t += 3) {
+    let polys = [[0, 1, 2].map(k => vert(idx ? idx.getScalar(t + k) : t + k))];
+    for (const c of planes) polys = polys.flatMap(p => { const ys = p.map(v => v[iy][1]); return Math.min(...ys) < c && Math.max(...ys) > c ? [side(p, c, true), side(p, c, false)] : [p]; });
+    for (const p of polys) for (let k = 1; k + 1 < p.length; k++) for (const v of [p[0], p[k], p[k + 1]]) v.forEach((a, s) => out[s].push(...a));
+  }
+  const iN = sems.indexOf('NORMAL'); if (iN >= 0) for (let i = 0; i < out[iN].length; i += 3) { const l = Math.hypot(out[iN][i], out[iN][i + 1], out[iN][i + 2]) || 1; for (let e = 0; e < 3; e++) out[iN][i + e] /= l; }
+  sems.forEach((s, k) => prim.setAttribute(s, doc.createAccessor().setType(acc[k].getType()).setArray(new Float32Array(out[k]))));
+  prim.setIndices(doc.createAccessor().setType('SCALAR').setArray(Uint32Array.from({ length: out[iy].length / 3 }, (_, i) => i)));
+}
+// piecewise-linear table [[x, y] …], extended past its ends along its first and last pieces
+function pwl(tab, x) {
+  let i = 0; while (i < tab.length - 2 && x > tab[i + 1][0]) i++;
+  const [x0, y0] = tab[i], [x1, y1] = tab[i + 1]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+}
+// Stretch a primitive: heights by W.y (source height → new height, piecewise linear) and distances from the axis by W.r
+// (source height → factor, held past its ends). Normals follow (the inverse transpose of the stretch, along each
+// triangle's piece of W.y).
+function warpPrimitive(prim, W) {
+  const pos = prim.getAttribute('POSITION'), nor = prim.getAttribute('NORMAL'), idx = prim.getIndices(), done = new Set(), P = [0, 0, 0], N = [0, 0, 0];
+  const r = y => y <= W.r[0][0] ? W.r[0][1] : y >= W.r[W.r.length - 1][0] ? W.r[W.r.length - 1][1] : pwl(W.r, y), slope = y => (pwl(W.y, y + 0.01) - pwl(W.y, y - 0.01)) / 0.02;
+  for (let t = 0; t < idx.getCount(); t += 3) {
+    const tri = [0, 1, 2].map(k => idx.getScalar(t + k)), k = slope(tri.reduce((a, i) => a + pos.getElement(i, P)[1], 0) / 3);
+    for (const i of tri) {
+      if (done.has(i)) continue; done.add(i);
+      pos.getElement(i, P); const s = r(P[1]); pos.setElement(i, [P[0] * s, pwl(W.y, P[1]), P[2] * s]);
+      if (nor) { nor.getElement(i, N); const m = [N[0] / s, N[1] / k, N[2] / s], l = Math.hypot(...m) || 1; nor.setElement(i, m.map(x => x / l)); }
+    }
+  }
+}
 // textures to WebP: size a number (every map) or { baseColor, other } (the colour maps, and the rest)
 async function shrinkTextures(doc, size) {
   if (!size) return;

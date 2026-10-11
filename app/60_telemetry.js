@@ -202,6 +202,7 @@ function drawTele(T, t) {
     else if (cf.sc === 'iss') cfgTxt = 'International Space Station' + (cf.mplm ? ' + logistics module' : '');
     else if (cf.key === 'stack') cfgTxt = `${L.stages[cf.stage].id} + spacecraft`;
     else if (cf.key === 'stage') cfgTxt = L.stages[cf.stage].name;
+    else if (cf.key === 'ist') cfgTxt = (L.jettison.find(j => j.part === 'IST') || {}).name || 'Interstage';
     else if (cf.key === 'capsule') cfgTxt = 'Capsule' + (cf.chutes ? ' under parachutes' : '');
     else cfgTxt = (cf.parts || []).join(' + ') + (cf.landed ? ' (landed)' : '');
   }
@@ -238,7 +239,7 @@ function drawTele(T, t) {
   });
   if (cf && cf.key === 'launch' && t >= md.M.t0 && s.m) {
     let dry = 0; L.stages.forEach((st, i) => { if (st.parallel ? cf.boosters : i >= cf.stFrom) dry += st.dry; });
-    const jet = L.jettison.filter(j => (j.part === 'fairing' && cf.fairing) || (j.part === 'LES' && cf.les) || (j.part === 'SAJ' && cf.saj)).reduce((a, j) => a + j.mass, 0);
+    const jet = L.jettison.filter(j => (j.part === 'fairing' && cf.fairing) || (j.part === 'LES' && cf.les) || (j.part === 'SAJ' && cf.saj) || (j.part === 'IST' && cf.ist !== false)).reduce((a, j) => a + j.mass, 0);
     const lvProp = s.m - dry - scTotalMass(md.SC) - jet;
     setv('prop', (E.prop.textContent || '') + ''); E.prop.title = 'Launch-vehicle propellant on board: ' + fMass(lvProp);
     setv('mass', fMass(s.m) + ' (' + fMass(Math.max(lvProp, 0)) + ' propellant)');
