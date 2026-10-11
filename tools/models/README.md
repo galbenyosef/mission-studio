@@ -26,3 +26,4 @@ node rings.mjs <file.glb> <x0> <z0> [node]   # the heights of a mesh's vertex ri
 | Asset | Source | Parts |
 |---|---|---|
 | `apollo_lm.glb` | `3D Models/Apollo Lunar Module` | `descent`: feet at y = −1.8 m. `ascent`: origin at the top of the descent stage. |
+| `perseverance.glb` | `3D Models/Mars 2020 Perseverance Rover` | `body`: wheels on the ground at y = 0, +Z forward. `wheel0`–`wheel5`: pivots on the axles, `extras.wheel` = radius. `mast`: pivot at the shoulder hinge, `extras.deploy` = axis and angle that raise it. |

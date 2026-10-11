@@ -139,7 +139,7 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 
 - **코드:** [MIT 라이선스](LICENSE)
 - **three.js:** r160, MIT (`vendor/`에 glTF 로더와 함께 포함). `vendor/`의 meshopt 디코더는 [meshoptimizer](https://github.com/zeux/meshoptimizer)(MIT)에서 가져왔어요.
-- **아폴로 달착륙선:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)의 3D 모델이에요. `tools/models`가 상승단과 하강단으로 나누고, 면을 줄이고, 압축해요.
+- **아폴로 달착륙선과 마스 2020 퍼서비어런스:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)의 3D 모델을 `tools/models`로 손봤어요. 달착륙선은 상승단과 하강단으로 나눴어요. 퍼서비어런스는 바퀴 6개와 마스트를 따로 떼어서 바퀴가 구르고 표면에서 마스트가 서게 했어요. 둘 다 면을 줄이고 압축했어요.
 - **지구 지도:** [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0, three.js 예제를 거쳐 받았어요.
 - **달 지도:** three.js 예제
 - **화성·금성·목성·토성 지도:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)

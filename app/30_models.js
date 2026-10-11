@@ -165,7 +165,11 @@ function detailPart(name, part, fallback, opt = {}) {
 // the detailed models a mission will show, loaded while the countdown runs
 function preloadDetailedModels(md) {
   const want = new Set();
-  for (const o of md.M.objects) for (const cf of o.configs) { const L = cf.label || {}; if ((L.sc === 'apollo' || L.sc === 'apolloCSM' || o.model === 'apollo') && (L.parts || []).some(p => p === 'lander' || p === 'descent' || p === 'ascent')) want.add('apollo_lm'); }
+  for (const o of md.M.objects) for (const cf of o.configs) {
+    const L = cf.label || {}, sc = L.sc || o.model, parts = L.parts || [];
+    if ((sc === 'apollo' || sc === 'apolloCSM') && parts.some(p => p === 'lander' || p === 'descent' || p === 'ascent')) want.add('apollo_lm');
+    if (sc === 'msl' && parts.includes('lander')) want.add('perseverance');
+  }
   for (const n of want) detailFile(n);
 }
 // a model's bounds after a detailed part replaced its built-in one (the camera frames a standing vehicle with them)
@@ -175,10 +179,19 @@ function refreshBounds(o) {
   w.traverse(n => { if (n.isMesh && n.visible && n.geometry) { n.geometry.computeBoundingBox && !n.geometry.boundingBox && n.geometry.computeBoundingBox(); const b = n.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, n.matrixWorld)); bb.union(b); } });
   if (bb.isEmpty()) return; const sz = new THREE.Vector3(); bb.getSize(sz);
   w.userData.sizeM = Math.max(sz.x, sz.y, sz.z, 1); w.userData.bbox = { w: sz.x, h: sz.y, d: sz.z }; w.userData.bbY = [bb.min.y, bb.max.y];
+  const wheels = []; w.traverse(n => { if (n.userData && n.userData.wheel) wheels.push(n); }); w.userData.wheels = wheels;
 }
 // Apollo lunar module: NASA's model, ascent and descent stages apart. Its descent stage keeps the built-in one's frame (feet
 // at −1.8 m); its ascent stage's origin is the top of the descent stage, 1.455 m up, where the built-in ascent stage sits
 // 1.65 m up. The ascent engine's bell, hidden inside the descent stage in NASA's model, is added for liftoff.
+// Mars 2020 Perseverance: NASA's model, its six wheels apart so they turn (each wheel's node carries its radius) and its
+// mast apart, folded on the deck for the landing and raised on the surface (the node carries the axis and angle)
+function roverD(landed) {
+  return detailPart('perseverance', 'body', rover(1), { extra: g => {
+    const P = DETAIL.ready.perseverance; for (let i = 0; i < 6; i++) if (P['wheel' + i]) g.add(P['wheel' + i].clone());
+    if (P.mast) { const m = P.mast.clone(), d = m.userData.deploy; if (landed && d) m.quaternion.setFromAxisAngle(new THREE.Vector3(d[0], d[1], d[2]), d[3]); g.add(m); }
+  } });
+}
 function lmDescentD(landed) { return detailPart('apollo_lm', 'descent', lmDescent(landed)); }
 function lmAscentD() { return detailPart('apollo_lm', 'ascent', lmAscent(), { y: -0.195, extra: g => { const b = bell(0.75, 0.39); b.position.y = -0.85; g.add(b); } }); }
 function solarWing(len, width, panels, color = '#1b2a4a') {
@@ -328,7 +341,7 @@ function buildSC(model, parts, flags = {}) {
       else if (has('cruisestage')) inner = CS();
       else if (has('lander')) {
         inner = new THREE.Group(); const ds = DS(); ds.position.y = 0; inner.add(ds);
-        const rv = rover(1); rv.position.y = flags.landed ? -7.6 : (flags.powered ? -7.6 : -1.3); if (flags.landed) rv.position.y = 0; inner.add(rv);
+        const rv = roverD(flags.landed); rv.position.y = flags.landed ? -7.6 : (flags.powered ? -7.6 : -1.3); if (flags.landed) rv.position.y = 0; inner.add(rv);
         if (flags.powered && !flags.landed) { const lines = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.8, 0, 0.8), new THREE.Vector3(-0.6, -6.5, 0.6), new THREE.Vector3(0.8, 0, -0.8), new THREE.Vector3(0.6, -6.5, -0.6), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -6.5, 0)]); inner.add(new THREE.LineSegments(lines, new THREE.LineBasicMaterial({ color: 0x999999 }))); }
         if (flags.landed) { inner.remove(ds); inner.userData.footY = 0; } else { inner.userData.footY = -7.6; mounts.push({ y: -0.2, r: 1.5, tag: 'DS' }); }
       }

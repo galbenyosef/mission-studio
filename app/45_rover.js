@@ -90,7 +90,7 @@ function buildTracks(md) {
   const T = md.trav; if (!T) return; const b = R.bodies[T.body]; if (!b) return;
   const C = meshDir(T.seg.lat, T.seg.lon), { E, N } = meshEN(T.seg.lat, T.seg.lon), k = 0.001 / b.R;
   const ground = (e, n, lift) => { const d = vunit([C[0] + (e * E[0] + n * N[0]) * k, C[1] + (e * E[1] + n * N[1]) * k, C[2] + (e * E[2] + n * N[2]) * k]); const hit = capHitLocal(T.body, d); const r = hit ? Math.hypot(...hit) : 1; return vscale(d, r + lift * k); };
-  const P0 = ground(0, 0, 0); const pos = [], od = [], ax = [], idx = []; const half = 1.25, wTr = 0.2; // wheel lines ±1.25 m, tracks 0.4 m wide
+  const P0 = ground(0, 0, 0); const pos = [], od = [], ax = [], idx = []; const half = 1.15, wTr = 0.2; // wheel lines ±1.15 m (Perseverance), tracks 0.4 m wide
   for (const m of T.moves) {
     if (m.kind === 'turn') continue;
     const steps = Math.max(2, Math.ceil(m.d / 0.5)); const sh = Math.sin(m.h0), ch = Math.cos(m.h0);
