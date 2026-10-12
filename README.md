@@ -142,6 +142,7 @@ assets/   planet maps, the star catalogue and the detailed vehicle models
 vendor/   three.js r160 with its glTF loader and the meshopt decoder (MIT)
 tools/models/  builds the detailed models in assets/ from NASA 3D Resources and free Sketchfab models (see its README)
 tools/textures/  builds the planet maps in assets/ from NASA and Solar System Scope sources (see its README)
+tools/video/  how the STS-31 film was made from the app: a scripted camera, the storyboard, the renderer, the score and captions (see its README)
 test/     Node tests for the engine
 media/    screenshots for this README
 ```

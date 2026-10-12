@@ -1,0 +1,13 @@
+# what the video tools write (all of it can be made again)
+node_modules/
+build/
+clips*/
+stills*/
+final/
+mus/
+qa/
+captions*.ass
+*.mp4
+thumb/st*/
+thumb/out/
+thumb/*.png
