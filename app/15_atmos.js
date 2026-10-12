@@ -152,7 +152,7 @@ function atmosUniforms(name, later) {
   A.U = { tTrans: { value: one(255) }, tMS: { value: one(0) }, tSkyI: { value: one(0) }, aRg: { value: A.Rg }, aRt: { value: A.Rg + A.top }, aBR: { value: v3(A.bR) }, aHR: { value: A.HR },
     aBMs: { value: v3(A.bMs) }, aBMe: { value: v3(A.bMe) }, aG: { value: v3(A.g) }, aHM: { value: A.HM }, aBO: { value: v3(A.bO) }, aOz: { value: new THREE.Vector2(A.ozC, A.ozW) },
     aGlow: { value: v3(A.glow) }, aGlowH: { value: new THREE.Vector2(A.glowH, A.glowW) }, aSunE: { value: ATMO_SUN_E }, aGrade: { value: new THREE.Vector3(1, 1, 0) }, aExpo: { value: 1 }, aWB: { value: new THREE.Vector3(1, 1, 1) },
-    aCam: { value: new THREE.Vector3(0, 0, A.Rg + 1000) }, aCamR: { value: A.Rg + 1000 }, aCamH: { value: 1000 }, aSun: { value: new THREE.Vector3(1, 0, 0) } };
+    aCam: { value: new THREE.Vector3(0, 0, A.Rg + 1000) }, aCamR: { value: A.Rg + 1000 }, aCamH: { value: 1000 }, aSun: { value: new THREE.Vector3(1, 0, 0) }, aRgE: { value: A.Rg } };
   const ready = () => { if (!A.lutT) atmosTables(A); A.U.tTrans.value = A.texT; A.U.tMS.value = A.texM; A.U.tSkyI.value = A.texI; };
   if (later) (window.requestIdleCallback || (f => setTimeout(f, 200)))(ready); else ready();
   return A.U;
@@ -186,7 +186,7 @@ const GLSL_ATMOS = `
 uniform sampler2D tTrans; uniform sampler2D tMS; uniform sampler2D tSkyI;
 uniform float aRg, aRt, aHR, aHM, aSunE, aExpo;
 uniform vec3 aBR, aBMs, aBMe, aG, aBO, aGlow, aWB, aGrade; uniform vec2 aOz, aGlowH;
-uniform vec3 aCam; uniform float aCamR, aCamH; uniform vec3 aSun;
+uniform vec3 aCam; uniform float aCamR, aCamH, aRgE; uniform vec3 aSun;
 vec3 aDensity(float h) { return vec3(exp(-h / aHR), exp(-h / aHM), max(0.0, 1.0 - abs(h - aOz.x) / aOz.y)); }
 // transmittance from radius r along mu to the top of the air (Bruneton's mapping of the table)
 vec3 aTransmittance(float r, float mu) {

@@ -71,6 +71,10 @@ const RECIPES = {
     // can raise it on the surface; extras.deploy: the axis and angle that stand it up, from the head's direction
     subtree: { node: 'Cylinder', part: 'mast', tip: 'head' },
     split: { node: 'Wheels_objs', seeds: [[-1.1, -1.15], [1.1, -1.15], [-1.1, 0], [1.1, 0], [-1.1, 1.1], [1.1, 1.1]], part: i => 'wheel' + i, extras: { wheel: 0.2625 } },
+    // the suspension's legs, as a part of their own: its pieces (by connected piece, from where its centre lies) below the
+    // belly, and those of the front and rear legs below the deck. For the landing the wheels are folded up beside the body;
+    // the app hides the legs while they are (the hinges and the rocker's pivots stay on the body)
+    cut: { node: 'suspension', part: 'legs', test: ([, y, z]) => y < 0.74 || (Math.abs(z) > 0.85 && y < 0.9) },
     minSize: 0.012,
     simplify: { default: 0.003, wheel: 0.012 },
     strip: ['KHR_materials_transmission', 'KHR_materials_clearcoat', 'KHR_materials_ior', 'KHR_materials_specular'],
@@ -213,6 +217,13 @@ for (const name of names.length ? names : Object.keys(RECIPES)) {
     });
     src.dispose();
   }
+  if (R.cut) { // the connected pieces of a mesh that R.cut.test picks (by their centres), as a part of their own
+    const src = root.listNodes().find(n => n.getName() === R.cut.node); if (!src) throw new Error('no node ' + R.cut.node);
+    const [cut, rest] = splitByPieces(doc, src, R.cut.test);
+    group(R.cut.part);
+    transformMesh(cut.getMesh(), mul([S, 0, 0, 0, 0, S, 0, 0, 0, 0, S, 0, 0, 0, 0, 1], cut.getWorldMatrix())); holders[R.cut.part].push(cut.getMesh()); cut.dispose();
+    rest.setName(src.getName()); src.dispose(); // the rest goes to a part by R.part, as any other node
+  }
   if (R.subtree) { // a node and its descendants as one part, pivoting about the node's origin
     const top = root.listNodes().find(n => n.getName() === R.subtree.node); if (!top) throw new Error('no node ' + R.subtree.node);
     const piv = mulv(top.getWorldMatrix(), [0, 0, 0]).map(x => x * S), tip = root.listNodes().find(n => n.getName() === R.subtree.tip);
@@ -265,7 +276,10 @@ for (const name of names.length ? names : Object.keys(RECIPES)) {
   // fewer triangles where it cannot be seen: error relative to each part's size (a few millimetres on a lunar module)
   if (R.simplify) for (const [p, g] of Object.entries(groups)) { // a number, or errors by part-name prefix ({ default, wheel, … })
     const err = typeof R.simplify === 'number' ? R.simplify : (Object.entries(R.simplify).find(([k]) => k !== 'default' && p.startsWith(k)) || [0, R.simplify.default])[1];
-    for (const h of g.listChildren()) for (const prim of h.getMesh().listPrimitives()) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: 0, error: err, lockBorder: true });
+    for (const h of g.listChildren()) for (const prim of h.getMesh().listPrimitives()) {
+      simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: 0, error: err, lockBorder: true });
+      if (prim.getIndices() && !prim.getIndices().getCount()) prim.dispose(); // simplified away whole (the encoder takes no empty buffers)
+    }
   }
   await shrinkTextures(doc, R.textures);
   await doc.transform(prune(), dedup(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
@@ -550,6 +564,29 @@ function splitByClusters(doc, node, seeds) {
       mesh.addPrimitive(subPrimitive(doc, prim, sel));
     }
     const nd = doc.createNode(node.getName() + '-' + k).setMesh(mesh).setMatrix(W);
+    doc.getRoot().listScenes()[0].addChild(nd); return nd;
+  });
+}
+// A mesh in two: the connected pieces whose centre (world frame) passes test, and the others. Vertices are joined by
+// position first (a piece's faces may not share vertices where its normals or texture coordinates break).
+function splitByPieces(doc, node, test) {
+  const W = node.getWorldMatrix(), sel = [[], []];
+  for (const prim of node.getMesh().listPrimitives()) {
+    const pos = prim.getAttribute('POSITION'), idx = prim.getIndices(), n = idx ? idx.getCount() : pos.getCount(), nv = pos.getCount(), v = [0, 0, 0];
+    const key = new Map(), id = new Int32Array(nv);
+    for (let i = 0; i < nv; i++) { pos.getElement(i, v); const k = v.map(x => Math.round(x * 1e4)).join(','); if (!key.has(k)) key.set(k, key.size); id[i] = key.get(k); }
+    const par = Int32Array.from({ length: key.size }, (_, i) => i), find = x => { while (par[x] !== x) x = par[x] = par[par[x]]; return x; };
+    const I = t => idx ? idx.getScalar(t) : t;
+    for (let t = 0; t < n; t += 3) { const a = find(id[I(t)]); par[find(id[I(t + 1)])] = a; par[find(id[I(t + 2)])] = a; }
+    const sum = new Map();
+    for (let t = 0; t < n; t++) { const r = find(id[I(t)]); pos.getElement(I(t), v); const p = mulv(W, v); const s = sum.get(r) || [0, 0, 0, 0]; s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; s[3]++; sum.set(r, s); }
+    const inCut = new Map(); for (const [r, s] of sum) inCut.set(r, test([s[0] / s[3], s[1] / s[3], s[2] / s[3]]));
+    for (let t = 0; t < n; t += 3) sel[inCut.get(find(id[I(t)])) ? 0 : 1].push({ prim, a: I(t), b: I(t + 1), c: I(t + 2) });
+  }
+  return sel.map((tris, k) => {
+    const mesh = doc.createMesh(node.getName() + (k ? '-rest' : '-cut'));
+    for (const prim of node.getMesh().listPrimitives()) { const s = tris.filter(t => t.prim === prim); if (s.length) mesh.addPrimitive(subPrimitive(doc, prim, s)); }
+    const nd = doc.createNode(node.getName() + (k ? '-rest' : '-cut')).setMesh(mesh).setMatrix(W);
     doc.getRoot().listScenes()[0].addChild(nd); return nd;
   });
 }

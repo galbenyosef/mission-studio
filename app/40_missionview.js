@@ -24,7 +24,7 @@ function setupMissionView(md) {
   for (const o of M.objects) {
     const node = new THREE.Group(); node.visible = false; R.scene.add(node);
     const c = { o, node, models: new Map(), cur: null, curKey: null, q: new THREE.Quaternion(), qInit: false, plumes: [], chute: null, chuteKey: null, plasma: null, P: null, s: null };
-    for (let i = 0; i < 6; i++) { const p = makePlume(); p.visible = false; node.add(p); c.plumes.push(p); }
+    for (let i = 0; i < 8; i++) { const p = makePlume(); p.visible = false; node.add(p); c.plumes.push(p); }
     c.plasma = makePlasma(); c.plasma.visible = false; node.add(c.plasma);
     const isPrim = o.id === 'ship';
     c.label = h('div', { class: 'lbl craft' + (isPrim ? ' primary' : ''), style: `color:${isPrim ? 'var(--amber)' : (o.kind === 'craft' ? '#7fd1ff' : '#9aa3ad')}` }, h('span', { class: 'dot' }), h('span', { class: 'nm' }, o.name), h('span', { class: 'eng' }, 'ENGINE ON'), h('span', { class: 'sub' }));
@@ -90,7 +90,7 @@ function activeMounts(c, s, t, cfgL, model) {
   if (b && /\bRCS\b/.test(b.engine || '') && !tag) return out; // small reaction-control jets: no main-engine plume
   if (cfgL && cfgL.key === 'stack') tag = 'upper';
   const ms = tag ? mounts.filter(mm => mm.tag === tag) : []; // every engine of that tank (e.g. the orbiter's two OMS engines)
-  if (!ms.length) { const m = mounts.find(mm => mm.tag === 'upper') || mounts[0]; if (m) ms.push(m); }
+  if (!ms.length) { const m = mounts.find(mm => mm.tag === 'upper') || mounts[0]; if (m) ms.push(...mounts.filter(mm => mm.tag === m.tag)); } // no burn on record (a powered descent): the engines of the first mount's kind
   out.push(...ms);
   return out;
 }
@@ -119,8 +119,8 @@ function noseDirection(c, s, t, cfgL, act) {
   // the seconds between one stage letting go and the next lighting up: the stack holds the attitude its guidance commands
   const asc = c.o.id === 'ship' && c.o.segs[0];
   if (cfgL && cfgL.key === 'launch' && !s.pad && asc && t > asc.t0 && t < asc.t1 && s.dir && vnorm(s.dir) > 0.5) return att(vunit(s.dir), upR);
-  if (cfgL && (cfgL.key === 'capsule' || (cfgL.parts && cfgL.parts.includes('aeroshell')))) {
-    if (cfgL.chutes || cfgL.chute || ex.chute) return att(up, vperp(up));
+  if (cfgL && (cfgL.key === 'capsule' || (cfgL.parts && (cfgL.parts.includes('aeroshell') || cfgL.parts.includes('backshell'))))) {
+    if (cfgL.chutes || cfgL.chute || ex.chute) return att(up, vperp(up)); // hanging under its parachute (a backshell let go keeps its own)
     const vv = alt < 200 ? vAir : vD; return att(vscale(vunit(vv), -1), upR);
   }
   if (c.o.model === 'starshipPayload' && alt < 160 && (body === 'earth' || body === 'mars') && cfgL && cfgL.key !== 'launch') {
@@ -191,13 +191,14 @@ function burnEdgeQ(c, x, edge) {
 }
 // the attitude a craft is turning toward at t (the drawn one eases into it), into quaternion q
 function craftAttitude(c, s, t, cfgL, act, q) {
-  if (c.o.kind === 'debris' && !s.surface && sepAttitude(c)) { q.copy(c.sepQ); _q2.setFromAxisAngle(_axTumble, (t - c.o.t0) * 0.035); return q.multiply(_q2); }
+  const hangs = cfgL && cfgL.chute; // under a parachute: no tumbling
+  if (c.o.kind === 'debris' && !s.surface && !hangs && sepAttitude(c)) { q.copy(c.sepQ); _q2.setFromAxisAngle(_axTumble, (t - c.o.t0) * 0.035); return q.multiply(_q2); }
   const nd = noseDirection(c, s, t, cfgL, act);
   basisQuat(nd.nose, nd.roll, q);
   if (nd.roll2 && nd.w2 > 0) { basisQuat(nd.nose, nd.roll2, _q3); q.slerp(_q3, nd.w2); } // handing over between two roll references
   applyShuttleSpin(nd, q);
   if (nd.coast && c.o.kind === 'craft' && !s.surface && !s.pad) { const bh = burnHold(c, t); if (bh) q.slerp(bh.q, bh.w); }
-  if (!s.surface && !s.pad && (c.o.kind === 'debris' || (c.o.kind === 'stage' && !(s.T > 0)))) { // slow tumble after separation (not once it rests on a surface, e.g. the LM descent stage left on the Moon)
+  if (!s.surface && !s.pad && !hangs && (c.o.kind === 'debris' || (c.o.kind === 'stage' && !(s.T > 0)))) { // slow tumble after separation (not once it rests on a surface, e.g. the LM descent stage left on the Moon)
     const age = c.o.id === 'et' ? Math.max(0, t - c.o.t0 - 90) : t - c.o.t0; // the Shuttle's tank drifts clear before it starts to tumble
     _q2.setFromAxisAngle(_axTumble, age * 0.035); q.multiply(_q2);
   }
@@ -332,6 +333,7 @@ function mountFlow(c, s, t, m, act, cfgL) {
 // all the propellant the vehicle burns at liftoff (kg/s): sizes the fire and smoke at the pad and the trail behind the rocket
 function liftoffFlow(L) { return liftoffStages(L).reduce((a, st) => a + stageFlow(st), 0); }
 const blastScale = L => clamp(Math.sqrt(liftoffFlow(L) / 13000), 0.35, 1.35); // 1 for the Saturn V
+const _vDown = new THREE.Vector3(0, -1, 0), _vPd = new THREE.Vector3();
 function updatePlumes(c, s, t, act, model) {
   let i = 0; c.flameLen = 0; c.flameLum = 0;
   if (act.length && s.T > 0) {
@@ -354,7 +356,7 @@ function updatePlumes(c, s, t, act, model) {
       shapePlume(p, r0, Math.max(r0 * g1, r0 + (0.06 + 0.12 * vac) * Lsl), len);
       const yc = model.userData.yc || 0;
       p.position.set(m.x || 0, m.y - yc + (c.yOff || 0), (m.z || 0) + (c.zOff || 0));
-      p.rotation.set(m.flip ? Math.PI : 0, 0, 0);
+      if (m.d) p.quaternion.setFromUnitVectors(_vDown, _vPd.set(m.d[0], m.d[1], m.d[2])); else p.rotation.set(m.flip ? Math.PI : 0, 0, 0); // a canted engine's exhaust leaves along its axis
       const u = p.material.uniforms; u.uColor.value.set(colr); u.uCore.value.set(look[2]);
       u.uI.value = look[0] * (0.35 + 0.65 * (1 - vac * 0.6)) * thr * Math.pow(g0 / g1, 0.7); u.uDiam.value = look[1] * (1 - vac); u.uTime.value = performance.now() / 1000;
       c.flameLen = Math.max(c.flameLen, len); c.flameLum = Math.max(c.flameLum, look[0] * thr * (1 - 0.7 * vac)); // for the smoke it lights (app/47_exhaust.js)

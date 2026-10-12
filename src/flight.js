@@ -415,7 +415,8 @@ function simulateDescent(opt) {
 // skip (bool), chutes ('apollo'|'orion'|'probe'|'none'), edl (Mars descent config), siteElev, landing {Tmax, isp...}
 // ---------------------------------------------------------------------------
 function simulateEntry(opt) {
-  const body = opt.body, mu = BODIES[body].mu, R = surfaceRadius(body), elev = opt.siteElev || 0;
+  // a sky crane lands its rover with the descent stage hanging above it: the stage, whose path this is, stops edl.hang up
+  const body = opt.body, mu = BODIES[body].mu, R = surfaceRadius(body), elev = (opt.siteElev || 0) + (opt.edl && opt.edl.hang || 0) / 1000;
   const omega = bodyOmegaEcl(body, opt.t0);
   const kSG = body === 'earth' ? 1.7415e-4 : 1.9027e-4;
   let t = opt.t0, r = vcopy(opt.r0), v = vcopy(opt.v0), m = opt.m0;
@@ -425,8 +426,9 @@ function simulateEntry(opt) {
   let phase = 'entry', maxG = 0, maxHeat = 0, maxQ = 0, tPeakG = t, tPeakHeat = t, skipPhase = opt.skip ? 1 : 0, dt = 0.25;
   let blackout = false, chuteState = 0, tChute = 0, landed = false, thrust = 0, thrDir = null, propUsed = 0;
   const edl = opt.edl || null, land = opt.land || null;
-  let poweredT0 = 0, powered = false, sky = false;
-  const evt = (name, desc, kind) => events.push({ t, name, desc, kind });
+  let poweredT0 = 0, powered = false, sky = false, divertDir = null;
+  const sky0 = edl && edl.skycrane ? (edl.skyAlt + 10 - edl.hang) / 1000 : null; // a sky crane is down to its last 0.75 m/s by the time it lets the rover down
+  const evt = (name, desc, kind) => events.push({ t, name, desc, kind, r: vcopy(r), v: vcopy(v), m }); // (where it happened: the parts let go there)
   // propulsive landing (Starship): a retro-burn against the airflow at full thrust, lit as late as it can be — once a burn
   // begun now would only just bring the speed down to vHover a few hundred metres above the site — then the hover-down
   // guidance below. The fixed light-up altitude is the latest it may wait (thin Martian air cannot slow the ship enough).
@@ -463,7 +465,10 @@ function simulateEntry(opt) {
     if (edl && body === 'mars') {
       if (chuteState === 0 && mach < edl.chute.mach && alt > 3) { chuteState = 1; tChute = t; evt('Supersonic parachute', `${edl.chute.diam} m parachute deploys at Mach ${mach.toFixed(1)}.`, 'chute'); }
       if (chuteState === 1 && !opt._hsSep && mach < edl.heatshieldSepMach) { opt._hsSep = true; m -= opt.heatshieldMass || 0; evt('Heat shield separation', 'The heat shield drops away; radar and cameras see the ground (terrain-relative navigation).', 'jettison'); }
-      if (chuteState === 1 && alt < edl.backshellSepAlt) { chuteState = 3; m -= opt.backshellMass || 0; powered = true; poweredT0 = t; evt('Backshell separation · powered descent', 'The descent stage drops free of the backshell and parachute and lights its engines.', 'powered'); }
+      if (chuteState === 1 && alt < edl.backshellSepAlt) {
+        chuteState = 3; m -= opt.backshellMass || 0; powered = true; poweredT0 = t; evt('Backshell separation · powered descent', 'The descent stage drops free of the backshell and parachute and lights its engines.', 'powered');
+        if (edl.divert) { const h0 = vsub(vrel, vscale(up, vdot(vrel, up))); divertDir = vunit(vcross(up, vnorm(h0) > 1e-6 ? h0 : vperp(up))); } // to the side of the track the parachute drifts along
+      }
     }
     if (PL && land && !powered) {
       let go = alt < PL.ignAlt;
@@ -507,17 +512,22 @@ function simulateEntry(opt) {
     if (powered && land && retro) { thrDir = vscale(vrel, -1 / vrn); aT = vscale(thrDir, land.Tmax / m / 1000); thrust = land.Tmax; }
     else if (powered && land) {
       const vr = vdot(vrel, up), hz = vsub(vrel, vscale(up, vr));
-      const vdesTarget = alt > 0.06 ? -Math.max(0.002, Math.min(0.09, Math.sqrt(2 * 0.0018 * Math.max(alt - 0.02, 0)))) : -0.00075;
+      // braking at a steady 1.8 m/s² toward 20 m up, the last 60 m at 0.75 m/s; a sky crane brakes toward its last 0.75 m/s
+      const vdesTarget = alt > (sky0 ?? 0.06) ? -Math.max(sky0 != null ? 0.00075 : 0.002, Math.min(0.09, Math.sqrt(2 * 0.0018 * Math.max(alt - (sky0 ?? 0.02), 0)))) : -0.00075;
       const gmag = mu / (rn * rn);
-      const aUp = Math.max(0.1 * gmag, gmag + (vdesTarget - vr) / 2.0); // engines push, never pull: falling slower than planned means minimum throttle, not thrust toward the ground
-      const aHz = vscale(hz, -1 / 3.0);
+      // a sky crane follows its braking curve closely, to be at 0.75 m/s in time: the deceleration the curve asks for at the
+      // speed it is falling, fed forward (1.8 m/s² when it falls as fast as the curve; nothing when it hovers)
+      const ff = sky0 != null && alt > sky0 ? Math.min(0.0036, 0.0018 * Math.max(0, -vr) / Math.max(-vdesTarget, 0.001)) : 0;
+      const aUp = Math.max(0.1 * gmag, gmag + ff + (vdesTarget - vr) / 2.0); // engines push, never pull: falling slower than planned means minimum throttle, not thrust toward the ground
+      // horizontal speed nulled; a sky crane first flies clear of the backshell and its parachute (edl.divert: m/s, for s)
+      const aHz = divertDir && t - poweredT0 < edl.divert[1] ? vscale(vsub(vscale(divertDir, edl.divert[0] / 1000), hz), 1 / 3.0) : vscale(hz, -1 / 3.0);
       let ac = vadd(vscale(up, aUp), aHz);
       ac = vsub(ac, aAero);
       let am = vnorm(ac); const amax = land.Tmax / m / 1000;
       if (am > amax) { am = amax; }
       if (am < (land.minThr || 0.05) * amax) am = (land.minThr || 0.05) * amax;
       thrDir = vunit(ac); aT = vscale(thrDir, am); thrust = am * m * 1000;
-      if (edl && edl.skycrane && !sky && alt < 0.022) { sky = true; evt('Sky crane', 'The descent stage hovers and lowers the rover on 7.6 m bridles.', 'skycrane'); }
+      if (edl && edl.skycrane && !sky && alt < (edl.skyAlt - edl.hang) / 1000) { sky = true; evt('Sky crane', `${edl.skyAlt} m up, the descent stage lets the rover down on ${edl.bridle} m bridles, still descending at 0.75 m/s.`, 'skycrane'); }
     }
     const aProper = vnorm(vadd(aAero, aT)) * 1000 / G0;
     const heat = kSG * Math.sqrt(atm.rho / (opt.rn || 1)) * Math.pow(vms, 3) / 1e4; // W/cm^2

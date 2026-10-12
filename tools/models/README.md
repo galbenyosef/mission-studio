@@ -7,7 +7,7 @@
 
 Each recipe in `build.mjs` does the following:
 
-- It splits the model into the parts the app moves separately. For example, a lunar module has an ascent stage and a descent stage.
+- It splits the model into the parts the app moves separately. For example, a lunar module has an ascent stage and a descent stage. A part can also be the connected pieces of one mesh, picked by where they lie: a rover's legs, which the app hides while the wheels are folded.
 - It scales the model to metres. It puts each part's origin where the app's built-in model of that part has it, so the parts fit every configuration: docked, landed or lifting off.
 - It drops parts too small to see. It merges meshes by material, so each part takes only a few draw calls, and simplifies the geometry within a few millimetres.
 - It sets metalness and roughness for the app's image-based lighting.
@@ -34,7 +34,7 @@ node frame.mjs <file.gltf>                   # a model's principal axes and exte
 | Asset | Source | Parts |
 |---|---|---|
 | `apollo_lm.glb` | `3D Models/Apollo Lunar Module` | `descent`: feet at y = −1.8 m. `ascent`: origin at the top of the descent stage. |
-| `perseverance.glb` | `3D Models/Mars 2020 Perseverance Rover` | `body`: wheels on the ground at y = 0, +Z forward. `wheel0`–`wheel5`: pivots on the axles, `extras.wheel` = radius. `mast`: pivot at the shoulder hinge, `extras.deploy` = axis and angle that raise it. |
+| `perseverance.glb` | `3D Models/Mars 2020 Perseverance Rover` | `body`: wheels on the ground at y = 0, +Z forward. `wheel0`–`wheel5`: pivots on the axles, `extras.wheel` = radius. `legs`: the suspension's pieces below the belly and the front and rear legs. `mast`: pivot at the shoulder hinge, `extras.deploy` = axis and angle that raise it. |
 | `iss.glb` | `3D Models/International Space Station (ISS) (D) (IGOAL)` | `iss`, one part: the station as in July 2011. The station's frame: +Y forward, +Z zenith, +X starboard, metres, PMA-2's docking face at (0, 21.5, 0). |
 | `saturnv.glb` | ["Saturn V"](https://sketchfab.com/3d-models/saturn-v-88f68de3b3e9435582560e02a52b325d) by BoldlyBuilding (CC BY 4.0), unzipped into `saturnv/` | One part per stage, each in the stage's own frame: +Y up, metres. `S-IC`: y = 0 at the base of its thrust structure, the F-1 nozzles 3.24 m below. `IST` (the S-II's aft interstage) and `S-II`: y = 0 at the bottom of the interstage. `S-IVB` (with the instrument unit): y = 0 at the top of the cone between it and the S-II. |
 | `shuttle_stack.glb` | ["Space Shuttle Atlantis"](https://sketchfab.com/3d-models/space-shuttle-atlantis-2f04130e3c78439d9765b5ac71b333d2) by paburoviii (CC BY 4.0), unzipped into `atlantis/` | The stack's frame: +Y up, the orbiter on −Z, metres. `ET`: y = 0 at the bottom of the tank's aft dome, on its axis. `SRB`: the right booster, y = 0 at the bottom of its aft skirt, on its axis (the nozzle's exit 0.88 m below); the app mirrors it for the left. |

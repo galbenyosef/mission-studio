@@ -271,7 +271,11 @@ const SPACECRAFT = {
       ROVER: { name: 'Perseverance rover + Ingenuity', dry: 1027, prop: 0 },
     },
     orbiter: ['CRUISE'], entry: ['AEROSHELL', 'DS', 'ROVER'], prop: { orbiter: 'CRUISE', lander: 'DS' },
-    edl: { diam: 4.5, LD: 0.24, cd: 1.65, rn: 1.125, chute: { diam: 21.5, cd: 0.6, mach: 1.75 }, heatshieldSepMach: 0.8, backshellSepAlt: 2.1, skycrane: true },
+    // sky crane (Perseverance's landing press kit): from 20 m up the descent stage lets the rover down on 6.4 m bridles and
+    // stands hang = 8.1 m above the ground when its wheels touch (the bridle device 0.6 m under the stage, the bridles, the
+    // rover's deck 1.13 m above its wheels: app/33_mars2020.js); then it flies off and comes down about 650 m away. Just
+    // after it drops from the backshell it flies sideways, clear of the backshell and parachute coming down behind it
+    edl: { diam: 4.5, LD: 0.24, cd: 1.65, rn: 1.125, chute: { diam: 21.5, cd: 0.6, mach: 1.75 }, heatshieldSepMach: 0.8, backshellSepAlt: 2.1, skycrane: true, hang: 8.1, skyAlt: 20, bridle: 6.4, flyaway: 650, divert: [30, 15] },
     model: 'msl',
   },
   tianwen1: {

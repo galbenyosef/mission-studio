@@ -230,11 +230,13 @@ void main() {
   if (t1 <= 0.0) discard;
   bool outside = aCamH > aRt - aRg;
   float t0 = outside ? -b - sq : 0.0;
-  float cG = aCamH * (aCamR + aRg), DG = near ? b * b - cG : aRg * aRg - pc2;
+  // the ground: the planet's sphere, or lower where the camera is in a basin below it (aRgE: the ground under the camera, as
+  // the terrain there has it), so that lines of sight passing over the basin's rim show sky rather than nothing
+  float cG = (aCamR - aRgE) * (aCamR + aRgE), DG = near ? b * b - cG : aRgE * aRgE - pc2;
   bool ground = b < 0.0 && DG > 0.0;
   // the planet's mesh covers lines of sight that dip more than its facets' depth (0.2 km) below the surface: only the sliver
   // at the limb is left to draw here
-  if (ground && pc2 < (aRg - 0.5) * (aRg - 0.5)) discard;
+  if (ground && pc2 < (aRgE - 0.5) * (aRgE - 0.5)) discard;
   float tE = ground ? (near ? cG / (-b + sqrt(DG)) : -b - sqrt(DG)) : t1;
   vec3 S, T; aIntegrate(aCam, d, t0, tE, aSun, outside ? (ground ? 2 : 0) : 1, 24, S, T);
   vec3 c = aDisplay(S);
@@ -589,7 +591,7 @@ function updateSky() {
   for (const name in R.airSky) {
     const A = ATMOS[name], U = A.U; if (!A.lutT) { R.airSky[name].visible = false; continue; } // (tables still to come)
     const rel = vsub(camH, helio(name, MV.tNow).r), r = vnorm(rel), h = r - A.Rg, sunD = vunit(vscale(camH, -1));
-    U.aCam.value.set(rel[0], rel[1], rel[2]); U.aCamR.value = r; U.aCamH.value = h;
+    U.aCam.value.set(rel[0], rel[1], rel[2]); U.aCamR.value = r; U.aCamH.value = h; U.aRgE.value = Math.min(A.Rg, groundRadius(name, vscale(rel, 1 / r), MV.tNow));
     R.airSky[name].visible = r < A.Rg * 120;
     const sT = r < A.Rg + A.top + 2000 ? atmosSunTransmittance(name, rel, sunD) : null, ex = atmosExposure(name, h, sT);
     U.aWB.value.set(...ex.wb); U.aGrade.value.set(...ex.grade); U.aExpo.value = ex.expo;
