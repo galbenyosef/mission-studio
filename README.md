@@ -39,6 +39,7 @@
 - **Direct the camera.**
   - An auto-follow "director" mode, plus orbit, chase, look-at, ground and top-down cameras.
   - Lenses from 12 to 3200 mm and film aspect-ratio guides (2.39:1, 1.85:1 …).
+  - A film look (in Layers): light brighter than white blooms (the Sun, flames, the glow of an entry), highlights roll off instead of clipping, the corners darken a little and fine grain moves over the picture.
   - Drag to orbit and scroll or pinch to zoom.
 - **Build a storyboard.** The **Shot** button saves a frame with a slate (mission time, camera, lens, telemetry) to a shot list. You can view the list as a contact sheet or copy it as text.
 - **Hear it.** All sound is synthesised live in the browser:

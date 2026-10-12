@@ -44,7 +44,9 @@ node tools/video/assemble.js --chapters --crf 20 --preset medium --lang en --sub
 ```
 
 `render.js --only s05_etsep,s14_hubble` renders some scenes; scenes marked `aa: true` render with multisampling in a
-session of their own. `subs.js` prints each caption with the mission time it falls on, to check it against `events.js sts31`.
+session of their own. `render.js --film` (or `film: true` in a board) renders with the app's film look: bloom, highlights
+that roll off, a vignette and grain. The STS-31 film was made without it. The grain changes every frame and costs a lot
+of bitrate (a clip of the runway scene came out twenty times larger); `--no-grain` (or `grain: false`) leaves it out. `subs.js` prints each caption with the mission time it falls on, to check it against `events.js sts31`.
 
 Thumbnails: `node tools/video/render.js --board tools/video/thumbboard.js --stills 1 --w 2560 --h 1440 --out tools/video/thumb/st`
 for the still (copy it to `thumb/bg.jpg`), then `node tools/video/thumb/thumb.js` writes `thumb_ko@2x.png` and

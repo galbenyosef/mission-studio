@@ -34,13 +34,14 @@
   }
   const evT = (md, name) => { const re = new RegExp(name, 'i'); const e = md.events.find(e => re.test(e.name)); if (!e) throw new Error('no event ' + name); return e.t; };
   const V = {};
-  V.setup = () => {
+  V.setup = (opts = {}) => {
     window.requestAnimationFrame = () => 0; // the app's own loop stops: frames are rendered on demand
     ms.STATE.playing = false; ms.STATE.auto = false;
     for (const k of ['paths', 'future', 'osc', 'orbits', 'labels', 'vectors', 'captions', 'burnin', 'guides', 'minimap']) ms.MV.layers[k] = false;
     document.getElementById('app').classList.add('hide-ui');
     for (const id of ['countdown', 'prop', 'caption']) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
     ms.setMode('chase'); ms.CAM.trans = null;
+    ms.MV.layers.film = !!opts.film; ms.MV.filmGrain = opts.grain !== false; // the app's film look: bloom, highlight roll-off, vignette, grain
   };
   // prepare a scene: its time mapping and camera
   V.scene = spec => {

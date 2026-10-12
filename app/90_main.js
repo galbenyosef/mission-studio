@@ -113,7 +113,9 @@ function renderFrame(forCapture) {
   updateLabels(t, focus);
   if (md && MV.layers.minimap !== false) drawMinimap(t, forCapture);
   const bc = R.bgCam; bc.quaternion.copy(R.camera.quaternion); if (bc.fov !== R.camera.fov || bc.aspect !== R.camera.aspect) { bc.fov = R.camera.fov; bc.aspect = R.camera.aspect; bc.updateProjectionMatrix(); }
+  const film = filmBegin(); // the film look: draw into its target, then finish onto the screen (app/25_film.js)
   R.renderer.clear(); R.renderer.render(R.bgScene, bc); R.renderer.clearDepth(); R.renderer.render(R.scene, R.camera);
+  if (film) filmEnd();
   updateHUD(t);
 }
 // ---------------- launch countdown: T−10 … 1, then LIFTOFF ----------------
@@ -211,6 +213,8 @@ function applyLayers() {
   $('#guides').classList.toggle('on', !!MV.layers.guides);
   $('#burnin').style.display = MV.layers.burnin ? '' : 'none';
   if (!MV.layers.captions) $('#caption').classList.add('fade');
+  const fl = $('#layers input[data-layer="film"]'); // the film look needs WebGL 2 with floating-point targets
+  if (fl && R.renderer && !filmSupported()) { fl.checked = false; fl.disabled = true; MV.layers.film = false; fl.parentElement.title = 'Not available: this browser cannot draw into floating-point targets'; }
 }
 function openSetup() { $('#setup').hidden = false; if (MV.md) { STATE.playing = false; syncPlayUI(); } if (SETUP.scn) { renderDetail(); renderPlanStatus(); } }
 function jumpEvent(dir) {
