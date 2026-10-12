@@ -280,6 +280,34 @@ function shuttlePayload(kind, flags = {}, B = SH_BAY_BUILTIN) {
   if (flags.obss) { const b = cyl(0.2, 0.2, 15.2, mat('#d8d6cf', 'paint'), 10); b.position.set(B.wall - 0.22, 6.9, B.hz + 0.25); g.add(b); } // the boom on the starboard sill
   return g;
 }
+// Each flight's orbiter in its own markings. The scan is Discovery as she was retired, in the markings of 1998 on; for the
+// orbiters of the app's flights tools/livery repaints its colour map as they flew them: Columbia in 1981 (the name on the
+// payload bay doors, "USA" on the right wing, a flag on the left, the black chines), Discovery in 1990 (the NASA logotype
+// on the wing and the doors, "USA" and a flag on the left wing, no insignia), Atlantis in 2011 (the scan's scheme, her name).
+const ORBITER_LIVERY = { 'OV-102': 'columbia-1981', 'OV-103': 'discovery-1990', 'OV-104': 'atlantis-2011' };
+const LIVERIES = {}; let SCAN_MAT = null; // (the scan's own material, which a livery replaces)
+function orbiterLivery(id) { // a promise of the scan's material with this orbiter's colour map (null: keep the scan's own)
+  const key = ORBITER_LIVERY[id]; if (!key) return Promise.resolve(null);
+  if (!LIVERIES[key]) LIVERIES[key] = detailFile('orbiter').then(P => new Promise(ok => {
+    let base = null; if (P && P.body) P.body.traverse(o => { if (!base && o.isMesh && o.material && o.material.map && o.material.name === 'default') base = o.material; });
+    if (!base) return ok(null);
+    SCAN_MAT = base;
+    const done = t => {
+      const b = base.map; t.flipY = false; t.colorSpace = b.colorSpace; t.wrapS = b.wrapS; t.wrapT = b.wrapT; t.magFilter = b.magFilter; t.minFilter = b.minFilter; t.anisotropy = b.anisotropy; t.needsUpdate = true;
+      const m = base.clone(); m.map = t; m.userData.livery = key; ok(m);
+    };
+    const file = ASSET('orbiter-' + key + '.webp'), fail = () => { console.warn(`Livery ${key} could not be loaded; the orbiter keeps the scan's markings.`); ok(null); };
+    // as the glTF loader reads the scan's own maps: decoded off the main thread where the browser can, not flipped
+    const safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    if (typeof createImageBitmap === 'function' && !safari) new THREE.ImageBitmapLoader().setOptions({ premultiplyAlpha: 'none' }).load(file, bmp => done(new THREE.Texture(bmp)), undefined, fail);
+    else new THREE.TextureLoader().load(file, done, undefined, fail);
+  }));
+  return LIVERIES[key];
+}
+// the scan's parts in a model take the livery's material (when it has arrived)
+function wearLivery(g, id) {
+  orbiterLivery(id).then(m => { if (m) g.traverse(o => { if (o.isMesh && o.material === SCAN_MAT) o.material = m; }); });
+}
 // The orbiter: the scan's body, doors (swung open 175.5° in orbit) and landing gear, with the payload bay's lining, the robot
 // arm and the payloads; the built-in model until the scan arrives (or if it cannot be loaded).
 function buildOrbiter(flags = {}) {
@@ -289,6 +317,7 @@ function buildOrbiter(flags = {}) {
     for (const [k, side] of [['doorL', -1], ['doorR', 1]]) if (P[k]) { const n = P[k].clone(); if (open) n.rotation.y = -side * SH_DOOR.open; d.add(n); doors[k] = n; }
     if (flags.gear && P.gear) d.add(P.gear.clone()); else if (!flags.gear) d.add(shuttleWellCovers());
     d.userData.doors = doors; d.userData.rig = orbiterFittings(d, flags, SH_BAY_SCAN);
+    wearLivery(d, flags.orbiter);
   } });
   // doors and arm in motion (bay doors opening or closing from flags.bayT, the deploy from flags.armT)
   if (flags.bayT != null || flags.armT) g.userData.animate = t => {

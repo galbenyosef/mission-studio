@@ -150,6 +150,7 @@ function preloadDetailedModels(md) {
     if ((sc === 'apollo' || sc === 'apolloCSM') && parts.some(p => p === 'lander' || p === 'descent' || p === 'ascent')) want.add('apollo_lm');
     if (sc === 'msl' && parts.includes('lander')) want.add('perseverance');
     if (o.model === 'shuttle') want.add('orbiter');
+    if (L.orbiter) orbiterLivery(L.orbiter); // the flight's orbiter in its markings (the stack's and the orbiter's own configurations)
     if (o.model === 'iss') want.add('iss');
     if (L.launcher && LAUNCHERS[L.launcher]) for (const st of LAUNCHERS[L.launcher].stages) if (st.detail) want.add(st.detail); // launch stacks and spent stages
   }
@@ -188,13 +189,21 @@ const STAGE_D = {
 };
 // Space Shuttle: the external tank and the boosters of a CC BY model of the stack (paburoviii, credited in the README and the
 // app), scaled to their published sizes by tools/models; the orbiter is the Smithsonian's scan. STS-1 and STS-2 flew tanks
-// painted white (opts.white): the foam's colour map gives way to white paint.
-const ET_WHITE = () => MATS.etWhite || (MATS.etWhite = new THREE.MeshStandardMaterial({ color: '#e6e4dc', roughness: 0.6, metalness: 0, side: THREE.DoubleSide }));
+// painted white (opts.white): the foam's colour map turns to white paint over the same foam, its texture and the darker
+// intertank showing through more faintly (0.188: the map's mean luminance).
+const ET_WHITE = new WeakMap();
+function etWhite(foam) {
+  let m = ET_WHITE.get(foam); if (m) return m;
+  m = foam.clone(); m.roughness = 0.6;
+  m.onBeforeCompile = s => { s.fragmentShader = s.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = vec3(0.79, 0.776, 0.716) * mix(1.0, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)) / 0.188, 0.55);'); };
+  m.customProgramCacheKey = () => 'etWhite';
+  ET_WHITE.set(foam, m); return m;
+}
 function stageD(st, fallback, opts) {
   const D = STAGE_D[st.detail + ':' + st.id] || {};
   return detailPart(st.detail, st.id, fallback, { extra: g => {
     const P = DETAIL.ready[st.detail];
-    if (opts.white) g.traverse(o => { if (o.isMesh && o.material && o.material.map && /Orange/.test(o.material.name)) o.material = ET_WHITE(); });
+    if (opts.white) g.traverse(o => { if (o.isMesh && o.material && o.material.map && /Orange/.test(o.material.name)) o.material = etWhite(o.material); });
     if (P.IST && st.geom[0][4] && st.geom[0][4].ist && opts.ist !== false) g.add(P.IST.clone());
     for (const [y, r, kind] of D.caps || []) { const c = cyl(r, r, 0.06, kind === 'dark' ? mat('#2e3135', 'dark') : mat('#9a9fa5', 'metal'), 32); c.position.y = y - 0.03; g.add(c); }
     if (D.bells) for (const p of engineLayout(st.eng)) { const b = bell(st.eng.len, st.eng.r); b.position.set(p[0], st.eng.y0, p[1]); g.add(b); }
