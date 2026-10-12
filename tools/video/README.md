@@ -1,9 +1,9 @@
 # Video tools
 
 How the 30-minute STS-31 film (Discovery deploys the Hubble Space Telescope, a sleep video with Korean and English
-versions) was made from Mission Studio: a build of the app with a scripted camera, a storyboard of 17 scenes, a renderer
-that steps the simulation frame by frame and pipes JPEGs into ffmpeg, an original ambient score, captions with an event
-timeline, and the final assembly. Nothing here is part of the app; the app itself is unchanged by these tools.
+versions) and the five-minute STS-135 highlight film were made from Mission Studio: a build of the app with a scripted
+camera, a storyboard of scenes, a renderer that steps the simulation frame by frame and pipes JPEGs into ffmpeg, an
+original score, captions with an event timeline, and the final assembly. Nothing here is part of the app; the app itself is unchanged by these tools.
 
 | File | What it does |
 |---|---|
@@ -51,6 +51,37 @@ of bitrate (a clip of the runway scene came out twenty times larger); `--no-grai
 Thumbnails: `node tools/video/render.js --board tools/video/thumbboard.js --stills 1 --w 2560 --h 1440 --out tools/video/thumb/st`
 for the still (copy it to `thumb/bg.jpg`), then `node tools/video/thumb/thumb.js` writes `thumb_ko@2x.png` and
 `thumb_en@2x.png`; scale them to 1280×720 with `ffmpeg -i thumb_ko@2x.png -vf scale=1280:720:flags=lanczos thumb_ko.jpg`.
+
+## The STS-135 film
+
+A five-minute highlight film of STS-135 (Atlantis, the last Space Shuttle flight, to the International Space Station),
+with Korean and English versions, made with the same tools from its own board and score:
+
+| File | What it does |
+|---|---|
+| `sts135.js` | The board: 16 scenes from the pad to wheel stop, 1.5-second crossfades, the app's film look without grain, captions in Korean and English, the event timeline |
+| `music_sts135.py`, `make_music_sts135.sh` | Its score, synthesised from nothing like the sleep film's, CC0: D major at 96 beats a minute, its bars laid so that liftoff and touchdown fall on downbeats; normalised to −16 LUFS (`mus/sts135.wav`) |
+
+```sh
+sh tools/video/build_video.sh
+python3 -m http.server -d tools/video/build/dist 8815 &
+node tools/video/render.js --board tools/video/sts135.js --stills 2 --out tools/video/stills135
+node tools/video/render.js --board tools/video/sts135.js --out tools/video/clips135
+sh tools/video/make_music_sts135.sh
+node tools/video/subs.js --board tools/video/sts135.js --timeline --out tools/video/captions135_tl.ass
+node tools/video/subs.js --board tools/video/sts135.js --timeline --lang en --out tools/video/captions135_en_tl.ass
+node tools/video/assemble.js --board tools/video/sts135.js --clips tools/video/clips135 --music tools/video/mus/sts135.wav --chapters --crf 20 --preset medium --fade-in 1.5 --fade-out 4 --lang ko --subs tools/video/captions135_tl.ass --out tools/video/final/sts135-ko.mp4
+node tools/video/assemble.js --board tools/video/sts135.js --clips tools/video/clips135 --music tools/video/mus/sts135.wav --chapters --crf 20 --preset medium --fade-in 1.5 --fade-out 4 --lang en --subs tools/video/captions135_en_tl.ass --out tools/video/final/sts135-en.mp4
+```
+
+Scenes are timed to the score: the docking falls on the downbeat where the score turns broad (136 s), the undocking and
+the deorbit start where it changes (181 s, 221 s), the touchdown on the last section's downbeat (268.5 s). A board's
+`title`, `titleEn` and `music` name the file's metadata. The station is filmed in sunlight: the backflip ends before the
+station goes into Earth's shadow, Raffaello is seen on Harmony at the next sunrise, and the undocking scene starts once
+Atlantis is back in sunlight, already flying round. Thumbnails: the still from `node tools/video/render.js --board
+tools/video/thumbboard135.js --stills 1 --w 2560 --h 1440 --out tools/video/thumb/st135` (Atlantis docked, seen ahead of
+the station) goes to `thumb/bg_sts135.jpg`, then `node tools/video/thumb/thumb.js sts135` writes `thumb_sts135_ko@2x.png`
+and `thumb_sts135_en@2x.png`.
 
 ## Rendering on a Mac
 

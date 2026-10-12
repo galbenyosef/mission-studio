@@ -26,6 +26,7 @@
 <script>
   window.fill = t => {
     document.documentElement.lang = new URLSearchParams(location.search).get('lang') || 'ko';
+    const bg = new URLSearchParams(location.search).get('bg'); if (bg) document.querySelector('.bg').style.backgroundImage = `url(${bg})`;
     k.textContent = t.kicker; h.innerHTML = t.head; s.textContent = t.sub;
     b.innerHTML = ''; t.badges.forEach((x, i) => { const e = document.createElement('span'); e.className = 'badge' + (i ? '' : ' lead'); e.textContent = x; b.appendChild(e); });
   };

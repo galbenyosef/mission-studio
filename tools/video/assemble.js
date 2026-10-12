@@ -7,7 +7,7 @@ const fs = require('fs'), path = require('path'), { spawnSync } = require('child
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const SB = require(path.resolve(arg('board', path.join(__dirname, 'scenes.js'))));
 const CLIPS = arg('clips', path.join(__dirname, 'clips')), SUBS = path.resolve(arg('subs', path.join(__dirname, 'captions.ass')));
-const MUSIC = arg('music', path.join(__dirname, 'mus/music.wav')), MFROM = +arg('music-from', 0), OUT = arg('out', path.join(__dirname, 'sts31.mp4'));
+const MUSIC = arg('music', path.join(__dirname, 'mus/music.wav')), MFROM = +arg('music-from', 0), OUT = arg('out', path.join(__dirname, 'sts31.mp4')); // the board's title, titleEn and music name the file's metadata
 const CRF = arg('crf', '20'), PRESET = arg('preset', 'slow'), FIN = +arg('fade-in', 3), FOUT = +arg('fade-out', 5), XF = SB.xfade || 0;
 const len = sc => sc.range ? sc.range[1] - sc.range[0] : sc.dur, LANG = arg('lang', 'ko');
 
@@ -35,8 +35,8 @@ const args = ['-y', '-hide_banner', '-loglevel', 'error', '-stats', ...inputs, '
   ...(chap.length ? ['-map_metadata', String(n + 1), '-map_chapters', String(n + 1)] : []),
   '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF, '-tune', 'film', '-x264-params', 'aq-mode=3', '-pix_fmt', 'yuv420p', '-r', '24',
   '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-t', T.toFixed(3), '-movflags', '+faststart',
-  '-metadata', LANG === 'en' ? 'title=STS-31 Discovery · Deploying the Hubble Space Telescope' : 'title=STS-31 디스커버리호 · 허블 우주망원경 배치',
-  '-metadata', 'comment=Rendered with Mission Studio. Music: original ambient score, CC0.', '-metadata:s:a:0', `language=${LANG === 'en' ? 'eng' : 'kor'}`,
+  '-metadata', 'title=' + (LANG === 'en' ? SB.titleEn || 'STS-31 Discovery · Deploying the Hubble Space Telescope' : SB.title || 'STS-31 디스커버리호 · 허블 우주망원경 배치'),
+  '-metadata', `comment=Rendered with Mission Studio. Music: ${SB.music || 'original ambient score, CC0'}.`, '-metadata:s:a:0', `language=${LANG === 'en' ? 'eng' : 'kor'}`,
   OUT + '.part.mp4'];
 fs.mkdirSync(path.dirname(path.resolve(OUT)), { recursive: true });
 console.log(`${n} scenes, ${T.toFixed(1)} s → ${OUT}`);
