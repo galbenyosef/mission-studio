@@ -274,7 +274,7 @@ function updateCraft(c, t, camPos) {
 const _vPl = new THREE.Vector3(), _qPl = new THREE.Quaternion();
 function updatePlasma(c, s, t, model, chutes) {
   const heat = (s.extra && s.extra.heat) || 0, G = c.plasma, U = G.userData;
-  if (heat > 0.3 && !model.userData.plasmaGeo && !U.pending) { // scatter the points over the model ahead of the glow, when the browser is idle (~0.1 s)
+  if (heat > 0.3 && !model.userData.plasmaGeo && !U.pending) { // scatter the points over the model ahead of the glow, when the browser is idle (~0.2 s)
     U.pending = true; (window.requestIdleCallback || setTimeout)(() => { plasmaGeometry(model); U.pending = false; });
   }
   if (!(heat > 3) || chutes) { G.visible = false; return; }

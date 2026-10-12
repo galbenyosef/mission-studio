@@ -615,13 +615,39 @@ function makePlasma() {
   const g = new THREE.Group(), shell = plasmaPoints('shell'), halo = plasmaPoints('halo'), wake = plasmaPoints('wake'); g.add(halo, shell, wake);
   g.userData = { shell, halo, wake, geo: null }; return g;
 }
-// points scattered evenly over a model's surface (by area), with the surface's outward normal, in the model's own axes;
-// made once per model
+// The space round a model: its surface drawn into voxels (each a 128th of the model's largest size), then the empty voxels
+// flood-filled from the edges of the box round it. What the fill cannot reach is enclosed by the model: a payload in a
+// closed bay, the bay doors' inner faces, a cabin behind its glass, a capsule's insides. tri: 18 numbers a triangle (its
+// corners, then their normals), lo/hi: the box. Returns out(x, y, z): true in the space outside.
+function outsideField(tri, lo, hi) {
+  const v = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 128 || 1, o = lo.map(x => x - 2 * v);
+  const n = [0, 1, 2].map(k => Math.ceil((hi[k] - lo[k]) / v) + 5), nxy = n[0] * n[1], cell = new Uint8Array(nxy * n[2]); // 1 surface, 2 outside
+  const at = (x, y, z) => { const i = Math.floor((x - o[0]) / v), j = Math.floor((y - o[1]) / v), k = Math.floor((z - o[2]) / v);
+    return i < 0 || j < 0 || k < 0 || i >= n[0] || j >= n[1] || k >= n[2] ? -1 : i + j * n[0] + k * nxy; };
+  for (let T = 0; T < tri.length; T += 18) { // points at most half a voxel apart over each triangle
+    const e = Math.max(Math.hypot(tri[T + 3] - tri[T], tri[T + 4] - tri[T + 1], tri[T + 5] - tri[T + 2]), Math.hypot(tri[T + 6] - tri[T], tri[T + 7] - tri[T + 1], tri[T + 8] - tri[T + 2]), Math.hypot(tri[T + 6] - tri[T + 3], tri[T + 7] - tri[T + 4], tri[T + 8] - tri[T + 5]));
+    const m = Math.max(1, Math.ceil(e / (0.5 * v)));
+    for (let a = 0; a <= m; a++) for (let b = 0; a + b <= m; b++) { const u = a / m, w = b / m, s = 1 - u - w;
+      const q = at(s * tri[T] + u * tri[T + 3] + w * tri[T + 6], s * tri[T + 1] + u * tri[T + 4] + w * tri[T + 7], s * tri[T + 2] + u * tri[T + 5] + w * tri[T + 8]); if (q >= 0) cell[q] = 1; }
+  }
+  const queue = new Int32Array(cell.length); let head = 0, tail = 0; queue[tail++] = 0; cell[0] = 2; // a corner of the box, outside the model
+  while (head < tail) { const q = queue[head++], i = q % n[0], j = Math.floor(q / n[0]) % n[1], k = Math.floor(q / nxy);
+    if (i > 0 && !cell[q - 1]) { cell[q - 1] = 2; queue[tail++] = q - 1; } if (i < n[0] - 1 && !cell[q + 1]) { cell[q + 1] = 2; queue[tail++] = q + 1; }
+    if (j > 0 && !cell[q - n[0]]) { cell[q - n[0]] = 2; queue[tail++] = q - n[0]; } if (j < n[1] - 1 && !cell[q + n[0]]) { cell[q + n[0]] = 2; queue[tail++] = q + n[0]; }
+    if (k > 0 && !cell[q - nxy]) { cell[q - nxy] = 2; queue[tail++] = q - nxy; } if (k < n[2] - 1 && !cell[q + nxy]) { cell[q + nxy] = 2; queue[tail++] = q + nxy; } }
+  const out = (x, y, z) => { const q = at(x, y, z); return q < 0 || cell[q] === 2; };
+  out.step = 1.5 * v; // how far off a surface to look
+  return out;
+}
+// Points scattered evenly over a model's surface (by area), with the surface's outward normal, in the model's own axes;
+// made once per model. Only on faces open to the space outside it (outsideField): a face with that space ahead of it, or
+// behind it (its normal then turned round); the air never reaches a face shut inside the model, and points there would
+// glow through any gap.
 function plasmaGeometry(model) {
   const ud = model.userData; if (ud.plasmaGeo) return ud.plasmaGeo;
   model.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(model.matrixWorld).invert(), M = new THREE.Matrix4(), NM = new THREE.Matrix3();
-  const tri = [], cum = []; let total = 0;
+  const tri = [], cum = [], lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; let total = 0;
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), na = new THREE.Vector3(), nb = new THREE.Vector3(), nc = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
   model.traverse(o => {
     if (!o.isMesh || !o.visible || !o.geometry || !o.geometry.attributes.position || !o.material || o.material.transparent || o.material.isShaderMaterial) return;
@@ -634,16 +660,23 @@ function plasmaGeometry(model) {
       if (N) { na.fromBufferAttribute(N, i0).applyMatrix3(NM); nb.fromBufferAttribute(N, i1).applyMatrix3(NM); nc.fromBufferAttribute(N, i2).applyMatrix3(NM); }
       else { e1.normalize(); na.copy(e1); nb.copy(e1); nc.copy(e1); }
       tri.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z); total += ar; cum.push(total);
+      for (const p of [a, b, c]) for (let k = 0; k < 3; k++) { const x = p.getComponent(k); if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x; }
     }
   });
-  const rnd = mulberry32(20261012), L = ud.len || 8;
+  const rnd = mulberry32(20261012), L = ud.len || 8, out = cum.length ? outsideField(tri, lo, hi) : null;
   const make = n => {
     const pos = new Float32Array(3 * n), nrm = new Float32Array(3 * n), r = new Float32Array(n), ph = new Float32Array(n), jit = new Float32Array(3 * n);
     for (let k = 0; k < n; k++) {
-      let lo = 0, hi = cum.length - 1; const x = rnd() * total; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < x) lo = m + 1; else hi = m; }
-      let u = rnd(), v = rnd(); if (u + v > 1) { u = 1 - u; v = 1 - v; } const w = 1 - u - v, T = 18 * lo;
-      for (let j = 0; j < 3; j++) { pos[3 * k + j] = w * tri[T + j] + u * tri[T + 3 + j] + v * tri[T + 6 + j]; nrm[3 * k + j] = w * tri[T + 9 + j] + u * tri[T + 12 + j] + v * tri[T + 15 + j]; }
-      const nl = Math.hypot(nrm[3 * k], nrm[3 * k + 1], nrm[3 * k + 2]) || 1; for (let j = 0; j < 3; j++) nrm[3 * k + j] /= nl;
+      for (let tries = 0; tries < 16; tries++) { // a point on a face open to the outside (after 16 misses, one that will not glow)
+        let lo = 0, hi = cum.length - 1; const x = rnd() * total; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < x) lo = m + 1; else hi = m; }
+        let u = rnd(), v = rnd(); if (u + v > 1) { u = 1 - u; v = 1 - v; } const w = 1 - u - v, T = 18 * lo;
+        for (let j = 0; j < 3; j++) { pos[3 * k + j] = w * tri[T + j] + u * tri[T + 3 + j] + v * tri[T + 6 + j]; nrm[3 * k + j] = w * tri[T + 9 + j] + u * tri[T + 12 + j] + v * tri[T + 15 + j]; }
+        const nl = Math.hypot(nrm[3 * k], nrm[3 * k + 1], nrm[3 * k + 2]) || 1; for (let j = 0; j < 3; j++) nrm[3 * k + j] /= nl;
+        const px = pos[3 * k], py = pos[3 * k + 1], pz = pos[3 * k + 2], d = out.step, nx = nrm[3 * k], ny = nrm[3 * k + 1], nz = nrm[3 * k + 2];
+        if (out(px + d * nx, py + d * ny, pz + d * nz)) break;
+        if (out(px - d * nx, py - d * ny, pz - d * nz)) { for (let j = 0; j < 3; j++) nrm[3 * k + j] *= -1; break; }
+        if (tries === 15) for (let j = 0; j < 3; j++) nrm[3 * k + j] = 0;
+      }
       r[k] = rnd(); ph[k] = rnd(); const z = 2 * rnd() - 1, th = TAU * rnd(), s = Math.sqrt(1 - z * z); jit[3 * k] = s * Math.cos(th); jit[3 * k + 1] = s * Math.sin(th); jit[3 * k + 2] = z;
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aN', new THREE.BufferAttribute(nrm, 3));
