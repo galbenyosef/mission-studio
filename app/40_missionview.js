@@ -267,21 +267,36 @@ function updateCraft(c, t, camPos) {
     }
     c.chuteKey = chKey;
   }
-  // plasma sheath during entry
-  const heat = s.extra && s.extra.heat || 0;
-  if (heat > 3 && !(ch)) {
-    const r = (model.userData.capsuleR || (model.userData.len || 8) * 0.25);
-    const k = clamp(Math.log10(heat) / 2.3, 0.15, 1.15);
-    c.plasma.visible = true;
-    const vAirDir = vunit(s.v); // wake trails behind along −v (world), convert to model frame
-    const inv = c.q.clone().invert(); const vd = new THREE.Vector3(vAirDir[0], vAirDir[1], vAirDir[2]).applyQuaternion(inv);
-    const front = vd.clone().multiplyScalar(r * 0.9);
-    c.plasma.userData.sprite.position.copy(front); c.plasma.userData.sprite.scale.setScalar(r * 5 * k);
-    c.plasma.userData.sprite.material.opacity = 0.9 * k;
-    const wake = c.plasma.userData.wake; wake.position.copy(front);
-    wake.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vd.clone().normalize());
-    shapePlume(wake, r * 1.1, r * 2.2, r * 14 * k); wake.material.uniforms.uI.value = 0.9 * k; wake.material.uniforms.uTime.value = performance.now() / 1000;
-  } else c.plasma.visible = false;
+  updatePlasma(c, s, t, model, !!ch);
+}
+// the shock layer and wake of an entry (makePlasma), and the light it throws on the vehicle
+const _vPl = new THREE.Vector3(), _qPl = new THREE.Quaternion();
+function updatePlasma(c, s, t, model, chutes) {
+  const heat = (s.extra && s.extra.heat) || 0, G = c.plasma, U = G.userData;
+  if (heat > 0.3 && !model.userData.plasmaGeo && !U.pending) { // scatter the points over the model ahead of the glow, when the browser is idle (~0.1 s)
+    U.pending = true; (window.requestIdleCallback || setTimeout)(() => { plasmaGeometry(model); U.pending = false; });
+  }
+  if (!(heat > 3) || chutes) { G.visible = false; return; }
+  const k = clamp((Math.log10(heat) - 0.5) / 1.6, 0.05, 1.1), P = plasmaGeometry(model); // faint at first (a few W/cm²), full by ~70 W/cm²
+  if (U.geo !== P) { U.shell.geometry = P.shell; U.halo.geometry = P.halo; U.wake.geometry = P.wake; U.geo = P; }
+  G.visible = true; G.position.copy(model.position); G.quaternion.copy(model.quaternion);
+  const vAir = s.ref === 'earth' || s.ref === 'mars' ? vsub(s.v, vcross(bodyOmegaEcl(s.ref, t), s.r)) : s.v, dir = vunit(vAir); // through the air, which turns with the planet
+  _vPl.set(dir[0], dir[1], dir[2]).applyQuaternion(_qPl.copy(c.node.quaternion).multiply(model.quaternion).invert());
+  const L = P.L, sc = c.node.scale.x, px = R.height * R.renderer.getPixelRatio() / (2 * Math.tan(R.camera.fov * DEG / 2));
+  for (const p of [U.shell, U.halo, U.wake]) {
+    const u = p.material.uniforms; u.uV.value.copy(_vPl); u.uHeat.value = k; u.uTime.value = R.clock; u.uPx.value = px; R.renderer.getDrawingBufferSize(u.uScreen.value);
+    u.uScale.value = sc; u.uOff.value = L * 0.025; u.uSize.value = L * 0.11; u.uLen.value = L * (1.5 + 5 * k); u.uSpread.value = 0.05; // stand-off and point size (m), length of the wake
+  }
+  U.halo.material.uniforms.uSize.value *= 3.5; U.halo.material.uniforms.uOff.value *= 2.5; // the halo: wide points, further off
+  U.shell.material.uniforms.uI.value = 0.22 * Math.min(k, 0.9); U.halo.material.uniforms.uI.value = 0.5 * k; U.wake.material.uniforms.uI.value = 0.065 * k;
+  const d = c.node.position.distanceTo(R.camera.position); // one light, from the glowing craft nearest the camera
+  if (!R.plasmaPick || d < R.plasmaPick.d) R.plasmaPick = { c, d, k, L: L * sc, dir };
+}
+function updatePlasmaLight() {
+  const Lt = R.plasmaLight, p = R.plasmaPick; R.plasmaPick = null; if (!Lt) return;
+  if (!p) { Lt.intensity = 0; return; }
+  const n = p.c.node.position; Lt.position.set(n.x + p.dir[0] * p.L * 0.45, n.y + p.dir[1] * p.L * 0.45, n.z + p.dir[2] * p.L * 0.45); // in the shock layer, on the windward side
+  Lt.distance = p.L * 3; Lt.intensity = 2.2 * p.k;
 }
 // ---------------- exhaust plumes, sized by propellant mass flow ----------------
 // The visible flame of a rocket engine at sea level grows with the square root of the propellant it burns per second

@@ -541,9 +541,106 @@ function makeChutes(kind, n, diam, capR) {
   }
   return g;
 }
+// The shock layer of an entry and its glowing wake. Coming into an atmosphere at several km/s, a vehicle drives a shock wave
+// ahead of the faces turned into the flow; the air squeezed between the shock and those faces is heated to thousands of
+// degrees and glows. It is brightest where the flow meets the surface head on (a capsule's heat shield; the Shuttle's nose
+// cap and wing leading edges, and at its 40° angle of attack its whole belly), pours round the edges and streams away behind
+// as a wake. All of it is soft points scattered over the vehicle's own surface (plasmaGeometry): the shock layer stands a
+// little off the faces that meet the flow and fades out toward the sheltered side, a wider, fainter copy of it is the glow
+// of the hot gas around them, and the wake is gas from it carried back along the flow, spreading and cooling.
+const PLASMA_N = 6000, HALO_N = 300, WAKE_N = 12000;
+const GLSL_SHOCK_V = `
+#include <common>
+#include <logdepthbuf_pars_vertex>
+attribute vec3 aN; attribute float aR; attribute float aP; attribute vec3 aJ;
+uniform vec3 uV; uniform float uOff, uSize, uScale, uPx, uTime, uLen, uWake, uSpread, uHeat; uniform vec2 uScreen;
+varying float vT; varying float vA; varying vec2 vDir; varying float vAn;
+void main(){
+  float w = smoothstep(0.0, 1.0, dot(aN, uV)); // facing into the flow (uV: the way the vehicle moves through the air)
+  vec3 p = position + uV * uOff * (0.3 + w) + aN * uOff * 0.3; // the shock stands off ahead of the face
+  float size = uSize * (0.55 + 0.65 * w), a, temp = w * mix(0.5, 1.0, clamp(uHeat, 0.0, 1.0)); // a cooler, redder glow at first
+  if (uWake > 0.5) { // carried back along the flow, spreading and fading; more of it near the vehicle, where it is brightest
+    float f = fract(aP + uTime * (0.35 + 0.3 * aR)), age = f * f;
+    vec3 lat = aJ - uV * dot(aJ, uV);
+    p += -uV * age * uLen + lat * age * uLen * uSpread * (0.5 + aR);
+    size *= 1.2 + 2.5 * age; a = 1.0 - age; a *= a * smoothstep(0.0, 0.04, age); temp *= 1.0 - 0.7 * sqrt(age);
+  } else a = 0.85 + 0.15 * sin(dot(position, uV) * 0.9 - uTime * 6.0 + aR * 2.0); // the layer shimmers, in waves running back along it
+  vT = temp; vA = a * w * w;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+  float px = size * uScale * uPx / max(-mv.z, 1e-9);
+  gl_PointSize = clamp(px, 1.0, 640.0);
+  vDir = vec2(1.0, 0.0); vAn = 1.0;
+  if (uWake > 0.5) { // drawn as a streak along the flow, as far as the flow lies across the line of sight
+    vec4 c1 = projectionMatrix * (modelViewMatrix * vec4(p - uV * size, 1.0));
+    vec2 d = (c1.xy / c1.w - gl_Position.xy / gl_Position.w) * uScreen * 0.5; float ld = length(d);
+    if (ld > 1e-6 && c1.w > 0.0) { vDir = vec2(d.x, -d.y) / ld; vAn = mix(1.0, 0.28, clamp(ld / max(px, 1e-6), 0.0, 1.0)); }
+  }
+  if (vA < 0.002) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // nothing on the sheltered side
+  #include <logdepthbuf_vertex>
+}`;
+const GLSL_SHOCK_F = `
+#include <common>
+#include <logdepthbuf_pars_fragment>
+uniform float uI; uniform vec3 uHot, uWarm, uCool;
+varying float vT; varying float vA; varying vec2 vDir; varying float vAn;
+void main(){
+  #include <logdepthbuf_fragment>
+  vec2 q = gl_PointCoord - 0.5; float al = dot(q, vDir), ac = dot(q, vec2(-vDir.y, vDir.x)) / vAn;
+  float d2 = (al * al + ac * ac) * 4.0; if (d2 > 1.0) discard;
+  float s = exp(-3.0 * d2) * (1.0 - d2) / vAn; // a streak keeps the light of the round blob it is squeezed from
+  vec3 col = mix(uCool, mix(uWarm, uHot, smoothstep(0.6, 1.0, vT)), smoothstep(0.05, 0.5, vT));
+  gl_FragColor = vec4(col * s * vA * uI, 1.0);
+}`;
+// kind: 'shell' (the shock layer), 'halo' (the glow round it) or 'wake'
+function plasmaPoints(kind) {
+  const m = new THREE.ShaderMaterial({ vertexShader: GLSL_SHOCK_V, fragmentShader: GLSL_SHOCK_F, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uV: { value: new THREE.Vector3(0, 1, 0) }, uOff: { value: 1 }, uSize: { value: 1 }, uScale: { value: 0.001 }, uPx: { value: 800 }, uTime: { value: 0 }, uLen: { value: 100 }, uWake: { value: kind === 'wake' ? 1 : 0 }, uSpread: { value: 0.08 }, uHeat: { value: 1 }, uScreen: { value: new THREE.Vector2(1, 1) }, uI: { value: 0 },
+      uHot: { value: new THREE.Color('#fff0d2') }, uWarm: { value: new THREE.Color('#ff9442') }, uCool: { value: new THREE.Color('#ff3a52') } } });
+  const p = new THREE.Points(new THREE.BufferGeometry(), m); p.frustumCulled = false; p.renderOrder = 6; p.userData.kind = kind; return p;
+}
 function makePlasma() {
-  const g = new THREE.Group();
-  const s = makeGlowSprite('#ff9a5c', 1.0); s.material.depthTest = true; g.add(s); g.userData.sprite = s;
-  const wake = makePlume(); wake.material.uniforms.uColor.value.set('#ff5f3a'); wake.material.uniforms.uCore.value.set('#ffe0b0'); g.add(wake); g.userData.wake = wake;
-  return g;
+  const g = new THREE.Group(), shell = plasmaPoints('shell'), halo = plasmaPoints('halo'), wake = plasmaPoints('wake'); g.add(halo, shell, wake);
+  g.userData = { shell, halo, wake, geo: null }; return g;
+}
+// points scattered evenly over a model's surface (by area), with the surface's outward normal, in the model's own axes;
+// made once per model
+function plasmaGeometry(model) {
+  const ud = model.userData; if (ud.plasmaGeo) return ud.plasmaGeo;
+  model.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(model.matrixWorld).invert(), M = new THREE.Matrix4(), NM = new THREE.Matrix3();
+  const tri = [], cum = []; let total = 0;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), na = new THREE.Vector3(), nb = new THREE.Vector3(), nc = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  model.traverse(o => {
+    if (!o.isMesh || !o.visible || !o.geometry || !o.geometry.attributes.position || !o.material || o.material.transparent || o.material.isShaderMaterial) return;
+    M.multiplyMatrices(inv, o.matrixWorld); NM.getNormalMatrix(M);
+    const g = o.geometry, P = g.attributes.position, N = g.attributes.normal, I = g.index, n = Math.floor((I ? I.count : P.count) / 3);
+    for (let i = 0; i < n; i++) {
+      const i0 = I ? I.getX(3 * i) : 3 * i, i1 = I ? I.getX(3 * i + 1) : 3 * i + 1, i2 = I ? I.getX(3 * i + 2) : 3 * i + 2;
+      a.fromBufferAttribute(P, i0).applyMatrix4(M); b.fromBufferAttribute(P, i1).applyMatrix4(M); c.fromBufferAttribute(P, i2).applyMatrix4(M);
+      e1.subVectors(b, a).cross(e2.subVectors(c, a)); const ar = e1.length() / 2; if (!(ar > 1e-6)) continue;
+      if (N) { na.fromBufferAttribute(N, i0).applyMatrix3(NM); nb.fromBufferAttribute(N, i1).applyMatrix3(NM); nc.fromBufferAttribute(N, i2).applyMatrix3(NM); }
+      else { e1.normalize(); na.copy(e1); nb.copy(e1); nc.copy(e1); }
+      tri.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z); total += ar; cum.push(total);
+    }
+  });
+  const rnd = mulberry32(20261012), L = ud.len || 8;
+  const make = n => {
+    const pos = new Float32Array(3 * n), nrm = new Float32Array(3 * n), r = new Float32Array(n), ph = new Float32Array(n), jit = new Float32Array(3 * n);
+    for (let k = 0; k < n; k++) {
+      let lo = 0, hi = cum.length - 1; const x = rnd() * total; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < x) lo = m + 1; else hi = m; }
+      let u = rnd(), v = rnd(); if (u + v > 1) { u = 1 - u; v = 1 - v; } const w = 1 - u - v, T = 18 * lo;
+      for (let j = 0; j < 3; j++) { pos[3 * k + j] = w * tri[T + j] + u * tri[T + 3 + j] + v * tri[T + 6 + j]; nrm[3 * k + j] = w * tri[T + 9 + j] + u * tri[T + 12 + j] + v * tri[T + 15 + j]; }
+      const nl = Math.hypot(nrm[3 * k], nrm[3 * k + 1], nrm[3 * k + 2]) || 1; for (let j = 0; j < 3; j++) nrm[3 * k + j] /= nl;
+      r[k] = rnd(); ph[k] = rnd(); const z = 2 * rnd() - 1, th = TAU * rnd(), s = Math.sqrt(1 - z * z); jit[3 * k] = s * Math.cos(th); jit[3 * k + 1] = s * Math.sin(th); jit[3 * k + 2] = z;
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aN', new THREE.BufferAttribute(nrm, 3));
+    g.setAttribute('aR', new THREE.BufferAttribute(r, 1)); g.setAttribute('aP', new THREE.BufferAttribute(ph, 1)); g.setAttribute('aJ', new THREE.BufferAttribute(jit, 3)); return g;
+  };
+  if (!cum.length) { ud.plasmaGeo = { shell: new THREE.BufferGeometry(), halo: new THREE.BufferGeometry(), wake: new THREE.BufferGeometry(), L }; return ud.plasmaGeo; }
+  const shell = make(PLASMA_N), halo = new THREE.BufferGeometry(); // the halo: a few of the shell's points, drawn wide
+  for (const k in shell.attributes) halo.setAttribute(k, shell.attributes[k]);
+  halo.setDrawRange(0, HALO_N);
+  ud.plasmaGeo = { shell, halo, wake: make(WAKE_N), L };
+  return ud.plasmaGeo;
 }
