@@ -89,10 +89,15 @@ const SCENARIOS = [
       landing: { lat: 43.0576, lon: -51.9161, name: 'Mons Rümker, Oceanus Procellarum' }, undockMET: 168.0, pdiMET: 186.6, landMET: 186.68, ascentMET: 234.67, ascentOrbit: { hp: 15, ha: 180 }, samples: 1.731,
       rendezvousMinDelay: 46, ascJettisonAfter: 6.9, teiMET: 461.35, returnTof: 88, returnMccAfter: 30,
       splash: { lat: 42.0, lon: 111.5, name: 'Siziwang Banner, Inner Mongolia' }, entry: { fpa: -5.5, skip: true },
+      splashName: 'Returner lands', splashDesc: 'The returner comes down on land under its parachute, on the snowy grassland of Siziwang Banner, where the recovery teams find it by its beacon.',
       smSepBeforeEI: 30, smSepName: 'Returner separation', smName: 'Chang’e 5 orbiter (continues to Sun–Earth L1)',
       sepName: 'Probe separation', sepDesc: 'The probe separates from the Long March 5 second stage, already on its Earth–Moon transfer orbit.',
       undockName: 'Lander + ascender separate', undockDesc: 'The lander–ascender combination separates from the orbiter–returner, which stays in a 200 km lunar orbit.', liftoffName: 'Ascender liftoff (first Chinese launch from another world)', dockName: 'Robotic docking', dockDesc: 'First robotic rendezvous and docking in lunar orbit; the sample canister is transferred into the returner.', dsName: 'Chang’e 5 lander (Mons Rümker)', ascStageName: 'Ascender (deorbited)', ascJettisonName: 'Ascender released',
-      scripted: [{ when: 'surface', afterLanding: 2.0, name: 'Sampling & drilling', desc: 'A drill and a robotic scoop collect 1,731 g of regolith. A Chinese flag is unfurled — the first fabric flag on the Moon.', kind: 'info' }],
+      scripted: [ // times after touchdown (15:11 UTC): the drilling was done by 20:53, the sampling sealed by 14:00 next day (CNSA); the flag before liftoff
+        { when: 'surface', afterLanding: 1.0, name: 'Drilling', desc: 'The drill bores about a metre into the regolith. The core, in a flexible bag, is coiled up and sealed into the container on top of the ascender.', kind: 'info' },
+        { when: 'surface', afterLanding: 6.0, name: 'Scooping', desc: 'The robotic arm scoops surface soil in several places and empties each scoop into the container on top of the ascender. Drill and scoop together: 1,731 g of regolith.', kind: 'info' },
+        { when: 'surface', afterLanding: 46.0, name: 'Flag unfurled', desc: 'A Chinese flag, made of a composite fabric to survive the Moon’s heat and radiation, unfurls on its pole at the side of the lander — China’s first fabric flag on the Moon (earlier landers carried painted flags).', kind: 'photo' },
+      ],
     },
   },
   // ------------------------------------------------------------------ MARS
@@ -136,7 +141,12 @@ const SCENARIOS = [
         next: 'land', site: { lat: 25.066, lon: 109.925, elev: -4.1, name: 'Utopia Planitia' }, tLand: '2021-05-14T23:18:00Z', parkPeri: 280, parkApo: 59000, entryFpa: -11.5,
         orbitEvents: [{ t: '2021-03-04T00:00:00Z', name: 'High-resolution imaging of the landing zone', desc: 'HiRIC camera images the pre-selected landing area at 0.5–0.7 m per pixel.', kind: 'photo' }] }],
       landName: 'Touchdown — Zhurong lander', surfaceDays: 8, orbiterName: 'Tianwen-1 orbiter',
-      surfaceEvents: [{ afterLanding: 7.1, name: 'Zhurong rolls off the lander', desc: 'The 240 kg solar-powered rover drives onto the surface of Utopia Planitia.', kind: 'info' }],
+      roverOff: { wings: 0.6, ramp: 2.0, roll: 7.14 }, // days after touchdown; it drove off on 22 May 02:40 UTC (the first two approximate)
+      surfaceEvents: [
+        { afterLanding: 0.6, name: 'Zhurong unfolds', desc: 'The rover raises its body on its suspension, opens its four solar wings like a butterfly’s and lifts its mast and antenna. (Time approximate.)', kind: 'deploy' },
+        { afterLanding: 2.0, name: 'Ramp unfolds', desc: 'Two rails swing down from the front of the landing platform and run out to the ground. (Time approximate.)', kind: 'deploy' },
+        { afterLanding: 7.14, name: 'Zhurong rolls off the lander', desc: 'The 240 kg solar-powered rover drives down the ramp onto the surface of Utopia Planitia.', kind: 'info' },
+      ],
     },
   },
   {

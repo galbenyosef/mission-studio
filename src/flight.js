@@ -463,6 +463,9 @@ function simulateEntry(opt) {
       if (chuteState === 1 && alt < mainAlt && opt.chutes !== 'probe') { chuteState = 2; tChute = t; evt('Main parachutes', 'Main chutes open — descent rate falls to ~8 m/s for splashdown.', 'chute'); }
     }
     if (edl && body === 'mars') {
+      // a trim wing (Tianwen-1) swings out shortly before the parachute: the capsule stops flying at the angle its offset
+      // centre of mass gave it for lift and turns into the airflow, ready for the parachute (the moment is approximate)
+      if (edl.trimWing && !opt._trim && chuteState === 0 && mach < edl.chute.mach * 1.5 && alt > 3) { opt._trim = true; evt('Trim wing deploys', 'A flap on the side of the backshell swings out into the airflow. It shifts the capsule’s trim from the tilted attitude it has flown at for lift to one nearly head-on into the wind, ready for the parachute.', 'trim'); }
       if (chuteState === 0 && mach < edl.chute.mach && alt > 3) { chuteState = 1; tChute = t; evt('Supersonic parachute', `${edl.chute.diam} m parachute deploys at Mach ${mach.toFixed(1)}.`, 'chute'); }
       if (chuteState === 1 && !opt._hsSep && mach < edl.heatshieldSepMach) { opt._hsSep = true; m -= opt.heatshieldMass || 0; evt('Heat shield separation', 'The heat shield drops away; radar and cameras see the ground (terrain-relative navigation).', 'jettison'); }
       if (chuteState === 1 && alt < edl.backshellSepAlt) {

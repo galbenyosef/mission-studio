@@ -347,30 +347,20 @@ function buildSC(model, parts, flags = {}) {
       else if (has('service')) inner = orionESM(false);
       break;
     }
-    case 'change5': {
-      const ORB = () => { const o = new THREE.Group(); const b = probeBus(2.6, 1.6, 2.6); o.add(b); for (const s of [-1, 1]) { const w = solarWing(4.5, 1.6, 3); w.position.set(s * 1.3, 0.8, 0); if (s < 0) w.rotation.y = Math.PI; o.add(w); } const bl = bell(0.7, 0.35); bl.position.y = -0.7; o.add(bl); o.userData.len = 1.6; o.userData.engineY = -0.7; o.userData.engineR = 0.35; return o; };
-      const RET = () => { const r = cyl(0.63, 0.22, 1.0, mat('#cfd2d6', 'metal')); r.userData.len = 1.0; return r; };
-      const LDR = () => sampleLander(false);
-      const ASC = () => { const a = new THREE.Group(); a.add(probeBus(1.2, 0.9, 1.2, '#d8d8d8', 'foil')); const bl = bell(0.4, 0.2); bl.position.y = -0.4; a.add(bl); a.userData.len = 0.9; a.userData.engineY = -0.4; a.userData.engineR = 0.2; return a; };
-      if (has('orbiter') && has('lander')) { inner = stackParts([{ g: ORB(), len: 1.6, mount: 'ORB' }, { g: RET(), len: 1.0, gap: 1.3 }, { g: LDR(), len: 0.9 }, { g: ASC(), len: 0.9 }]); mounts.push(...inner.userData.mounts); }
-      else if (has('orbiter') && has('ascent')) { inner = stackParts([{ g: ORB(), len: 1.6, mount: 'ORB' }, { g: RET(), len: 1.0 }]); const a = ASC(); a.rotation.x = Math.PI; a.position.y = 2.6 + 0.9; inner.add(a); mounts.push(...inner.userData.mounts); }
-      else if (has('orbiter')) { inner = stackParts([{ g: ORB(), len: 1.6, mount: 'ORB' }, { g: RET(), len: 1.0 }]); mounts.push(...inner.userData.mounts); }
-      else if (has('lander')) { inner = stackParts([{ g: LDR(), len: 0.9, mount: 'LDR' }, { g: ASC(), len: 0.9 }]); inner.userData.footY = -1.2; mounts.push(...inner.userData.mounts); }
-      else if (has('descent')) { inner = LDR(); inner.userData.footY = -1.2; }
-      else if (has('ascent')) { inner = ASC(); mounts.push({ y: -0.4, r: 0.2, tag: 'ASC' }); }
-      else if (has('capsule')) { inner = RET(); inner.userData.chuteY = 1.0; inner.userData.capsuleR = 0.63; }
-      else if (has('service')) inner = ORB();
-      break;
-    }
+    case 'change5': { const r = ce5Assembly(P, flags); inner = r.inner; mounts.push(...r.mounts); break; } // app/38_change5.js
     case 'mariner': { inner = marinerModel(flags); mounts.push({ y: -0.12, r: 0.06, tag: 'BUS' }); break; } // app/36_mariner.js
     case 'msl': { const r = m20Assembly(P, flags); inner = r.inner; mounts.push(...r.mounts); break; } // app/33_mars2020.js
-    case 'tianwen': {
+    case 'tianwen': { const r = twAssembly(P, flags); inner = r.inner; mounts.push(...r.mounts); break; } // app/37_tianwen.js
+    case 'msr': { // the sample-return concept: generic parts
       const ORB = () => { const o = new THREE.Group(); o.add(probeBus(2.4, 1.8, 2.4, '#c9a043')); for (const s of [-1, 1]) { const w = solarWing(5.0, 1.8, 3); w.position.set(s * 1.2, 0.9, 0); if (s < 0) w.rotation.y = Math.PI; o.add(w); } const dd = dish(1.0); dd.position.set(0, 1.9, -0.8); o.add(dd); const bl = bell(0.7, 0.35); bl.position.y = -0.7; o.add(bl); o.userData.len = 1.8; o.userData.engineY = -0.7; o.userData.engineR = 0.35; return o; };
       const CAP = () => { const c = aeroshell(1.7, 1.4, '#e8e4dc'); return c; };
       if (has('cruise')) { const o = ORB(); const c = CAP(); c.rotation.x = Math.PI; c.position.y = 1.8 + 2.4; inner = new THREE.Group(); inner.add(o); inner.add(c); inner.userData.len = 4.2; mounts.push({ y: -0.7, r: 0.35, tag: 'ORB' }); }
       else if (has('orbiter')) { inner = ORB(); mounts.push({ y: -0.7, r: 0.35, tag: 'ORB' }); }
       else if (has('aeroshell')) { inner = CAP(); inner.userData.chuteY = 2.2; inner.userData.capsuleR = 1.7; inner.userData.dgb = true; }
-      else if (has('lander')) { inner = sampleLander(model === 'tianwen' && !P.has('mav'), '#d4d6da'); inner.userData.footY = -1.2; if (!flags.landed) mounts.push({ y: -0.7, r: 0.35, tag: 'LDR' }); }
+      else if (has('lander')) { // the lander with the ascent vehicle standing on it
+        inner = sampleLander(false, '#d4d6da'); inner.userData.footY = -1.2; if (!flags.landed) mounts.push({ y: -0.7, r: 0.35, tag: 'LDR' });
+        const mv = new THREE.Group(); mv.add(cyl(0.28, 0.28, 2.8, mat('#ecebe6'))); const nc = cyl(0.28, 0.02, 0.6, mat('#ecebe6')); nc.position.y = 2.8; mv.add(nc); mv.position.y = 0.95; inner.add(mv);
+      }
       else if (has('mav')) { inner = new THREE.Group(); const r1 = cyl(0.28, 0.28, 2.8, mat('#ecebe6')); inner.add(r1); const nc = cyl(0.28, 0.02, 0.6, mat('#ecebe6')); nc.position.y = 2.8; inner.add(nc); const b = bell(0.35, 0.22); b.position.y = -0.35; inner.add(b); inner.userData.len = 3.4; mounts.push({ y: -0.35, r: 0.22, tag: 'MAV' }); }
       else if (has('os')) { inner = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), mat('#e0e0e0', 'metal')); inner.userData.len = 0.3; }
       break;
@@ -428,7 +418,12 @@ function buildStowed(model, rBelow, fl = {}) {
     g.userData = { len: 0.35 + 2.89, mounts: sc.userData.mounts.map(m => ({ ...m, y: m.y + 0.35 })) }; return g;
   }
   const ad = cyl(Math.min(rBelow, 1.6), 0.8, 1.0, mat('#bdbdbd', 'metal')); g.add(ad);
-  const sc = buildSC(model, model === 'msl' ? ['cruise'] : model === 'tianwen' ? ['cruise'] : model === 'change5' ? ['orbiter', 'lander'] : ['orbiter']);
+  if (model === 'tianwen' || model === 'change5') { // on Long March 5's adapter cone, folded up (app/37_tianwen.js, app/38_change5.js)
+    const ad = cyl(1.55, 0.62, 1.0, mat('#c4c8cd', 'metal', { side: THREE.DoubleSide }), 48, true); g.add(ad);
+    const sc = buildSC(model, model === 'tianwen' ? ['cruise'] : ['orbiter', 'lander'], { stowed: true }); sc.position.y = 1.0 + 0.12; g.add(sc);
+    g.userData = { len: 1.12 + sc.userData.len, mounts: sc.userData.mounts.map(m => ({ ...m, y: m.y + 1.12 })) }; return g;
+  }
+  const sc = buildSC(model, model === 'msl' || model === 'msr' ? ['cruise'] : ['orbiter']);
   sc.position.y = 1.0 + 0.8; g.add(sc);
   g.userData = { len: 1.8 + (sc.userData.len || 2), mounts: (sc.userData.mounts || []).map(m => ({ ...m, y: m.y + 1.8 })) }; return g;
 }

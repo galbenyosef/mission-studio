@@ -365,7 +365,7 @@ function planLunar(cfg, progress = () => { }) {
     const resU = cisInt(t, [...y.slice(0, 3), ...vadd(y.slice(3, 6), vscale(vunit(y.slice(3, 6)), -0.004)), mUp], t + (cfg.upperDays || 5) * 24 * H, { events: [evLunarImpact()] });
     up.add(resToSeg(resU, 'spent stage'));
     y[6] -= mUp; P.upper.attached = false; for (const a of SC.adapter || []) P.mods[a].attached = false;
-    ship.setConfig(t, 'sc', { key: 'sc', sc: SC.model, parts: SC.lander ? ['orbiter', 'lander'] : ['orbiter'] });
+    ship.setConfig(t, 'sc', { key: 'sc', sc: SC.model, parts: SC.lander ? ['orbiter', 'lander'] : ['orbiter'], deployT: t }); // (a spacecraft that unfolds after it leaves the stage does so from deployT)
     M.ev(t, 'ship', cfg.sepName || 'Spacecraft separation', cfg.sepDesc || 'The spacecraft separates from the spent upper stage, which is sent onto a different trajectory.', 'sep');
   }
   // ---------------- outbound mid-course correction (targeting) ----------------
@@ -687,7 +687,7 @@ function finishReturn(M, cfg, SC, P, ship, t0, t, y, ref, rvpT, progress, tDepar
   ship.setConfig(ent.samples.find(s => s.chute >= 1)?.t ?? ent.t, 'capsule', { key: 'capsule', sc: SC.model, chutes: 1 });
   const tMain = ent.samples.find(s => s.chute >= 2)?.t; if (tMain) ship.setConfig(tMain, 'capsule', { key: 'capsule', sc: SC.model, chutes: 2 });
   const miss = missF(ent);
-  M.ev(ent.t, 'ship', cfg.splashName || 'Splashdown', `${EXPLAIN.splash} Landing point ${ent.ll[0].toFixed(2)}°, ${ent.ll[1].toFixed(2)}° — ${miss.toFixed(0)} km from the planned recovery area (${splash.name || 'recovery zone'}).`, 'landing');
+  M.ev(ent.t, 'ship', cfg.splashName || 'Splashdown', `${cfg.splashDesc || EXPLAIN.splash} Landing point ${ent.ll[0].toFixed(2)}°, ${ent.ll[1].toFixed(2)}° — ${miss.toFixed(0)} km from the planned recovery area (${splash.name || 'recovery zone'}).`, 'landing');
   ship.add(new SurfaceSeg('earth', ent.t, ent.t + 2 * H, ent.ll[0], ent.ll[1], 0, capM, { extra: { phase: 'recovery' } }));
   M.phase(tDepart, tE, 'Return to Earth', '#f15bb5');
   M.phase(tE, ent.t, 'Entry & splashdown', '#ff5d5d');
@@ -905,7 +905,7 @@ function doLanding(M, cfg, SC, P, ship, t0, getState, setState, progress) {
   const sL2 = seleno(tLift, resState(oR, tLift)); const hTarget = vunit(vcross(sL2.r, sL2.v));
   // lander: on surface
   lander.add(new SurfaceSeg('moon', tLand, tLift, ll[0], ll[1], site.elev || 0, mOnSurf));
-  lander.setConfig(tLand, 'sc', { key: 'sc', sc: SC.model, parts: ['lander'], landed: true });
+  lander.setConfig(tLand, 'sc', { key: 'sc', sc: SC.model, parts: ['lander'], landed: true, tLand }); // (a lander that works on the surface times it from tLand)
   M.phase(tLand, tLift, 'Surface operations', '#ffd166');
   // descent stage stays forever
   const dsObj = M.addObj(new MObject('descent-stage', cfg.dsName || 'Descent stage (left on surface)', { kind: 'stage', model: SC.model, color: '#d4a017', trail: false }));
@@ -961,9 +961,9 @@ function doLanding(M, cfg, SC, P, ship, t0, getState, setState, progress) {
   { const r = cisInt(t, y, tJet, {}); ship.add(resToSeg(r, 'lunar orbit')); t = r.tEnd; y = Array.from(r.y[r.y.length - 1]); }
   const mAsc = rT.y[rT.y.length - 1][6] - pB.prop;
   const jet = M.addObj(new MObject('ascent-stage', cfg.ascStageName || 'Ascent stage (jettisoned)', { kind: 'stage', model: SC.model, color: '#999' }));
-  jet.setConfig(tJet, 'sc', { key: 'sc', sc: SC.model, parts: ['ascent'] });
+  jet.setConfig(tJet, 'sc', { key: 'sc', sc: SC.model, parts: ['ascent'], dock: true }); // (Chang'e 5 releases its docking and support modules with the ascender)
   { const yJ = [...y]; yJ[3] += 0.0006 * vunit(y.slice(3, 6))[0]; yJ[6] = mAsc; const r = cisInt(tJet, yJ, tJet + 30 * H, { events: [evLunarImpact()] }); jet.add(resToSeg(r, 'jettisoned')); }
-  ship.setConfig(tJet, 'sc', { key: 'sc', sc: SC.model, parts: ['orbiter'] });
+  ship.setConfig(tJet, 'sc', { key: 'sc', sc: SC.model, parts: ['orbiter'], dock: false });
   M.ev(tJet, 'ship', cfg.ascJettisonName || 'Ascent stage jettison', 'The empty ascent vehicle is released.', 'sep');
   y[6] = P.massOf(orbIds) + (cfg.samples || 0);
   setState(t, y);
