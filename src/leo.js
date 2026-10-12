@@ -419,7 +419,7 @@ function shuttleApproach(start, rwy, opt) {
   const rB = toBF(start.r), vB = toBF(vsub(start.v, vcross(omega, start.r)));
   const U = llToBF(rwy.lat, rwy.lon), Tp = vscale(U, Rb), E = vunit(vcross([0, 0, 1], U)), N = vcross(U, E);
   const f = vadd(vscale(N, Math.cos(rwy.hdg * DEG)), vscale(E, Math.sin(rwy.hdg * DEG))), lf = vcross(U, f);
-  const toXY = p => { const d = vsub(p, Tp); return [vdot(d, f), vdot(d, lf)]; };
+  const toXY = p => { const d = vunit(p), k = Rb / vdot(d, U); return [k * vdot(d, f), k * vdot(d, lf)]; }; // the inverse of posBF below: the path starts where the entry ends (a plain projection put it 400–600 m off)
   const P0 = toXY(rB), h0 = vnorm(rB) - Rb, upL = vunit(rB);
   const vh = vsub(vB, vscale(upL, vdot(vB, upL))); const dir0 = (() => { const d = [vdot(vh, f), vdot(vh, lf)], n = Math.hypot(d[0], d[1]); return [d[0] / n, d[1] / n]; })();
   const gam0 = Math.asin(clamp(vdot(vB, upL) / vnorm(vB), -1, 1));

@@ -246,7 +246,7 @@ function updateCraft(c, t, camPos) {
   c.node.scale.setScalar(sc);
   const ud = model.userData;
   model.position.z = 0;
-  if (c.o.model === 'shuttle' && cfgL && cfgL.key === 'sc') { model.position.y = 0; if (s.surface) { model.position.y = SH_STAND_H * Math.sin(SH_STANCE); model.position.z = SH_STAND_H * Math.cos(SH_STANCE); } } // standing on its wheels, nose down
+  if (c.o.model === 'shuttle' && cfgL && cfgL.key === 'sc') model.position.y = 0; // the orbiter's state is its reference point, in flight and on its wheels (shuttleGround)
   else model.position.y = anchorY(c, cfgL, model, s) + stagingShift(c, t, cfgL, model, s);
   const so = shuttleSepShift(c, t, cfgL, model, s); if (so) { model.position.y += so[1]; model.position.z += so[2]; }
   c.yOff = model.position.y; c.zOff = model.position.z;

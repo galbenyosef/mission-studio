@@ -115,14 +115,22 @@ function applyShuttleSpin(nd, q) {
 }
 // With the gear down near the runway, the main wheels on the ground whatever the pitch: in the flare the reference point is
 // raised where the planned path (for wings level and the reference plane at gear height) would sink them, and on the runway
-// it rides at the height that keeps them on the paint as the nose comes down to the 4.4° stance.
+// it rides at the height that keeps them on the paint as the nose comes down to the 4.4° stance. Standing after wheel stop
+// it stays at that height (the ground under it is where groundCraft put the state): the chase camera and the scene's origin
+// follow the reference point, and would drop 5.6 m at wheel stop if it went down to the ground.
 function shuttleGround(c, s, t) {
-  const P = shuttlePrep(MV.md); if (!P || !P.rwy || s.surface) return;
-  const cf = c.o.configAt(t), lab = cf && cf.label; if (!lab || !lab.gear) return;
+  const P = shuttlePrep(MV.md); if (!P || !P.rwy || s.pad) return;
+  const cf = c.o.configAt(t), lab = cf && cf.label;
+  if (s.surface) { if (lab && lab.key === 'sc') { s.r = vscale(s.r, 1 + SH_STAND_H / 1000 / vnorm(s.r)); s.v = vcross(bodyOmegaEcl('earth', t), s.r); } return; }
+  if (!lab || !lab.gear) return;
   const Rr = R_E + P.rwy.elev, h = vnorm(s.r) - Rr; if (h > 0.015) return;
   const al = ((s.extra && s.extra.alpha) || 0) * DEG, hMin = (-SH_MAIN_GEAR[0] * Math.sin(al) - SH_MAIN_GEAR[1] * Math.cos(al)) / 1000 + SH_RWY_TOP + 0.00002;
   const rolling = s.extra && /rollout|wheel stop/.test(s.extra.phase || '');
   if (h < hMin || rolling) s.r = vscale(s.r, (Rr + hMin) / vnorm(s.r)); // tyres 2 cm above the paint, as standing craft are
+  if (rolling) { // and moving over it, not into it: the nose follows the way it rolls even as it comes to rest
+    const w = vcross(bodyOmegaEcl('earth', t), s.r), up = vunit(s.r), vg = vsub(s.v, w);
+    s.v = vadd(w, vsub(vg, vscale(up, vdot(vg, up))));
+  }
 }
 // The runway is drawn on the true sphere, SH_RWY_TOP above its elevation, while the surface patch under it is made of flat
 // facets that sag up to ~0.7 m below the sphere between their corners. Radius (km) of the drawn runway under a direction

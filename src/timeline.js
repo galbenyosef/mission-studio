@@ -66,10 +66,11 @@ class BurnSeg {
     return { ref: this.ref, r: vlerp(a.r, b.r, w), v: vlerp(a.v, b.v, w), m: this.m0 + (this.m1 - this.m0) * f, T: this.thrust, dir: this.dvDir, D: [0, 0, 0], extra: this.meta.extra || {} };
   }
 }
+const SURF_LIFT = 0.002; // km: a craft standing on a surface is placed this far above the site's elevation
 class SurfaceSeg {
   constructor(ref, t0, t1, lat, lon, elev, m, meta = {}) { this.type = 'surface'; this.ref = ref; this.t0 = t0; this.t1 = t1; this.lat = lat; this.lon = lon; this.elev = elev || 0; this.mconst = m; this.meta = meta; }
   stateAt(t) {
-    const r = sitePosEcl(this.ref, this.lat, this.lon, this.elev + 0.002, t);
+    const r = sitePosEcl(this.ref, this.lat, this.lon, this.elev + SURF_LIFT, t);
     const m = this.m1 != null ? this.m0 + (this.m1 - this.m0) * clamp((t - this.t0) / Math.max(this.t1 - this.t0, 1e-9), 0, 1) : this.mconst;
     return { ref: this.ref, r, v: vcross(bodyOmegaEcl(this.ref, t), r), m, T: 0, dir: vunit(r), D: [0, 0, 0], extra: { phase: 'on surface', alt: 0, ...(this.meta.extra || {}) }, surface: true };
   }
@@ -85,14 +86,32 @@ class MObject {
   get t1() { return this.segs.length ? this.segs[this.segs.length - 1].t1 : -Infinity; }
   setConfig(t, key, label) { this.configs.push({ t, key, label }); this.configs.sort((a, b) => a.t - b.t); }
   configAt(t) { let c = this.configs[0]; for (const x of this.configs) if (x.t <= t) c = x; else break; return c; }
-  segAt(t) {
-    const s = this.segs; if (!s.length) return null;
-    if (t < s[0].t0 || t > s[s.length - 1].t1) return null;
+  segIndex(t) { // the segment in effect at t (the last to start at or before it), or −1
+    const s = this.segs; if (!s.length) return -1;
+    if (t < s[0].t0 || t > s[s.length - 1].t1) return -1;
     let lo = 0, hi = s.length - 1;
     while (lo < hi) { const m = (lo + hi + 1) >> 1; if (s[m].t0 <= t) lo = m; else hi = m - 1; }
-    return s[lo];
+    return lo;
   }
-  stateAt(t) { const sg = this.segAt(t); if (!sg) return null; const st = sg.stateAt(Math.min(Math.max(t, sg.t0), sg.t1)); st.seg = sg; return st; }
+  segAt(t) { const i = this.segIndex(t); return i < 0 ? null : this.segs[i]; }
+  stateAt(t) {
+    const i = this.segIndex(t); if (i < 0) return null;
+    const sg = this.segs[i], nx = this.segs[i + 1];
+    if (t > sg.t1 && nx) return bridgeState(sg, nx, t);
+    const st = sg.stateAt(Math.min(Math.max(t, sg.t0), sg.t1)); st.seg = sg; return st;
+  }
+}
+// A segment can end a moment before the next one starts: an integration sampled about once a second stops short of the
+// engine cutoff, splashdown or wheel stop where the next segment begins. In between, the craft goes from the state the one
+// ends with to the state the next starts with (positions and velocities matched at both ends) instead of holding still in
+// space, where a turning planet would slide away under it. The gap is the end of the earlier segment: its engines, mass and
+// phase. A landing ends on the ground itself, not at the height a standing craft is placed.
+function bridgeState(a, b, t) {
+  const A = a.stateAt(a.t1), B = b.stateAt(b.t0), h = b.t0 - a.t1;
+  let rB = B.surface ? vscale(B.r, 1 - SURF_LIFT / vnorm(B.r)) : B.r, vB = B.v;
+  if (B.ref !== A.ref) { const pa = planetHelio(A.ref, b.t0), pb = planetHelio(B.ref, b.t0); rB = vadd(rB, vsub(pb.r, pa.r)); vB = vadd(vB, vsub(pb.v, pa.v)); }
+  const hs = hermite(A.r, A.v, rB, vB, h, clamp((t - a.t1) / h, 0, 1));
+  A.r = hs.r; A.v = hs.v; A.seg = a; return A;
 }
 class Mission {
   constructor(cfg) {

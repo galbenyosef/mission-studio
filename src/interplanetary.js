@@ -873,11 +873,14 @@ function msrOrbiterBranch(M, cfg, SC, P, tE, rT, vT, massStack, tEI, leg) {
   const rLow = R + (cfg.lmoOrbiter ?? 400);
   M.ev(t + 2 * D, 'orbiter', 'Aerobraking campaign begins', `Hundreds of shallow passes through the upper atmosphere (≈110 km) gradually shrink the orbit without propellant. (Simplified here as ${steps} steps.)`, 'info');
   for (let k = 1; k <= steps; k++) {
-    const tk = t + tAB / steps;
+    // the drag passes are at periapsis: each step ends at the periapsis passage nearest its share of the campaign, where the
+    // smaller orbit starts from the same point (switching orbits anywhere else would move the orbiter by up to thousands of km)
+    const Tp = TAU * Math.sqrt(Math.pow(rv2coe(r, v, mu).a, 3) / mu), tq = t + timeToPeri(r, v, mu);
+    const tk = tq + Math.max(1, Math.round((t + tAB / steps - tq) / Tp)) * Tp;
     orb.add(new ConicSeg('mars', t, tk, r, v, m, { extra: { phase: 'aerobraking' } }));
     const s2 = kepProp(r, v, tk - t, mu);
     const el = rv2coe(s2.r, s2.v, mu); const raN = el.ra + (rLow - el.ra) * (k / steps);
-    // at current point, set new orbit with same periapsis direction & radius rp0, new apoapsis
+    // at periapsis, set the new orbit with the same periapsis direction & radius rp0, new apoapsis
     const rp0 = el.rp, aN = (rp0 + raN) / 2, eN = (raN - rp0) / (raN + rp0), pN = aN * (1 - eN * eN);
     const nu = el.nu; const vN = coe2rv(pN, eN, el.i, el.Om, el.w, nu, mu);
     r = vN.r; v = vN.v; t = tk;
