@@ -338,7 +338,7 @@ function planInterplanetary(cfg, progress = () => { }) {
     const mUp = P.upper.dry + P.upper.propLeft;
     up.add(new ConicSeg('earth', tSep, tSep + 3 * D, rCur, vadd(vCur, vscale(vunit(vCur), -0.01)), mUp, { extra: { phase: 'spent upper stage (escapes Earth into solar orbit)' } }));
     mass -= mUp; P.upper.attached = false;
-    ship.setConfig(tSep, 'sc', { key: 'sc', sc: SC.model, parts: ['cruise'] });
+    ship.setConfig(tSep, 'sc', { key: 'sc', sc: SC.model, parts: ['cruise'], deployT: tSep }); // (a spacecraft that unfolds after it leaves the stage does so from deployT)
     M.ev(tSep, 'ship', 'Spacecraft separation', `${SC.name} separates from the spent ${P.upper.name}. Solar arrays deploy and the craft begins its ${Math.round((tArr1 - tSep) / D)}-day cruise.`, 'sep');
   }
   // ---------------- cruise legs ----------------

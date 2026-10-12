@@ -82,6 +82,7 @@ function buildStage(st, opts = {}) {
   }
   if (st.gridfins) for (let k = 0; k < 4; k++) { const f = box(3.0, 2.2, 0.3, mat('#2b2d30', 'metal')); const a = k * Math.PI / 2; f.position.set(Math.cos(a) * (rTop + 1.2), y - 4, Math.sin(a) * (rTop + 1.2)); f.rotation.y = -a + Math.PI / 2; g.add(f); }
   if (st.flaps) { for (const [yy, sz] of [[y - 9, 6.5], [6, 9]]) for (const a of [Math.PI / 2, -Math.PI / 2]) { const f = box(0.25, sz, 3.6, mat('#1d1f22', 'tile')); f.position.set(Math.cos(a) * (rTop + 1.0), yy, Math.sin(a) * (rTop + 1.0)); g.add(f); } }
+  if (st.look && STAGE_LOOK[st.look]) STAGE_LOOK[st.look](g, st, opts); // drawn by hand over the plain geometry (app/35_atlas.js)
   return { group: st.detail ? stageD(st, g, opts) : g, len: y, rTop, rBottom, engLen: eng ? -(eng.y0 ?? -eng.len) : 0 };
 }
 
@@ -361,13 +362,7 @@ function buildSC(model, parts, flags = {}) {
       else if (has('service')) inner = ORB();
       break;
     }
-    case 'mariner': {
-      inner = new THREE.Group(); const bus = cyl(0.69, 0.69, 0.46, mat('#9a7b3e', 'gold'), 8); inner.add(bus);
-      for (let k = 0; k < 4; k++) { const w = solarWing(1.8, 0.9, 1); const a = k * Math.PI / 2; w.position.set(Math.cos(a) * 0.69, 0.4, Math.sin(a) * 0.69); w.rotation.y = -a; inner.add(w); }
-      const d = dish(0.6); d.position.y = 0.9; inner.add(d);
-      const boom = cyl(0.02, 0.02, 2.2, mat('#aaa', 'metal')); boom.position.y = 0.46; inner.add(boom);
-      inner.userData.len = 0.46; mounts.push({ y: -0.1, r: 0.1, tag: 'BUS' }); break;
-    }
+    case 'mariner': { inner = marinerModel(flags); mounts.push({ y: -0.12, r: 0.06, tag: 'BUS' }); break; } // app/36_mariner.js
     case 'msl': { const r = m20Assembly(P, flags); inner = r.inner; mounts.push(...r.mounts); break; } // app/33_mars2020.js
     case 'tianwen': {
       const ORB = () => { const o = new THREE.Group(); o.add(probeBus(2.4, 1.8, 2.4, '#c9a043')); for (const s of [-1, 1]) { const w = solarWing(5.0, 1.8, 3); w.position.set(s * 1.2, 0.9, 0); if (s < 0) w.rotation.y = Math.PI; o.add(w); } const dd = dish(1.0); dd.position.set(0, 1.9, -0.8); o.add(dd); const bl = bell(0.7, 0.35); bl.position.y = -0.7; o.add(bl); o.userData.len = 1.8; o.userData.engineY = -0.7; o.userData.engineR = 0.35; return o; };
@@ -428,6 +423,10 @@ function buildStowed(model, rBelow, fl = {}) {
     g.userData = { len: y, mounts: [{ y: 1.6, r: 0.6, tag: 'ESM' }] }; return g;
   }
   if (model === 'starshipPayload') { g.userData = { len: 0, mounts: [] }; return g; }
+  if (model === 'mariner') { // on the Agena's adapter (app/35_atlas.js), the panels folded up
+    const sc = buildSC(model, ['orbiter'], { stowed: true }); sc.position.y = 0.35; g.add(sc);
+    g.userData = { len: 0.35 + 2.89, mounts: sc.userData.mounts.map(m => ({ ...m, y: m.y + 0.35 })) }; return g;
+  }
   const ad = cyl(Math.min(rBelow, 1.6), 0.8, 1.0, mat('#bdbdbd', 'metal')); g.add(ad);
   const sc = buildSC(model, model === 'msl' ? ['cruise'] : model === 'tianwen' ? ['cruise'] : model === 'change5' ? ['orbiter', 'lander'] : ['orbiter']);
   sc.position.y = 1.0 + 0.8; g.add(sc);
@@ -454,7 +453,7 @@ function buildLaunchStack(lkey, scModel, c) {
   const PF = L.payloadFairing;
   if (PF && c.fairing) {
     const yF = PF.encloseUpper && core.length >= 2 ? y - core[core.length - 1].s.geom.reduce((a, gg) => a + gg[0], 0) - 0.5 : y;
-    const f = ogive(PF.r, PF.len, mat(PF.color)); f.position.y = yF; g.add(f); y = yF + PF.len;
+    const f = ogive(PF.r, PF.len, mat(PF.color), PF.cyl ?? 0.45); f.position.y = yF; g.add(f); y = yF + PF.len;
   } else if (lkey !== 'starship') {
     const st = buildStowed(scModel, topR, { les: c.les, saj: c.saj }); st.position.y = y; g.add(st); y += st.userData.len;
   }

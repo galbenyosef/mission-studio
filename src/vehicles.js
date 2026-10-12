@@ -107,18 +107,22 @@ const LAUNCHERS = {
     payloadFairing: { len: 20.7, r: 2.7, color: C.white, encloseUpper: true }, ascent: { hp: 185, ha: 185, vert: 10, kickGuess: 2.5 },
   },
   atlasAgena: {
-    name: 'Atlas LV-3 Agena-D', org: 'USAF / NASA (USA)', years: '1963–1978', height: 31.0, diameter: 3.05,
+    // As Mariner 4 flew it: the Atlas 19.8 m from its base to the Agena adapter and 3.05 m across, the booster section a
+    // skirt round the foot of the tank (its tank and sustainer engine stay when the section drops away); the Agena-D 6.3 m
+    // long and 1.52 m across; the shroud enclosing the Agena and the spacecraft; 28.4 m in all. look: drawn over the plain
+    // geometry by app/35_atlas.js
+    name: 'Atlas LV-3 Agena-D', org: 'USAF / NASA (USA)', years: '1963–1978', height: 28.4, diameter: 3.05,
     blurb: '“Stage-and-a-half” Atlas with balloon tanks plus a restartable Agena-D upper stage. Sent Mariner 4 to the first Mars flyby.',
     stages: [
       { id: 'Booster', name: 'Atlas booster section (2 × LR89 + sustainer)', prop: 'kerolox', engine: 'LR89 ×2 + LR105', n: 3, thrustSL: 1590e3, thrustVac: 1850e3, ispSL: 258, ispVac: 290, dry: 3050, propMass: 87000,
-        geom: [[3.2, 1.6, 1.6, C.steel]], eng: { n: 2, len: 2.3, r: 0.7, layout: 'pair', spread: 1.0 } },
+        geom: [[0.8, 1.6, 1.6, C.steel]], eng: { n: 2, len: 2.1, r: 0.6, layout: 'pair', spread: 3.0 }, look: 'atlasBooster' },
       { id: 'Sustainer', name: 'Atlas sustainer (LR105)', prop: 'kerolox', engine: 'LR105', n: 1, thrustSL: 254e3, thrustVac: 363e3, ispSL: 220, ispVac: 316, dry: 2350, propMass: 26500,
-        geom: [[18.0, 1.525, 1.525, C.steel], [2.0, 1.525, 0.76, C.steel]], eng: { n: 1, len: 1.6, r: 0.45, layout: 'single' } },
+        geom: [[19.0, 1.525, 1.525, C.steel], [1.4, 1.525, 0.76, C.steel]], eng: { n: 1, len: 2.1, r: 0.5, layout: 'single' }, look: 'atlasSustainer' },
       { id: 'Agena-D', name: 'Agena-D (Bell 8247)', prop: 'udmh', engine: 'Bell 8247', n: 1, thrustSL: 40e3, thrustVac: 71.2e3, ispSL: 200, ispVac: 290, dry: 670, propMass: 6100, restart: true,
-        geom: [[7.1, 0.76, 0.76, C.silver]], eng: { n: 1, len: 1.2, r: 0.45, layout: 'single' } },
+        geom: [[5.4, 0.76, 0.76, C.silver]], eng: { n: 1, len: 0.9, r: 0.4, layout: 'single' }, look: 'agenaD' },
     ],
     jettison: [{ name: 'Mariner shroud', mass: 400, alt: 110, part: 'fairing' }],
-    payloadFairing: { len: 7.6, r: 0.8, color: C.silver }, ascent: { hp: 185, ha: 185, vert: 10, kickGuess: 2.0 },
+    payloadFairing: { len: 9.0, r: 0.82, cyl: 0.78, color: C.silver, encloseUpper: true }, ascent: { hp: 185, ha: 185, vert: 10, kickGuess: 2.0 },
   },
   falconHeavy: {
     name: 'Falcon Heavy (expendable)', org: 'SpaceX (USA)', years: '2018–', height: 70.0, diameter: 3.66,
