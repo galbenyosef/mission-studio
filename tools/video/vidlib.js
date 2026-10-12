@@ -122,6 +122,7 @@
     return quality ? ms.R.renderer.domElement.toDataURL('image/jpeg', quality) : null;
   };
   V.info = tau => { const t = V.tOf(tau), s = ms.craftById('ship').s; return { met: t - V.t0ev, alt: s ? vnorm(s.r) - BODIES.earth.R : null }; };
-  V.ready = () => { const D = ms.DETAIL.ready; return D.orbiter !== undefined && D.shuttle_stack !== undefined; };
+  // ready when every detailed model the mission asked for has loaded (or failed to); a mission that asks for none, after 3 s
+  V.ready = () => { const D = ms.DETAIL, k = Object.keys(D.files); if (!k.length) { V.t0 = V.t0 || Date.now(); return Date.now() - V.t0 > 3000; } return k.every(n => D.ready[n] !== undefined); };
   window.__vid = V;
 })();

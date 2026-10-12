@@ -148,7 +148,7 @@ function preloadDetailedModels(md) {
   for (const o of md.M.objects) for (const cf of o.configs) {
     const L = cf.label || {}, sc = L.sc || o.model, parts = L.parts || [];
     if ((sc === 'apollo' || sc === 'apolloCSM') && parts.some(p => p === 'lander' || p === 'descent' || p === 'ascent')) want.add('apollo_lm');
-    if (sc === 'msl' && parts.includes('lander')) want.add('perseverance');
+    if (sc === 'msl' && (parts.includes('lander') || (parts.includes('aeroshell') && L.hs === false))) want.add('perseverance'); // (the rover shows once the heat shield is gone)
     if (o.model === 'shuttle') want.add('orbiter');
     if (L.orbiter) orbiterLivery(L.orbiter); // the flight's orbiter in its markings (the stack's and the orbiter's own configurations)
     if (o.model === 'iss') want.add('iss');
@@ -168,13 +168,33 @@ function refreshBounds(o) {
 // Apollo lunar module: NASA's model, ascent and descent stages apart. Its descent stage keeps the built-in one's frame (feet
 // at −1.8 m); its ascent stage's origin is the top of the descent stage, 1.455 m up, where the built-in ascent stage sits
 // 1.65 m up. The ascent engine's bell, hidden inside the descent stage in NASA's model, is added for liftoff.
-// Mars 2020 Perseverance: NASA's model, its six wheels apart so they turn (each wheel's node carries its radius) and its
-// mast apart, folded on the deck for the landing and raised on the surface (the node carries the axis and angle)
-function roverD(landed) {
-  return detailPart('perseverance', 'body', rover(1), { extra: g => {
-    const P = DETAIL.ready.perseverance; for (let i = 0; i < 6; i++) if (P['wheel' + i]) g.add(P['wheel' + i].clone());
+// Mars 2020 Perseverance: NASA's model, its six wheels apart so they turn (each wheel's node carries its radius), its legs
+// apart, and its mast apart, folded on the deck for the landing and raised on the surface (the node carries the axis and
+// angle). Stowed for the landing (NASA's drawing of the spacecraft, PIA24128) the wheels are folded up beside the body and
+// the legs are not shown; userData.mobility(f) unfolds them, from f = 0 (stowed) to 1 (as the model is).
+const ROVER_STOW = [ // wheel0 … wheel5 (rear, middle, front; left, right): its centre when stowed, and its turn (x, y, z, rad)
+  [[-0.97, 0.97, -1.02], [0.35, 0, 0.3]], [[0.97, 0.97, -1.02], [0.35, 0, -0.3]],
+  [[-1.0, 0.98, -0.07], [0, 0, 0.15]], [[1.0, 0.98, -0.07], [0, 0, -0.15]],
+  [[-0.97, 0.97, 0.98], [-0.35, 0, 0.3]], [[0.97, 0.97, 0.98], [-0.35, 0, -0.3]],
+];
+function roverD(landed, stowed) {
+  let f = stowed ? 0 : 1, legs = null; const W = [], q0 = new THREE.Quaternion();
+  const pose = () => {
+    for (const w of W) { w.piv.position.lerpVectors(w.p1, w.p0, f); w.piv.quaternion.slerpQuaternions(w.q1, q0, f); }
+    if (legs) legs.visible = f > 0.85;
+  };
+  const g = detailPart('perseverance', 'body', rover(1), { extra: g => {
+    const P = DETAIL.ready.perseverance;
+    for (let i = 0; i < 6; i++) if (P['wheel' + i]) { // each wheel in a pivot of its own (the wheel itself turns as it rolls)
+      const w = P['wheel' + i].clone(), piv = new THREE.Group(); piv.position.copy(w.position); w.position.set(0, 0, 0); piv.add(w); g.add(piv);
+      W.push({ piv, p0: piv.position.clone(), p1: new THREE.Vector3(...ROVER_STOW[i][0]), q1: new THREE.Quaternion().setFromEuler(new THREE.Euler(...ROVER_STOW[i][1])) });
+    }
+    if (P.legs) { legs = P.legs.clone(); g.add(legs); }
     if (P.mast) { const m = P.mast.clone(), d = m.userData.deploy; if (landed && d) m.quaternion.setFromAxisAngle(new THREE.Vector3(d[0], d[1], d[2]), d[3]); g.add(m); }
+    pose();
   } });
+  g.userData.mobility = x => { if (x !== f) { f = x; pose(); } };
+  return g;
 }
 function lmDescentD(landed) { return detailPart('apollo_lm', 'descent', lmDescent(landed)); }
 // Saturn V: a textured model (CC BY: BoldlyBuilding, credited in the README and the app), cut into its stages and stretched
@@ -348,21 +368,7 @@ function buildSC(model, parts, flags = {}) {
       const boom = cyl(0.02, 0.02, 2.2, mat('#aaa', 'metal')); boom.position.y = 0.46; inner.add(boom);
       inner.userData.len = 0.46; mounts.push({ y: -0.1, r: 0.1, tag: 'BUS' }); break;
     }
-    case 'msl': {
-      const AS = () => aeroshell(2.25, 1.6);
-      const CS = () => { const c = new THREE.Group(); const disk = cyl(2.0, 2.0, 0.35, mat('#1d2b4a', 'solar'), 32); c.add(disk); const hub = cyl(0.9, 0.9, 0.5, mat('#c9c9c9', 'metal')); hub.position.y = 0.35; c.add(hub); c.userData.len = 0.85; return c; };
-      const DS = () => { const d = new THREE.Group(); const fr = box(2.6, 0.8, 2.6, mat('#bfc3c8', 'metal')); d.add(fr); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + Math.PI / 8; const b = bell(0.35, 0.18); b.position.set(Math.cos(a) * 1.5, -0.2, Math.sin(a) * 1.5); b.rotation.z = Math.cos(a) * 0.35; b.rotation.x = -Math.sin(a) * 0.35; d.add(b); } d.userData.len = 0.8; return d; };
-      if (has('cruise')) { inner = stackParts([{ g: AS(), len: 2.6 }, { g: CS(), len: 0.85 }]); mounts.push({ y: 3.0, r: 0.2, tag: 'CRUISE' }); }
-      else if (has('aeroshell')) { inner = AS(); inner.userData.chuteY = 2.9; inner.userData.capsuleR = 2.25; inner.userData.dgb = true; }
-      else if (has('cruisestage')) inner = CS();
-      else if (has('lander')) {
-        inner = new THREE.Group(); const ds = DS(); ds.position.y = 0; inner.add(ds);
-        const rv = roverD(flags.landed); rv.position.y = flags.landed ? -7.6 : (flags.powered ? -7.6 : -1.3); if (flags.landed) rv.position.y = 0; inner.add(rv);
-        if (flags.powered && !flags.landed) { const lines = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.8, 0, 0.8), new THREE.Vector3(-0.6, -6.5, 0.6), new THREE.Vector3(0.8, 0, -0.8), new THREE.Vector3(0.6, -6.5, -0.6), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -6.5, 0)]); inner.add(new THREE.LineSegments(lines, new THREE.LineBasicMaterial({ color: 0x999999 }))); }
-        if (flags.landed) { inner.remove(ds); inner.userData.footY = 0; } else { inner.userData.footY = -7.6; mounts.push({ y: -0.2, r: 1.5, tag: 'DS' }); }
-      }
-      break;
-    }
+    case 'msl': { const r = m20Assembly(P, flags); inner = r.inner; mounts.push(...r.mounts); break; } // app/33_mars2020.js
     case 'tianwen': {
       const ORB = () => { const o = new THREE.Group(); o.add(probeBus(2.4, 1.8, 2.4, '#c9a043')); for (const s of [-1, 1]) { const w = solarWing(5.0, 1.8, 3); w.position.set(s * 1.2, 0.9, 0); if (s < 0) w.rotation.y = Math.PI; o.add(w); } const dd = dish(1.0); dd.position.set(0, 1.9, -0.8); o.add(dd); const bl = bell(0.7, 0.35); bl.position.y = -0.7; o.add(bl); o.userData.len = 1.8; o.userData.engineY = -0.7; o.userData.engineR = 0.35; return o; };
       const CAP = () => { const c = aeroshell(1.7, 1.4, '#e8e4dc'); return c; };
@@ -401,7 +407,8 @@ function buildSC(model, parts, flags = {}) {
   }
   if (!inner) { inner = probeBus(1.5, 1.5, 1.5, '#c9a043'); inner.userData.len = 1.5; mounts.push({ y: 0, r: 0.3, tag: 'any' }); }
   g.add(inner);
-  g.userData = { len: inner.userData.len || 2, mounts, footY: inner.userData.footY, chuteY: inner.userData.chuteY, capsuleR: inner.userData.capsuleR, dgb: inner.userData.dgb };
+  const iu = inner.userData;
+  g.userData = { len: iu.len || 2, mounts, footY: iu.footY, chuteY: iu.chuteY, capsuleR: iu.capsuleR, dgb: iu.dgb, yc0: iu.yc0, animate: iu.animate };
   return g;
 }
 // stowed spacecraft on top of an upper stage (inside adapters / fairings)

@@ -42,6 +42,7 @@
     - 롤 리버설로 방향을 잡는 활공 재진입
     - 활주로 착륙
     - 궤도선마다 그 비행 때의 표기: STS-1(1981)의 컬럼비아는 화물칸 문의 이름, 오른쪽 날개의 "USA", 검은 친(chine), 흰색으로 칠한 외부 탱크. STS-31(1990)의 디스커버리는 NASA 로고타입(웜). STS-135(2011)의 아틀란티스는 NASA 인시그니아(미트볼)
+  - 부품별로 재현한 마스 2020의 착륙: 태양전지판 둘레를 라디에이터가 북처럼 감싼 크루즈 스테이지가 에어로셸을 놓아주고, 열 차폐막이 떨어져 나가면 백셸 안에 하강단과 바퀴를 접은 로버가 드러나요. 낙하산을 단 백셸은 뒤에 남고, 스카이 크레인이 브라이들 끝에 로버를 내리는 동안 바퀴가 펼쳐져요. 착지한 뒤 하강단은 날아가 650 m 떨어진 곳에 추락해요. 열 차폐막과 백셸은 떨어진 자리에 놓여 있어요
 - **실시간 수치와 설명**
   - 고도와 속도, 체감 g
   - 추력과 가속도, 남은 연료와 단별 Δv
@@ -148,7 +149,8 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 
 - **코드:** [MIT 라이선스](LICENSE)
 - **three.js:** r160, MIT (`vendor/`에 glTF 로더와 함께 포함). `vendor/`의 meshopt 디코더는 [meshoptimizer](https://github.com/zeux/meshoptimizer)(MIT)에서 가져왔어요.
-- **아폴로 달착륙선과 마스 2020 퍼서비어런스:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)의 3D 모델을 `tools/models`로 손봤어요. 달착륙선은 상승단과 하강단으로 나눴어요. 퍼서비어런스는 바퀴 6개와 마스트를 따로 떼어서 바퀴가 구르고 표면에서 마스트가 서게 했어요. 둘 다 면을 줄이고 압축했어요.
+- **아폴로 달착륙선과 마스 2020 퍼서비어런스:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)의 3D 모델을 `tools/models`로 손봤어요. 달착륙선은 상승단과 하강단으로 나눴어요. 퍼서비어런스는 바퀴 6개와 다리, 마스트를 따로 떼어서 바퀴가 구르고, 착륙할 때는 몸체 옆으로 접혀 있다가 스카이 크레인 아래에서 펼쳐지고, 표면에서 마스트가 서게 했어요. 둘 다 면을 줄이고 압축했어요.
+- **마스 2020 크루즈 스테이지, 에어로셸, 하강단:** 공개된 치수(마스 사이언스 래버러토리의 진입 관련 논문과 보도 자료)와 NASA/JPL-Caltech의 우주선 그림·사진(PIA24128, PIA23887, PIA23886, 큐리오시티 하강단은 PIA11425)을 참고해 코드로 그렸어요. 그림과 사진은 참고만 했고 이 저장소에는 들어 있지 않아요.
 - **우주왕복선 궤도선:** 스미스소니언이 국립항공우주박물관 우드바-헤이지 센터에 있는 디스커버리(OV-103)를 [3D 스캔한 모델](https://sketchfab.com/3d-models/orbiter-space-shuttle-ov-103-discovery-5f7176a2ae284d6b99fc970c9d265c04)이에요([CC0](https://creativecommons.org/publicdomain/zero/1.0/)). `tools/models`로 본체, 화물칸 문 두 짝, 착륙 기어를 나눠서 궤도에서는 문이 열리고 착륙할 때는 기어가 내려와요. 화물칸 내부, 로봇 팔, 탑재물은 코드로 그렸어요. 스캔은 디스커버리의 마지막 표기를 하고 있어서, `tools/livery`가 궤도선 표기의 변천사에 맞춰 비행마다 그 궤도선이 그때 하고 있던 표기로 색 지도를 다시 칠해요(NASA 로고타입은 [Simple Icons](https://simpleicons.org/)의 그림, CC0. 글자는 TeX Gyre Heros로 썼어요).
 - **국제우주정거장:** 존슨 우주센터 IGOAL 연구실이 만든 NASA 모델이에요([NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)). `tools/models`로 STS-135 때인 2011년 7월 모습으로 되돌렸어요. 그 뒤에 붙은 나우카, 프리찰, iROSA 태양전지판, BEAM, 비숍 에어록, 도킹 어댑터는 빼고 면을 줄였어요.
 - **새턴 V:** [BoldlyBuilding](https://sketchfab.com/TitanicKyle)의 ["Saturn V"](https://sketchfab.com/3d-models/saturn-v-88f68de3b3e9435582560e02a52b325d)([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))를 바탕으로 했어요. `tools/models`로 S-IC, S-II 후방 단간부, S-II, S-IVB로 나누고 단마다 공개된 길이와 지름에 맞게 늘렸어요. 단간부는 실제 비행처럼 단 분리 30초 뒤에 떨어져요. 모델에 있던 우주선은 앱의 아폴로 우주선으로 바꿨어요.

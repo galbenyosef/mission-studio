@@ -140,6 +140,60 @@ function runMarsEDL(SC, P, t0, r0, v0, bank, site, refOnly) {
   }
   return simulateEntry(opt);
 }
+// Mars 2020's landing in its parts (edl.skycrane). The configurations the app shows the entry vehicle in, from the heat
+// shield's going to the rover's lowering (app/33_mars2020.js), and the parts that go their own ways: the heat shield
+// falling away and the backshell coming down on its parachute, each through the air from where it let go to where it
+// lies; and the descent stage, once the rover is down, flying off: a second's hover, a climb, a turn to 45° from the
+// vertical and thrust (2.2 g here) for as long as it takes to come down edl.flyaway metres away along the ground track.
+// It is not seen after it hits the ground.
+function skyCraneParts(M, SC, ship, ent, site, mDS, tEnd) {
+  const edl = SC.edl, sc = SC.model, R = surfaceRadius('mars'), elev = site.elev || 0, at = n => ent.events.find(e => e.name === n);
+  const hs = at('Heat shield separation'), bs = at('Backshell separation · powered descent'), sky = at('Sky crane');
+  if (hs) ship.setConfig(hs.t, 'sc', { key: 'sc', sc, parts: ['aeroshell'], chute: 1, hs: false });
+  if (sky) ship.setConfig(sky.t, 'sc', { key: 'sc', sc, parts: ['lander'], powered: true, skyT: sky.t });
+  const fall = (id, name, e, m, diam, cd, part, chute) => {
+    if (!e) return;
+    const f = simulateEntry({ body: 'mars', t0: e.t, r0: e.r, v0: e.v, m0: m, diam, cd, LD: 0, rn: diam / 2, siteElev: elev, maxTime: 900 });
+    const smp = f.samples.map(x => ({ ...x, phase: `${name.toLowerCase()}${chute ? ' on its parachute' : ', falling'}` }));
+    if (f.t > smp[smp.length - 1].t) smp.push({ ...smp[smp.length - 1], t: f.t, r: f.r, v: f.v }); // down to the ground itself
+    const o = M.addObj(new MObject(id, name, { kind: 'debris', model: sc, color: '#9aa3ad', trail: false }));
+    o.setConfig(e.t, 'sc', { key: 'sc', sc, parts: [part], ...(chute ? { chute: 1 } : {}) });
+    o.add(new SampleSeg('mars', smp, { m }));
+    if (f.landed) { o.setConfig(f.t, 'sc', { key: 'sc', sc, parts: [part], rest: true }); o.add(new SurfaceSeg('mars', f.t, tEnd, f.ll[0], f.ll[1], elev, m, { extra: { phase: 'on the ground' } })); }
+  };
+  const mHS = edl.heatshieldMass ?? 440;
+  fall('heatshield', 'Heat shield', hs, mHS, edl.diam, 1.0, 'heatshield', false);
+  fall('backshell', 'Backshell', bs, edl.backshellMass ?? (SC.modules.AEROSHELL.dry - mHS), edl.chute.diam, 0.62, 'backshell', true); // the parachute's drag, and a little of the backshell's
+  // the descent stage's flight in the site's own frame (metres along the ground track and up; m/s; thrust in m/s²; tilt)
+  const g = BODIES.mars.mu / (R * R) * 1000, aT = 2.2 * g;
+  const fly = tb => {
+    const out = []; let x = 0, z = edl.hang, vx = 0, vz = 0;
+    for (let k = 0; k < 6000; k++) {
+      const s = k * 0.05, th = clamp((s - 2.5) / 1.5, 0, 1) * 45 * DEG, a = s < 1 ? g : s < 2.5 ? g + 4 : s < 2.5 + tb ? aT : 0;
+      out.push([s, x, z, vx, vz, a, th]); if (z < 0) break;
+      vx += a * Math.sin(th) * 0.05; vz += (a * Math.cos(th) - g) * 0.05; x += vx * 0.05; z += vz * 0.05;
+    }
+    return out;
+  };
+  let lo = 0, hi = 30; for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2, p = fly(mid); if (p[p.length - 1][1] < edl.flyaway) lo = mid; else hi = mid; }
+  const path = fly((lo + hi) / 2);
+  const pd = ent.samples.find(x => x.phase === 'powered descent') || ent.samples[0], ll0 = subPointLL('mars', pd.r, pd.t), cl = Math.cos(ent.ll[0] * DEG);
+  let he = (ent.ll[1] - ll0[1]) * cl, hn = ent.ll[0] - ll0[0]; const hl = Math.hypot(he, hn); if (hl > 1e-9) { he /= hl; hn /= hl; } else { he = 1; hn = 0; } // heading: on along the ground track
+  const W = vunit(bodyOmegaEcl('mars', ent.t)), t0 = ent.t;
+  const pos = (x, z, t) => sitePosEcl('mars', ent.ll[0] + x * hn / (R * 1000) * RAD, ent.ll[1] + x * he / (R * 1000 * cl) * RAD, elev + z / 1000, t);
+  const smp = [], idx = []; for (let i = 0; i < path.length - 1; i += 5) idx.push(i); idx.push(path.length - 1); // every quarter second, and the impact
+  for (const i of idx) {
+    const [s, x, z, vx, vz, a, th] = path[i], t = t0 + s, r = pos(x, Math.max(z, 0), t), h = 0.01;
+    const v = vscale(vsub(pos(x + vx * h, z + vz * h, t + h), pos(x - vx * h, z - vz * h, t - h)), 1 / (2 * h));
+    const U = vunit(r), E = vunit(vcross(W, U)), N = vcross(U, E), H = vadd(vscale(E, he), vscale(N, hn));
+    smp.push({ t, r, v, m: mDS, T: a * mDS, thrDir: a > 0 ? vunit(vadd(vscale(H, Math.sin(th)), vscale(U, Math.cos(th)))) : null, phase: 'descent stage flyaway', alt: z / 1000 });
+  }
+  const ds = M.addObj(new MObject('ds', 'Descent stage', { kind: 'stage', model: sc, color: '#aaa' }));
+  ds.setConfig(t0, 'sc', { key: 'sc', sc, parts: ['descentstage'] });
+  ds.add(new SampleSeg('mars', smp, { m: mDS }));
+  M.ev(t0 + 1, 'ds', 'Descent stage flyaway', 'The bridles are cut; the descent stage throttles up and flies off at 45°, clear of the rover.', 'powered');
+  M.ev(smp[smp.length - 1].t, 'ds', 'Descent stage impact', `The descent stage comes down about ${edl.flyaway} m from the rover.`, 'info');
+}
 function earthEntryGeneric(SC, P, t0, r0, v0, m, bank) {
   if (SC.usesUpperStage) {
     const e = SC.edl, mm = m ?? (P.massOf(SC.orbiter) + P.upper.dry + P.upper.propLeft);
@@ -501,9 +555,10 @@ function doDirectEntry(M, cfg, SC, P, ship, nodes, lam, iLeg, tE, rT, vT, body, 
   M.ev(ent.t, 'ship', landName, `${body === 'mars' ? 'Touchdown on Mars' : 'Landing on Earth'} at ${ent.ll[0].toFixed(2)}°, ${ent.ll[1].toFixed(2)}° — ${miss.toFixed(1)} km from the target (${site.name}). ${body === 'mars' ? `One-way radio delay to Earth: ${(vnorm(vsub(bodyPos('mars', ent.t), bodyPos('earth', ent.t))) / C_KMS / 60).toFixed(1)} min — the landing was over before Earth heard about entry.` : ''}`, 'landing');
   M.phase(tEI, ent.t, body === 'mars' ? 'Entry, descent & landing' : 'Earth entry', '#ff5d5d');
   M.summary.entries = M.summary.entries || []; M.summary.entries.push({ body, vEI: vnorm(vrel), maxG: ent.maxG, maxHeat: ent.maxHeat, miss, ll: ent.ll, bank: g.x });
-  const mLanded = ent.m;
+  const crane = body === 'mars' && SC.edl && SC.edl.skycrane, mLanded = crane ? SC.modules.ROVER.dry : ent.m; // a sky crane flies off and leaves the rover
   if (body === 'mars') {
     ship.setConfig(ent.t, 'sc', { key: 'sc', sc: SC.model, parts: ['lander'], landed: true });
+    if (crane) skyCraneParts(M, SC, ship, ent, site, ent.m - mLanded, ent.t + (cfg.surfaceDays ?? 3) * D);
     if (leg.next === 'return') return surfaceStayAndReturn(M, cfg, SC, P, ship, nodes, lam, iLeg, ent, mLanded, progress);
     for (const e of (cfg.surfaceEvents || [])) M.ev(ent.t + e.afterLanding * D, 'ship', e.name, e.desc, e.kind || 'info');
     const tEnd = ent.t + (cfg.surfaceDays ?? 3) * D;
