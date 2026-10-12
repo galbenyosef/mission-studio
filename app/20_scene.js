@@ -19,7 +19,7 @@ varying vec2 vLocal; varying float vCap; varying vec3 vObj;
 uniform vec3 uCapDir[4]; uniform float uCapCos[4];
 void capHoles() { if (vCap < 0.5) { for (int i = 0; i < 4; i++) { if (dot(vObj, uCapDir[i]) > uCapCos[i]) discard; } } }
 float detailAt(vec2 uv, float dist) {
-  float w1 = 1.0 - smoothstep(600.0, 4000.0, dist), w2 = 1.0 - smoothstep(30.0, 220.0, dist), w3 = 1.0 - smoothstep(1.5, 12.0, dist), w4 = 1.0 - smoothstep(0.08, 0.7, dist);
+  float w1 = 1.0 - smoothstep(150.0, 900.0, dist), w2 = 1.0 - smoothstep(30.0, 220.0, dist), w3 = 1.0 - smoothstep(1.5, 12.0, dist), w4 = 1.0 - smoothstep(0.08, 0.7, dist);
   float d = 0.0;
   if (w1 > 0.0) d += (texture2D(tDetail, uv * uDetailRep).r - 0.5) * w1;
   if (w2 > 0.0) d += (texture2D(tDetail, uv * uDetailRep * 17.0).r - 0.5) * w2;
@@ -38,60 +38,118 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * wp;
   #include <logdepthbuf_vertex>
 }`;
+// relief from a slope map (G, B: slopes east and north as 128 + slope·K): the normal tilted over the sphere's
+const GLSL_RELIEF = `
+uniform sampler2D tAux; uniform vec3 uPole; uniform float uSlopeK, uRelief; uniform vec2 uReliefNear;
+vec3 reliefNormal(vec3 N, vec3 aux, float dist, out vec3 E, out vec3 Nn, out float cosLat) {
+  E = cross(uPole, N); cosLat = length(E); E /= max(cosLat, 1e-5); Nn = cross(N, E);
+  vec2 s = (aux.gb * 255.0 - 128.0) / uSlopeK * uRelief * smoothstep(uReliefNear.x, uReliefNear.y, dist); // (gone close up, where a texel would show as a facet)
+  return normalize(N - E * s.x - Nn * s.y);
+}`;
+// Earth: the day map lit by sunlight and skylight from the atmosphere model (reddened near the terminator), relief from
+// the slope map, clouds on a layer above the ground (seen with parallax, casting shadows along the sunlight, their tops
+// lit a little past the ground's sunset), the sea's glint and sky reflection, towns' lights at night, and the air between
+// the camera and the ground over all of it.
 const GLSL_EARTH_F = `
 #include <common>
 #include <logdepthbuf_pars_fragment>
-uniform sampler2D tDay; uniform sampler2D tNight; uniform sampler2D tCS; uniform vec3 uSunDir; uniform float uLights; uniform float uRim; uniform vec3 uFogColor; uniform float uFogK; uniform vec3 uFill;
+uniform sampler2D tDay; uniform sampler2D tNight; uniform sampler2D tClouds; uniform vec3 uSunDir; uniform float uLights; uniform vec3 uFill;
 varying vec2 vUv; varying vec3 vN; varying vec3 vP;
 ${GLSL_DETAIL}
+${GLSL_ATMOS}
+${GLSL_RELIEF}
+const float CLOUD_H = 6.0; // km
+// a horizontal displacement on the ground (km, world axes) in texture coordinates
+vec2 uvShift(vec3 dv, vec3 E, vec3 Nn, float cosLat) { return vec2(dot(dv, E) / (2.0 * PI * aRg * max(cosLat, 0.05)), dot(dv, Nn) / (PI * aRg)); }
+float cloudAt(vec2 uv) { return smoothstep(0.1, 0.92, texture2D(tClouds, uv).r); }
 void main() {
   ${LOGDEPTH_EXACT}
   capHoles();
-  vec3 N = normalize(vN); vec3 L = normalize(uSunDir); vec3 V = normalize(cameraPosition - vP);
-  float ndl = dot(N, L);
-  vec3 day = texture2D(tDay, vUv).rgb;
-  vec3 cs = texture2D(tCS, vUv).rgb;
-  vec3 night = texture2D(tNight, vUv).rgb;
-  float cloud = smoothstep(0.08, 0.9, cs.g);
-  float ocean = cs.r;
-  float diff = max(ndl, 0.0);
-  float dayMix = smoothstep(-0.10, 0.12, ndl);
-  day *= mix(detailAt(vUv, length(cameraPosition - vP)), 1.0, ocean);
-  vec3 col = day * (0.012 + 1.05 * diff);
-  vec3 Hh = normalize(L + V);
-  float spec = pow(max(dot(N, Hh), 0.0), 70.0) * ocean * (1.0 - cloud) * smoothstep(0.0, 0.1, ndl);
-  col += vec3(1.0, 0.93, 0.80) * spec * 0.55;
-  col = mix(col, vec3(0.92, 0.94, 0.97) * (0.012 + 1.05 * diff), cloud * 0.92);
-  vec3 lights = pow(night, vec3(1.6)) * vec3(1.0, 0.78, 0.45) * 2.6 * uLights * (1.0 - dayMix) * (1.0 - cloud * 0.75);
-  lights *= smoothstep(5.0, 60.0, length(cameraPosition - vP)); // from close by, a town's glow is its separate lights, not a lit patch of ground
-  col += lights;
-  col += day * uFill * (1.0 - dayMix); // cinematic night fill near the camera: the ground stays readable after dark
-  float mu = max(dot(N, V), 0.0);
-  float fres = pow(1.0 - mu, 2.6);
-  col += vec3(0.26, 0.52, 1.0) * fres * 0.75 * uRim * smoothstep(-0.25, 0.35, ndl);
-  col += vec3(0.6, 0.22, 0.05) * pow(1.0 - abs(ndl), 10.0) * smoothstep(-0.15, 0.05, ndl) * 0.35;
-  float fog = 1.0 - exp(-length(cameraPosition - vP) * uFogK);
-  col = mix(col, uFogColor, fog);
+  vec3 N = normalize(vN), L = normalize(uSunDir);
+  vec3 seg = vP - cameraPosition; float dist = length(seg); vec3 d = seg / dist, V = -d;
+  vec3 aux = texture2D(tAux, vUv).rgb; float ocean = aux.r;
+  vec3 E, Nn; float cosLat;
+  vec3 Nb = normalize(mix(reliefNormal(N, aux, dist, E, Nn, cosLat), N, ocean));
+  float mus = dot(N, L), muv = max(dot(N, V), 0.0);
+  // clouds: where the line of sight crosses their layer, and the shadow they cast along the sunlight
+  float cloud = cloudAt(vUv + uvShift((V - N * muv) * CLOUD_H / max(muv, 0.06), E, Nn, cosLat));
+  float shadow = cloudAt(vUv + uvShift((L - N * mus) * CLOUD_H / max(mus, 0.06), E, Nn, cosLat)) * smoothstep(-0.02, 0.08, mus);
+  // light on the ground: the Sun through the air, and the sky
+  vec3 sun = aSunlight(aRg, mus) * (aSunE / PI) * (1.0 - 0.8 * shadow);
+  vec3 sky = aSkyLight(aRg, mus) * (1.0 - 0.3 * shadow);
+  vec3 alb = texture2D(tDay, vUv).rgb * mix(detailAt(vUv, dist), 1.0, ocean);
+  alb = mix(alb, max(alb, vec3(0.004, 0.012, 0.036)), ocean); // deep water's own colour (the Blue Marble paints the open sea flat and darker)
+  vec3 col = alb * (sun * max(dot(Nb, L), 0.0) + sky);
+  // the sea: glint off wind-ruffled water (Cox–Munk slopes, ~6 m/s wind), the sky's reflection, both rising towards
+  // grazing angles (Fresnel)
+  vec3 H = normalize(L + V); float nh = max(dot(N, H), 1e-3), vh = max(dot(V, H), 0.0);
+  const float S2 = 0.035;
+  float D = exp(-(1.0 - nh * nh) / (nh * nh * S2)) / (PI * S2 * nh * nh * nh * nh);
+  float F = 0.02 + 0.98 * pow(1.0 - vh, 5.0), Fv = 0.02 + 0.98 * pow(1.0 - muv, 5.0);
+  vec3 sea = col * (1.0 - Fv) + sun * PI * F * D / (4.0 * max(muv, 0.05)) + sky * Fv;
+  col = mix(col, sea, ocean);
+  // the cloud tops CLOUD_H up see the Sun a little longer than the ground below
+  float rc = aRg + CLOUD_H, muhc = -sqrt(max(1.0 - aRg * aRg / (rc * rc), 0.0));
+  float cshade = pow(clamp((mus - muhc) / (1.0 - muhc), 0.0, 1.0), 0.65);
+  vec3 cloudCol = 0.8 * (aSunlight(rc, mus) * (aSunE / PI) * cshade + aSkyLight(rc, mus));
+  col = mix(col, cloudCol, cloud);
+  // towns at night (with a soft glow from a coarser mip), switching on through dusk, dimmed by clouds, which they light
+  // from below; seen close, a texel's glow breaks up into separate lights
+  float nl = texture2D(tNight, vUv).r, ng = texture2D(tNight, vUv, 3.0).r;
+  nl = pow(nl, 2.2); ng = pow(ng, 2.2);
+  float near = 1.0 - smoothstep(250.0, 1500.0, dist);
+  nl *= mix(1.0, smoothstep(0.5, 0.72, texture2D(tDetail, vUv * uDetailRep * 0.25).r) * 4.0, near);
+  float dark = (1.0 - smoothstep(-0.14, 0.02, mus)) * uLights;
+  vec3 warm = mix(vec3(1.0, 0.62, 0.30), vec3(1.0, 0.86, 0.62), smoothstep(0.1, 0.8, nl)); // sodium-orange outskirts, whiter centres
+  vec3 lights = (nl * 2.4 + ng * (1.1 - 0.8 * near)) * warm * dark * (1.0 - cloud * 0.8);
+  lights *= smoothstep(5.0, 60.0, dist); // from close by, a town's glow is its separate lights, not a lit patch of ground
+  col += lights + ng * cloud * vec3(1.0, 0.7, 0.42) * 0.6 * dark;
+  col += (alb * (1.0 - ocean * 0.7) + cloud * 0.6) * vec3(0.0016, 0.0022, 0.0030) * (1.0 - smoothstep(-0.2, 0.0, mus)); // airglow and starlight on the night side
+  col += alb * uFill * (1.0 - smoothstep(-0.10, 0.12, mus)); // cinematic night fill near the camera: the ground stays readable after dark
+  // the air between the camera and this point
+  float t0 = 0.0;
+  if (aCamH > aRt - aRg) { float b = dot(aCam, d); vec3 pc = aCam - b * d; float Dt = aRt * aRt - dot(pc, pc); t0 = Dt > 0.0 ? clamp(-b - sqrt(Dt), 0.0, dist) : dist; }
+  vec3 S, T; aIntegrate(aCam, d, t0, dist, L, 2, aCamH > aRt - aRg ? 12 : 16, S, T);
+  col = col * T * aWB * aExpo + aDisplay(S);
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
+// The Moon and the other bodies: lunar-Lambert photometry (the Moon's flat-looking full disc), relief from a slope map
+// where there is one, and on Mars the dusty air (sunlight and skylight through it, and the haze over the ground).
 const GLSL_ROCK_F = `
 #include <common>
 #include <logdepthbuf_pars_fragment>
-uniform sampler2D map; uniform vec3 uSunDir; uniform float uAmb; uniform float uLS; uniform vec3 uTint; uniform float uHasMap; uniform vec3 uFogColor; uniform float uFogK; uniform vec3 uFill;
+uniform sampler2D map; uniform vec3 uSunDir; uniform float uAmb; uniform float uLS; uniform vec3 uTint; uniform float uHasMap; uniform float uHasAux; uniform vec3 uFogColor; uniform float uFogK; uniform vec3 uFill;
 varying vec2 vUv; varying vec3 vN; varying vec3 vP;
 ${GLSL_DETAIL}
+${GLSL_RELIEF}
+#ifdef HAS_ATMO
+${GLSL_ATMOS}
+#endif
 void main() {
   ${LOGDEPTH_EXACT}
   capHoles();
   vec3 N = normalize(vN); vec3 L = normalize(uSunDir); vec3 V = normalize(cameraPosition - vP);
-  float mu0 = max(dot(N, L), 0.0); float mu = max(dot(N, V), 0.0);
+  vec3 E, Nn; float cosLat;
+  float dist = length(cameraPosition - vP);
+  vec3 Nb = uHasAux > 0.5 ? reliefNormal(N, texture2D(tAux, vUv).rgb, dist, E, Nn, cosLat) : N;
+  float mus = dot(N, L);
+  float mu0 = max(dot(Nb, L), 0.0) * smoothstep(-0.03, 0.01, mus); float mu = max(dot(Nb, V), 0.0);
   float ls = min(2.0 * mu0 / max(mu0 + mu, 1e-4), 1.35);
   float shade = mix(mu0, ls * smoothstep(0.0, 0.04, mu0), uLS);
   vec3 alb = (uHasMap > 0.5 ? texture2D(map, vUv).rgb : vec3(1.0)) * uTint;
-  if (uDetailAmp > 0.0) alb *= detailAt(vUv, length(cameraPosition - vP));
+  if (uDetailAmp > 0.0) alb *= detailAt(vUv, dist);
+#ifdef HAS_ATMO
+  vec3 col = alb * (shade * aSunlight(aRg, mus) + aSkyLight(aRg, mus)) + alb * uFill * (1.0 - smoothstep(0.0, 0.25, mus));
+  vec3 d = (vP - cameraPosition) / dist;
+  float t0 = 0.0;
+  if (aCamH > aRt - aRg) { float b = dot(aCam, d); vec3 pc = aCam - b * d; float Dt = aRt * aRt - dot(pc, pc); t0 = Dt > 0.0 ? clamp(-b - sqrt(Dt), 0.0, dist) : dist; }
+  vec3 S, T; aIntegrate(aCam, d, t0, dist, L, 2, 12, S, T);
+  col = col * T * aWB * aExpo + aDisplay(S);
+#else
   vec3 col = alb * (shade + uAmb) + alb * uFill * (1.0 - smoothstep(0.0, 0.25, mu0)); // night fill (earthshine on the Moon, cinematic elsewhere)
-  col = mix(col, uFogColor, 1.0 - exp(-length(cameraPosition - vP) * uFogK));
+  col = mix(col, uFogColor, 1.0 - exp(-dist * uFogK));
+#endif
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
@@ -150,6 +208,40 @@ void main() {
   gl_FragColor = vec4(col, a);
   #include <colorspace_fragment>
 }`;
+// The sky of a planet with air, from inside it or from space (the glowing limb): the atmosphere model along each line of
+// sight, drawn in the background pass. Premultiplied: the stars behind are dimmed by the air's transmittance and hidden
+// where the sky is bright (as the eye or a camera exposed for a sunlit scene would). Lines of sight that end on the
+// ground beyond the planet's polygon edge (a sliver at its limb) are drawn opaque, as the haze that covers them.
+const GLSL_ASKY_F = `
+#include <common>
+${GLSL_ATMOS}
+uniform float aHide;
+varying vec3 vDir;
+void main() {
+  vec3 d = normalize(vDir);
+  float b = dot(aCam, d);
+  // distances along the line of sight to the top of the air and to the ground; near the planet from its altitude (precise
+  // when the camera is low), from the point of closest approach otherwise (precise when it is far)
+  bool near = aCamH < 1000.0;
+  vec3 pc = aCam - b * d; float pc2 = dot(pc, pc);
+  float DT = near ? b * b - (aCamH - (aRt - aRg)) * (aCamR + aRt) : aRt * aRt - pc2;
+  if (DT <= 0.0) discard;
+  float sq = sqrt(DT), t1 = -b + sq;
+  if (t1 <= 0.0) discard;
+  bool outside = aCamH > aRt - aRg;
+  float t0 = outside ? -b - sq : 0.0;
+  float cG = aCamH * (aCamR + aRg), DG = near ? b * b - cG : aRg * aRg - pc2;
+  bool ground = b < 0.0 && DG > 0.0;
+  // the planet's mesh covers lines of sight that dip more than its facets' depth (0.2 km) below the surface: only the sliver
+  // at the limb is left to draw here
+  if (ground && pc2 < (aRg - 0.5) * (aRg - 0.5)) discard;
+  float tE = ground ? (near ? cG / (-b + sqrt(DG)) : -b - sqrt(DG)) : t1;
+  vec3 S, T; aIntegrate(aCam, d, t0, tE, aSun, outside ? (ground ? 2 : 0) : 1, 24, S, T);
+  vec3 c = aDisplay(S);
+  float a = ground ? 1.0 : 1.0 - dot(T, vec3(1.0 / 3.0)) * exp(-aHide * dot(c, vec3(0.2126, 0.7152, 0.0722)));
+  gl_FragColor = vec4(c, a);
+  #include <colorspace_fragment>
+}`;
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function makeDetailTexture() { // tileable value noise + craters, used to add surface texture below the resolution of the global maps
   const N = 512, rnd = mulberry32(7); const v = new Float32Array(N * N);
@@ -198,6 +290,12 @@ function initScene() {
   R.sky = new THREE.Mesh(new THREE.SphereGeometry(5e8, 48, 24), new THREE.ShaderMaterial({ vertexShader: GLSL_SKY_V, fragmentShader: GLSL_SKY_F, side: THREE.BackSide, transparent: true, depthWrite: false, depthTest: false,
     uniforms: { uUp: { value: new THREE.Vector3(0, 0, 1) }, uSun: { value: new THREE.Vector3(1, 0, 0) }, uDensity: { value: 0 }, uZenith: { value: new THREE.Color('#3a76d6') }, uHorizon: { value: new THREE.Color('#c6dcf2') }, uSunset: { value: new THREE.Color('#ff9a52') }, uHalo: { value: new THREE.Color('#fff2d8') } } }));
   R.sky.renderOrder = 10; R.sky.frustumCulled = false; R.bgScene.add(R.sky);
+  R.airSky = {}; // the physically based skies of Earth and Mars (Venus keeps a simple rim)
+  for (const name of ['earth', 'mars']) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(5e8, 64, 32), new THREE.ShaderMaterial({ vertexShader: GLSL_SKY_V, fragmentShader: GLSL_ASKY_F, side: THREE.BackSide,
+      transparent: true, premultipliedAlpha: true, depthWrite: false, depthTest: false, uniforms: Object.assign({ aHide: { value: 150 } }, atmosUniforms(name, name !== 'earth')) }));
+    m.renderOrder = 11; m.frustumCulled = false; m.visible = false; R.bgScene.add(m); R.airSky[name] = m;
+  }
   R.hemi = new THREE.HemisphereLight(0x9cc3ff, 0x6b5a45, 0); R.scene.add(R.hemi);
   // Image-based lighting: a small surround of the craft's world (sky and ground inside an atmosphere, the nearest planet's
   // sunlit disc in space, a faint fill) captured into a cube map, so metal and foil reflect their surroundings and faces
@@ -223,11 +321,52 @@ function initScene() {
   R.sunGlow = makeGlowSprite('#fff4dc', 1.0); R.scene.add(R.sunGlow);
   R.sunGlow2 = makeGlowSprite('#ffcf8a', 0.35, true); R.scene.add(R.sunGlow2);
 }
-function loadTex(name, srgb = true) {
+// grey: a single-channel texture (a quarter of the memory of an RGBA one)
+function loadTex(name, srgb = true, grey = false) {
   const tex = R.loader.load(ASSET(name), () => { R.texLoaded++; });
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  if (grey) tex.format = THREE.RedFormat;
   tex.anisotropy = Math.min(8, R.maxAniso || 1);
   return tex;
+}
+// Sharper maps for a body, loaded as the camera comes near it and released when it goes far away: each level of detail
+// loads within `near` body radii and is dropped beyond `far`; `big` levels (8192 × 4096) only on devices that can hold
+// them — a desktop GPU (16384 px textures) and a fine pointer; ?tex=8k or ?tex=4k forces the choice. The sharpest loaded
+// level is used; maps decode off the main thread where the browser can. flag: a uniform set to 1 while a level is in use.
+R.texLOD = [];
+function texLOD(body, uniform, levels, srgb, grey, flag) {
+  R.texLOD.push({ body, U: uniform, base: uniform.value, srgb, grey, flag, levels: levels.map(l => Object.assign({ tex: null, state: 'idle' }, l)) });
+}
+function bigTexOK() {
+  const q = (location.search.match(/[?&]tex=(\w+)/) || [])[1];
+  if (q) return q === '8k';
+  const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  return R.renderer.capabilities.maxTextureSize >= 16384 && !coarse;
+}
+function loadTexAsync(file, srgb, grey, done, fail) {
+  const fin = t => { t.anisotropy = Math.min(8, R.maxAniso || 1); if (srgb) t.colorSpace = THREE.SRGBColorSpace; if (grey) t.format = THREE.RedFormat; t.needsUpdate = true; done(t); };
+  // an image decoded before its upload (decode() works off the main thread), so the swap does not stall a frame
+  const viaImage = () => R.loader.load(ASSET(file), t => { const im = t.image; if (im && im.decode) im.decode().then(() => fin(t), () => fin(t)); else fin(t); }, undefined, fail);
+  // Chromium decodes straight into an ImageBitmap, flipped as WebGL needs (other engines have not always honoured the options)
+  const chromium = navigator.userAgentData && navigator.userAgentData.brands && navigator.userAgentData.brands.some(b => /Chromium/.test(b.brand));
+  if (typeof createImageBitmap !== 'function' || !chromium) return viaImage();
+  new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' })
+    .load(ASSET(file), bmp => { const t = new THREE.Texture(bmp); t.flipY = false; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; fin(t); }, undefined, viaImage);
+}
+function updateTexLOD() {
+  if (R.bigTex === undefined) R.bigTex = bigTexOK();
+  for (const e of R.texLOD) {
+    const b = R.bodies[e.body], k = R.camera.position.distanceTo(b.group.position) / b.R;
+    let use = null;
+    for (const l of e.levels) {
+      if (l.state === 'idle' && k < l.near && (!l.big || R.bigTex)) { l.state = 'loading'; loadTexAsync(l.file, e.srgb, e.grey, t => { l.tex = t; l.state = 'ready'; }, () => { l.state = 'failed'; }); }
+      else if (l.state === 'ready' && k > l.far) { l.tex.dispose(); if (l.tex.image && l.tex.image.close) l.tex.image.close(); l.tex = null; l.state = 'idle'; }
+      if (l.state === 'ready') use = l.tex;
+    }
+    const v = use || e.base;
+    if (e.U.value !== v) e.U.value = v;
+    if (e.flag) e.flag.value = v ? 1 : 0;
+  }
 }
 function glowTexture(color, soft) {
   const c = document.createElement('canvas'); c.width = c.height = 256;
@@ -278,18 +417,35 @@ function capUniforms() { return { uCapDir: { value: [0, 1, 2, 3].map(() => new T
 function bodyMaterial(name) {
   const sunU = { value: new THREE.Vector3(1, 0, 0) };
   if (name === 'earth') {
-    return new THREE.ShaderMaterial({ vertexShader: GLSL_V, fragmentShader: GLSL_EARTH_F, uniforms: { tDay: { value: loadTex('earth_day.jpg') }, tNight: { value: loadTex('earth_night.jpg') }, tCS: { value: loadTex('earth_cs.jpg', false) }, uSunDir: sunU, uLights: { value: 1 }, uRim: { value: 1 }, uFogColor: { value: new THREE.Color(0, 0, 0) }, uFogK: { value: 0 }, uFill: { value: new THREE.Vector3(0, 0, 0) }, tDetail: { value: R.detailTex }, uDetailAmp: { value: 0.55 }, uDetailRep: { value: new THREE.Vector2(512, 256) }, ...capUniforms() } });
+    // earth_aux: R the sea, G and B the slopes east and north (128 + slope·1000), drawn 5× steeper
+    const m = new THREE.ShaderMaterial({ vertexShader: GLSL_V, fragmentShader: GLSL_EARTH_F, uniforms: { tDay: { value: loadTex('earth_day.jpg') }, tNight: { value: loadTex('earth_night.jpg', false, true) },
+      tClouds: { value: loadTex('earth_clouds.jpg', false, true) }, tAux: { value: loadTex('earth_aux.jpg', false) }, uSlopeK: { value: 1000 }, uRelief: { value: 5 }, uReliefNear: { value: new THREE.Vector2(20, 120) }, uPole: { value: new THREE.Vector3(0, 0, 1) },
+      uSunDir: sunU, uLights: { value: 1 }, uFill: { value: new THREE.Vector3(0, 0, 0) }, tDetail: { value: R.detailTex }, uDetailAmp: { value: 0.55 }, uDetailRep: { value: new THREE.Vector2(512, 256) },
+      ...capUniforms(), ...atmosUniforms('earth') } });
+    const big = f => [{ file: f, near: 25, far: 60, big: true }];
+    texLOD('earth', m.uniforms.tDay, big('earth_day_8k.jpg'), true, false); texLOD('earth', m.uniforms.tClouds, big('earth_clouds_8k.jpg'), false, true); texLOD('earth', m.uniforms.tNight, big('earth_night_8k.jpg'), false, true);
+    return m;
   }
   if (name === 'sun') return new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.96, 0.86) });
   const maps = { moon: 'moon.jpg', mars: 'mars.jpg', venus: 'venus.jpg', jupiter: 'jupiter.jpg', saturn: 'saturn.jpg' };
   const ls = { moon: 0.9, mercury: 0.9, mars: 0.45, venus: 0.0, jupiter: 0.0, saturn: 0.0, uranus: 0.0, neptune: 0.0 }[name] ?? 0;
   const amb = { moon: 0.012, mars: 0.006 }[name] ?? 0.004;
-  const tint = name === 'mars' ? [1.05, 0.98, 0.95] : [1, 1, 1];
+  const tint = name === 'mars' ? [1.0, 0.95, 0.9] : [1, 1, 1];
   const plain = { mercury: '#9c958c', uranus: '#a9dde3', neptune: '#5c7fe6' }[name];
-  return new THREE.ShaderMaterial({ vertexShader: GLSL_V, fragmentShader: GLSL_ROCK_F, uniforms: {
+  // relief: slope maps (128 + slope·400) from LRO LOLA and MGS MOLA, loaded with the 4096 px colour maps when the camera
+  // heads for the body (until then a 1024 px map and no relief)
+  const aux = { moon: ['moon_aux.jpg', 1.0], mars: ['mars_aux.jpg', 1.5] }[name];
+  const m = new THREE.ShaderMaterial({ vertexShader: GLSL_V, fragmentShader: GLSL_ROCK_F, defines: name === 'mars' ? { HAS_ATMO: 1 } : {}, uniforms: {
     map: { value: maps[name] ? loadTex(maps[name]) : null }, uHasMap: { value: maps[name] ? 1 : 0 }, uSunDir: sunU, uAmb: { value: amb }, uLS: { value: ls },
     uTint: { value: plain ? new THREE.Color(plain).convertSRGBToLinear() : new THREE.Vector3(...tint) }, uFogColor: { value: new THREE.Color(0, 0, 0) }, uFogK: { value: 0 }, uFill: { value: new THREE.Vector3(0, 0, 0) },
-    tDetail: { value: R.detailTex }, uDetailAmp: { value: ({ moon: 0.85, mars: 0.7, mercury: 0.8 })[name] || 0 }, uDetailRep: { value: new THREE.Vector2(512, 256) }, ...capUniforms() } });
+    tAux: { value: null }, uHasAux: { value: 0 }, uSlopeK: { value: 400 }, uRelief: { value: aux ? aux[1] : 0 }, uReliefNear: { value: new THREE.Vector2(8, 40) }, uPole: { value: new THREE.Vector3(0, 0, 1) },
+    tDetail: { value: R.detailTex }, uDetailAmp: { value: ({ moon: 0.35, mars: 0.45, mercury: 0.8 })[name] || 0 }, uDetailRep: { value: new THREE.Vector2(512, 256) }, ...capUniforms(),
+    ...(name === 'mars' ? atmosUniforms('mars', true) : {}) } });
+  if (aux) {
+    texLOD(name, m.uniforms.map, [{ file: name + '_4k.jpg', near: 100, far: 400 }, { file: name + '_8k.jpg', near: 25, far: 60, big: true }], true, false);
+    texLOD(name, m.uniforms.tAux, [{ file: aux[0], near: 100, far: 400 }], false, false, m.uniforms.uHasAux);
+  }
+  return m;
 }
 function atmoShell(color, sunset, strength, pow, scale) {
   const m = new THREE.ShaderMaterial({ vertexShader: GLSL_V, fragmentShader: GLSL_ATMO_F, uniforms: { uSunDir: { value: new THREE.Vector3(1, 0, 0) }, uColor: { value: new THREE.Color(color) }, uSunset: { value: new THREE.Color(sunset) }, uStrength: { value: strength }, uPow: { value: pow } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide });
@@ -297,19 +453,19 @@ function atmoShell(color, sunset, strength, pow, scale) {
 }
 function buildBodies() {
   R.bodies = {};
-  const geo = new THREE.SphereGeometry(1, 128, 64);
+  // Earth's sphere is finer: its facets would otherwise sink up to 1.9 km below the true surface, enough to show at the limb
+  // against the air drawn on the true sphere
+  const geo = new THREE.SphereGeometry(1, 128, 64), geoFine = new THREE.SphereGeometry(1, 384, 192);
   for (const name of BODY_LIST) {
     const B = BODIES[name];
     const g = new THREE.Group(); g.name = name;
     const mat = bodyMaterial(name);
-    const mesh = new THREE.Mesh(geo, mat);
+    const mesh = new THREE.Mesh(name === 'earth' ? geoFine : geo, mat);
     const Rb = name === 'earth' ? B.R : (B.Rmean && name !== 'earth' ? B.Rmean : B.R);
     const flat = { jupiter: 0.06487, saturn: 0.09796 }[name] || 0; // Earth, Moon & Mars stay spherical, as in the flight planner
     mesh.scale.set(Rb, Rb * (1 - flat), Rb);
     g.add(mesh);
     const rec = { name, group: g, mesh, mat, R: Rb };
-    if (name === 'earth') { rec.atmo = atmoShell('#4f8dff', '#ff8a3d', 1.0, 3.2, 1.0); rec.atmo.scale.set(Rb * 1.022, Rb * 1.022 * (1 - flat), Rb * 1.022); g.add(rec.atmo); }
-    if (name === 'mars') { rec.atmo = atmoShell('#ffb48a', '#6fa3ff', 0.45, 3.5, 1.0); rec.atmo.scale.setScalar(Rb * 1.012); g.add(rec.atmo); }
     if (name === 'venus') { rec.atmo = atmoShell('#ffe7b8', '#ffb070', 0.6, 3.0, 1.0); rec.atmo.scale.setScalar(Rb * 1.015); g.add(rec.atmo); }
     if (name === 'saturn') {
       const rg = new THREE.RingGeometry(74500, 136800, 256, 1);
@@ -349,8 +505,11 @@ function updateBodies(t, camDist) {
     if (b.atmo) b.atmo.quaternion.copy(b.mesh.quaternion);
     const d = vnorm(P) || 1; const sd = [-P[0] / d, -P[1] / d, -P[2] / d];
     if (b.mat.uniforms && b.mat.uniforms.uSunDir) b.mat.uniforms.uSunDir.value.set(sd[0], sd[1], sd[2]);
+    if (b.mat.uniforms && b.mat.uniforms.uPole) b.mat.uniforms.uPole.value.set(0, 1, 0).applyQuaternion(b.mesh.quaternion);
+    if (b.mat.uniforms && b.mat.uniforms.aSun) b.mat.uniforms.aSun.value.set(sd[0], sd[1], sd[2]);
     if (b.atmo) b.atmo.material.uniforms.uSunDir.value.set(sd[0], sd[1], sd[2]);
   }
+  updateTexLOD();
   R.sunLight.position.set(-O[0], -O[1], -O[2]);
   // Sun glow: real corona size, but never smaller than a bright point
   const sunCam = R.camera.position.distanceTo(R.bodies.sun.group.position);
@@ -420,8 +579,27 @@ function updateSky() {
   let moonFill = 0;
   if (!best) { const Pm = helio('moon', MV.tNow).r; const d = vsub(camH, Pm); const alt = vnorm(d) - BODIES.moon.R; if (alt < 400) { const up = vunit(d); const el = vdot(vunit(vscale(camH, -1)), up); moonFill = clamp(el * 3, 0, 1) * (1 - alt / 400); R.hemi.position.set(...up); R.hemi.color.set('#000000'); R.hemi.groundColor.set('#8f8a84'); } }
   R.ambient.intensity = MV.layers.fill === false ? 0.04 : 0.35;
-  u.uDensity.value = dens; R.sky.visible = dens > 0.002;
-  for (const b of ['earth', 'mars']) { const U = R.bodies[b].mat.uniforms; if (best && best.b === b) { U.uFogK.value = dens / (b === 'earth' ? 55 : 90); U.uFogColor.value.copy(u.uHorizon.value).multiplyScalar(0.25 + 0.75 * day); } else U.uFogK.value = 0; }
+  u.uDensity.value = dens; R.sky.visible = dens > 0.002 && !(best && R.airSky[best.b]);
+  for (const b of ['mars']) { const U = R.bodies[b].mat.uniforms; if (best && best.b === b) { U.uFogK.value = dens / 90; U.uFogColor.value.copy(u.uHorizon.value).multiplyScalar(0.25 + 0.75 * day); } else U.uFogK.value = 0; }
+  // the physically based air: the camera relative to each planet (double precision here, so the shaders get its altitude
+  // exactly), and the Sun seen through the air (reddened and dimmed near the horizon, also from orbit at sunrise)
+  let sunT = null;
+  let wb = [1, 1, 1];
+  for (const name in R.airSky) {
+    const A = ATMOS[name], U = A.U; if (!A.lutT) { R.airSky[name].visible = false; continue; } // (tables still to come)
+    const rel = vsub(camH, helio(name, MV.tNow).r), r = vnorm(rel), h = r - A.Rg, sunD = vunit(vscale(camH, -1));
+    U.aCam.value.set(rel[0], rel[1], rel[2]); U.aCamR.value = r; U.aCamH.value = h;
+    R.airSky[name].visible = r < A.Rg * 120;
+    const sT = r < A.Rg + A.top + 2000 ? atmosSunTransmittance(name, rel, sunD) : null, ex = atmosExposure(name, h, sT);
+    U.aWB.value.set(...ex.wb); U.aGrade.value.set(...ex.grade); U.aExpo.value = ex.expo;
+    // the airglow shows as a thin line on the limb seen from above it, not as a glow around a camera inside the layer
+    const gk = smoothstep((h - 110) / 40); U.aGlow.value.set(A.glow[0] * gk, A.glow[1] * gk, A.glow[2] * gk);
+    if (sT) { sunT = sT; wb = ex.wb.map(x => x * ex.expo); }
+  }
+  const st = sunT ? sunT.map((x, i) => Math.min(x * wb[i], 1.2)) : [1, 1, 1];
+  R.sunLight.color.setRGB(st[0], st[1], st[2]);
+  R.bodies.sun.mat.color.setRGB(1.0 * st[0], 0.96 * st[1], 0.86 * st[2]);
+  R.sunGlow.material.color.setRGB(st[0], st[1], st[2]); R.sunGlow2.material.color.setRGB(st[0], st[1], st[2]);
   R.hemi.intensity = best ? 1.6 * dens * day : 1.4 * moonFill;
   // night fill: with "Cinematic fill light" on, the ground near the camera stays readable after dark (on the Moon it stands in for earthshine)
   const fillOn = MV.layers.fill !== false;
@@ -446,7 +624,4 @@ function updateSky() {
     else U.uPlCos.value = 2;
     if (R.envN++ % 6 === 0) { R.envCam.update(R.renderer, R.envScene); R.envPM = R.pmrem.fromCubemap(R.envRT.texture, R.envPM); R.scene.environment = R.envPM.texture; }
   }
-  // Earth rim highlight fades when the camera is low in the atmosphere
-  const eAlt = vnorm(vsub(camH, helio('earth', MV.tNow).r)) - BODIES.earth.R;
-  R.bodies.earth.mat.uniforms.uRim.value = smoothstep((eAlt - 30) / 600);
 }

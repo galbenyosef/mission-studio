@@ -97,6 +97,7 @@ Each flight is calculated from physics, not keyframed. The planner solves the mi
   - Starship enters belly-first, then lights its engines as late as it can and flips upright onto them. On Mars the thin air leaves it still moving at several times the speed of sound, so it brakes tail-first into the airflow (supersonic retropropulsion) before the flip.
   - Powered descent uses ZEM/ZEV guidance.
 - **Propellant.** It is tracked with the rocket equation, stage by stage, so the Δv budget always adds up.
+- **Air and light.** Earth's and Mars's atmospheres are drawn from a physical model: Rayleigh and Mie scattering with ozone absorption, single scattering plus an approximation of the higher orders (Bruneton & Neyret 2008, Hillaire 2020). The same model draws the sky from the ground and the glowing limb from orbit. It also gives the haze over distant ground, the sunlight that reddens towards the terminator and the light the sky sheds on the ground. On Earth, clouds float on a layer 6 km up and cast shadows, the sea glints, and towns light up after dusk. On Mars, dust gives a butterscotch sky with a blue glow around the setting Sun. The terrain of Earth, the Moon and Mars is lit by its real slopes.
 - **Exhaust in the air.** The trail's thickness follows the propellant each stage burns per metre of path (solid boosters leave the most smoke, hydrogen engines the least), its spread the thinning air, and its drift a wind profile drawn for the launch: the jet stream, and winds turning with height higher up. Each part of it is lit by sunlight that has crossed the air on the way, so it reddens near the shadow of the Earth and is dark inside it.
 
 ### Accuracy
@@ -137,9 +138,10 @@ node test/t_mission.js   # complete missions
 ```
 src/      flight engine (plain JavaScript; also runs in a Web Worker)
 app/      renderer and UI (ES module), markup and styles
-assets/   planet textures, the star catalogue and the detailed vehicle models
+assets/   planet maps, the star catalogue and the detailed vehicle models
 vendor/   three.js r160 with its glTF loader and the meshopt decoder (MIT)
 tools/models/  builds the detailed models in assets/ from NASA 3D Resources and free Sketchfab models (see its README)
+tools/textures/  builds the planet maps in assets/ from NASA and Solar System Scope sources (see its README)
 test/     Node tests for the engine
 media/    screenshots for this README
 ```
@@ -154,9 +156,10 @@ media/    screenshots for this README
 - **Space Shuttle external tank and boosters:** based on ["Space Shuttle Atlantis"](https://sketchfab.com/3d-models/space-shuttle-atlantis-2f04130e3c78439d9765b5ac71b333d2) by [paburoviii](https://sketchfab.com/paburoviii), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). `tools/models` keeps the tank and one booster (the app mirrors it for the other side) and scales them to their published sizes. It paints the tank's sprayed foam and weathers the boosters' paint, so they match the scanned orbiter they fly with.
 - **Apollo command and service modules, other launch vehicles:** drawn in code from published dimensions.
 - **Launch pads:** drawn in code from published dimensions and photographs: NASA and Kennedy Space Center fact sheets, the Historic American Engineering Record's documentation of Launch Complex 39, *Moonport* (NASA SP-4204), the NSTS News Reference Manual, and ULA, SpaceX and CASC material.
-- **Earth day, night and cloud maps:** [Solar System Scope](https://www.solarsystemscope.com/textures/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). They are taken from the three.js examples, which resized and merged them.
-- **Moon map:** `moon_1024.jpg` from the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets).
-- **Mars, Venus, Jupiter and Saturn maps:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), resized.
+- **Earth maps:** NASA Earth Observatory's [Blue Marble: Next Generation](https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/) (April 2004, by Reto Stöckli) for the ground. Its GEBCO_08 topography and bathymetry give the relief and the sea. The night lights are NASA's [Black Marble 2016](https://science.nasa.gov/earth/earth-observatory/) (Suomi NPP VIIRS). The clouds are from [Solar System Scope](https://www.solarsystemscope.com/textures/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). `tools/textures` prepares them.
+- **Moon maps:** NASA Scientific Visualization Studio's [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (Ernie Wright), from the Lunar Reconnaissance Orbiter's LROC colour mosaic and LOLA elevation.
+- **Mars maps:** the colour is from [Solar System Scope](https://www.solarsystemscope.com/textures/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), made a little less saturated. The relief comes from Mars Global Surveyor MOLA elevation ([NASA PDS Geosciences Node](https://pds-geosciences.wustl.edu/missions/mgs/megdr.html)).
+- **Venus, Jupiter and Saturn maps:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), resized.
 - **Stars:** `stars.6.json` from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (BSD 3-Clause), based on XHIP (Anderson & Francis 2012, VizieR V/137D).
 - **Fonts:** IBM Plex Sans Condensed and IBM Plex Mono ([SIL OFL 1.1](https://openfontlicense.org/)), via Google Fonts.
 - **Mission and vehicle data:** NASA mission reports and press kits (including the Space Shuttle press kits, the Shuttle Crew Operations Manual and the NSTS reference manual), NASA/JPL, CNSA releases, and published SpaceX and ISRO figures.
