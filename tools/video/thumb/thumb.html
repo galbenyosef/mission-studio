@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><title>thumbnail</title>
+<style>
+  :root { --ink: #f6f3ff; --peach: #ffbf96; --lav: #cdd1ff; --night: 6, 8, 22; }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; background: #000; }
+  body { position: relative; font-family: 'Noto Sans CJK KR', sans-serif; color: var(--ink); }
+  /* the orbiter in the left half (the still was framed for it), the text over the Earth's glowing limb on the right */
+  .bg { position: absolute; inset: 0; background: url(bg.jpg) center / cover no-repeat; }
+  .shade { position: absolute; inset: 0; background:
+      linear-gradient(90deg, rgba(var(--night), 0) 40%, rgba(var(--night), .5) 54%, rgba(var(--night), .72) 100%),
+      linear-gradient(0deg, rgba(var(--night), .35) 0%, rgba(var(--night), 0) 30%); }
+  .text { position: absolute; left: 668px; top: 0; bottom: 0; right: 28px; display: flex; flex-direction: column; justify-content: center; gap: 0; }
+  .kicker { font-weight: 500; font-size: 22px; letter-spacing: .14em; color: var(--peach); text-transform: uppercase; margin-bottom: 14px; }
+  .head { font-weight: 900; font-size: 84px; line-height: 1.06; letter-spacing: -.01em; text-shadow: 0 0 28px rgba(150, 140, 255, .35), 0 2px 6px rgba(0,0,0,.55); }
+  html[lang=en] .head { font-size: 76px; line-height: 1.02; letter-spacing: -.015em; }
+  .sub { margin-top: 18px; font-weight: 400; font-size: 25px; line-height: 1.3; color: var(--lav); }
+  html[lang=en] .sub { font-size: 23px; }
+  .badges { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 9px; max-width: 580px; }
+  .badge { font-weight: 500; font-size: 20px; padding: 7px 15px 8px; border-radius: 999px; border: 1.5px solid rgba(205, 209, 255, .55); background: rgba(10, 12, 34, .55); color: var(--ink); white-space: nowrap; }
+  html[lang=en] .badge { font-size: 18.5px; padding: 6px 13px 7px; }
+  html[lang=en] .badges { gap: 8px; max-width: 600px; }
+  .badge.lead { background: var(--peach); border-color: var(--peach); color: #1b1230; font-weight: 800; }
+</style></head><body>
+<div class="bg"></div><div class="shade"></div>
+<div class="text"><div class="kicker" id="k"></div><div class="head" id="h"></div><div class="sub" id="s"></div><div class="badges" id="b"></div></div>
+<script>
+  window.fill = t => {
+    document.documentElement.lang = new URLSearchParams(location.search).get('lang') || 'ko';
+    k.textContent = t.kicker; h.innerHTML = t.head; s.textContent = t.sub;
+    b.innerHTML = ''; t.badges.forEach((x, i) => { const e = document.createElement('span'); e.className = 'badge' + (i ? '' : ' lead'); e.textContent = x; b.appendChild(e); });
+  };
+</script></body></html>

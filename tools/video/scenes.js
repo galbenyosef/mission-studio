@@ -1,0 +1,65 @@
+// STS-31 (Discovery, Hubble Space Telescope), 24–29 April 1990, in about 30 minutes for falling asleep to.
+// time: [[τ (s into the scene), MET (s from liftoff)] …], smooth through the keys. Cameras: see vidlib.js. Captions in Korean.
+// chapter / chapterEn: a chapter of the finished file starts with this scene. Captions: text (Korean), en (English).
+const M = (h, m = 0, s = 0) => h * 3600 + m * 60 + s;
+const XF = 2; // s of crossfade between scenes
+module.exports = {
+  mission: 'sts31', xfade: XF,
+  // the event timeline along the bottom of the frame: marks for events (the scene that shows each one, and its mission time
+  // or {tau} in the scene) and the mission's phases (from the scene each one starts with)
+  timeline: {
+    events: [['s02_liftoff', 0], ['s03_ascent', 122], ['s04_climb', 511], ['s05_etsep', 529], ['s07_doors', { tau: 52 }], ['s07_doors', M(1, 27, 30)],
+      ['s09_reach', M(23, 4)], ['s10_lift', M(24, 40)], ['s12_arrays', M(28, 28)], ['s13_release', M(31, 4)], ['s16_landing', M(121, 10, 34)]],
+    phases: [['s01_pad', '발사', 'Launch'], ['s07_doors', '궤도', 'Orbit'], ['s09_reach', '허블 배치', 'Hubble deploy'], ['s15_entry', '귀환', 'Return']],
+  },
+  scenes: [
+    { id: 's01_pad', chapter: '발사 준비', chapterEn: 'Before launch', dur: 90, fps: 24, aa: true, time: [[0, -M(0, 12)], [90, -M(0, 2)]],
+      cam: { type: 'chase', az: [[0, -38], [90, -8]], el: [[0, 4], [90, 8]], dist: [[0, 340], [90, 270]], aimUp: 32, lens: 35 },
+      captions: [{ at: 6, dur: 9, text: 'STS-31 · 디스커버리호\\N1990년 4월 24일, 케네디 우주센터 39B 발사대', en: 'STS-31 · Space Shuttle Discovery\\NApril 24, 1990 · Launch Pad 39B, Kennedy Space Center' }] },
+    { id: 's02_liftoff', chapter: '발사', chapterEn: 'Liftoff', dur: 72, fps: 24, aa: true, time: [[0, -42], [72, 30]],
+      cam: { type: 'ground', site: 'launch', e: 1.2, n: -3.4, lookUp: [[0, 28], [42, 28], [56, 10], [72, -120]], fitSize: [[0, 62], [42, 62], [72, 700]], fitFrac: 0.3, lensMax: 1200 },
+      captions: [{ at: 43, dur: 6, text: '발사', en: 'Liftoff' }] },
+    { id: 's03_ascent', chapter: '상승', chapterEn: 'Ascent', dur: 84, fps: 24, time: [[0, 30], [84, 128]],
+      cam: { type: 'chase', az: [[0, 195], [84, 215]], el: [[0, 8], [84, 12]], dist: [[0, 220], [84, 170]], aimFwd: 18, lens: 35 },
+      captions: [{ at: 76, dur: 6, text: '고체 로켓 부스터 분리', en: 'Solid rocket booster separation' }] },
+    { id: 's04_climb', dur: 100, fps: 24, time: [[0, 128], [80, M(0, 7, 50)], [100, M(0, 8, 40)]],
+      cam: { type: 'chase', az: [[0, 120], [100, 80]], el: [[0, 14], [100, 20]], dist: [[0, 150], [100, 120]], aimFwd: 22, lens: 35 },
+      captions: [{ at: 92, dur: 6, text: '주 엔진 정지', en: 'Main engine cutoff' }] },
+    { id: 's05_etsep', chapter: '외부 연료탱크 분리', chapterEn: 'External tank separation', dur: 76, fps: 24, time: [[0, M(0, 8, 40)], [76, M(0, 9, 56)]],
+      cam: { type: 'lvlh', aimDrawn: true, off: [[0, [-50, 70, 12]], [76, [-120, 170, 60]]], at: [[0, [0, 0, 8]], [76, [0, 0, 75]]], up: [0, 0, 1], lens: 32 },
+      captions: [{ at: 10, dur: 7, text: '외부 연료탱크 분리', en: 'External tank separation' }] },
+    { id: 's06_trail', chapter: '하늘에 남은 비행운', chapterEn: 'The trail in the sky', dur: 82, fps: 24, time: [[0, M(0, 4)], [82, M(0, 30)]],
+      cam: { type: 'ground', site: 'launch', e: 1.2, n: -3.4, yaw: [[0, 4], [82, 22]], pitch: [[0, 30], [82, 36]], lens: 24 } },
+    { id: 's07_doors', chapter: '화물칸 문 열기', chapterEn: 'Opening the payload bay', dur: 180, fps: 24, time: [[0, M(1, 23, 40)], [180, M(1, 28, 30)]],
+      cam: { type: 'body', off: [[0, [3, 27, 15]], [180, [4, 25, 16]]], at: [[0, [0, 4, 0]], [180, [0, 3, 0]]], up: [0, 0, 1], lens: 24 },
+      captions: [{ at: 54, dur: 9, text: '화물칸 문이 열린다', en: 'The payload bay doors open' }, { at: 150, dur: 8, text: '궤도의 해돋이', en: 'Sunrise in orbit' }] },
+    { id: 's08_orbit', chapter: '지구 궤도', chapterEn: 'In Earth orbit', dur: 150, fps: 24, time: [[0, M(1, 30)], [150, M(1, 40)]],
+      cam: { type: 'lvlh', off: [[0, [-60, -40, 22]], [150, [-50, 45, 25]]], at: [0, 0, -4], up: [0, 0, 1], lens: 28 } },
+    { id: 's09_reach', chapter: '로봇 팔로 허블 꺼내기', chapterEn: 'The arm lifts Hubble out', dur: 110, fps: 24, time: [[0, M(22, 39)], [110, M(23, 5)]],
+      cam: { type: 'body', off: [[0, [-20, -4, 22]], [110, [-18, 0, 20]]], at: [[0, [0, 10, 2]], [110, [0, 12, 3]]], up: [0, 0, 1], lens: 30 },
+      captions: [{ at: 100, dur: 8, text: '로봇 팔이 허블을 붙잡는다', en: 'The robot arm grapples Hubble' }] },
+    { id: 's10_lift', dur: 80, fps: 24, time: [[0, M(24, 39, 30)], [80, M(24, 49)]],
+      cam: { type: 'body', off: [[0, [26, -2, 12]], [80, [30, 2, 16]]], at: [[0, [-1, 10, 4]], [80, [0, 12, 8]]], up: [0, 0, 1], lens: 30 },
+      captions: [{ at: 8, dur: 8, text: '허블을 화물칸에서 꺼낸다', en: 'Lifting Hubble out of the bay' }] },
+    { id: 's11_upright', dur: 62, fps: 24, time: [[0, M(24, 49)], [62, M(25, 4)]],
+      cam: { type: 'body', off: [[0, [30, 2, 16]], [62, [34, -6, 22]]], at: [[0, [0, 12, 8]], [62, [0, 16, 12]]], up: [0, 0, 1], lens: 30 } },
+    { id: 's12_arrays', chapter: '태양전지판 펼치기', chapterEn: 'Unfurling the solar arrays', dur: 106, fps: 24, time: [[0, M(28, 27)], [106, M(28, 41)]],
+      cam: { type: 'body', off: [[0, [10, -42, 14]], [106, [16, -40, 18]]], at: [[0, [0, 14, 12]], [106, [0, 16, 13]]], up: [0, 0, 1], lens: 30 },
+      captions: [{ at: 10, dur: 8, text: '태양전지판을 펼친다', en: 'The solar arrays unfurl' }] },
+    { id: 's13_release', chapter: '허블 분리', chapterEn: 'Hubble release', dur: 120, fps: 24, time: [[0, M(31, 2, 30)], [120, M(31, 10)]],
+      cam: { type: 'lvlh', target: 'hst', before: [2.8, 0, 12], off: [[0, [-26, 34, 6]], [120, [-40, 50, 12]]], at: [[0, [0, 0, -6]], [120, [0, 0, -10]]], up: [0, 0, 1], lens: 32 },
+      captions: [{ at: 26, dur: 8, text: '허블 우주망원경을 놓아준다', en: 'Releasing the Hubble Space Telescope' }] },
+    { id: 's14_hubble', dur: 140, fps: 24, time: [[0, M(31, 16)], [140, M(31, 36)]],
+      cam: { type: 'lvlh', target: 'hst', off: [[0, [-26, 20, 7]], [140, [-20, 27, 3]]], at: [[0, [0, 0, -2]], [140, [0, 0, -3]]], up: [0, 0, 1], lens: 28 },
+      captions: [{ at: 60, dur: 9, text: '허블은 지금도 지구를 돌고 있다', en: 'Hubble is still orbiting the Earth today' }] },
+    { id: 's15_entry', chapter: '대기권 재진입', chapterEn: 'Reentry', dur: 120, fps: 24, time: [[0, M(120, 40)], [120, M(120, 57)]],
+      cam: { type: 'chase', az: [[0, 150], [120, 120]], el: [[0, -6], [120, -2]], dist: [[0, 90], [120, 80]], lens: 35 },
+      captions: [{ at: 12, dur: 8, text: '대기권 재진입', en: 'Reentry' }] },
+    { id: 's16_landing', chapter: '착륙', chapterEn: 'Landing', dur: 140, fps: 24, aa: true, time: [[0, M(121, 8, 50)], [140, M(121, 11, 10)]],
+      cam: { type: 'ground', site: 'runway', e: -0.795, n: -0.992, lookUp: 2, fitSize: 37, fitFrac: 0.3, lensMax: 2000 },
+      captions: [{ at: 104, dur: 8, text: '에드워드 공군기지 착륙', en: 'Landing at Edwards Air Force Base' }] },
+    { id: 's17_rest', chapter: '활주로에서', chapterEn: 'On the runway', dur: 120, fps: 24, aa: true, time: [[0, M(121, 11, 15)], [120, M(121, 17)]],
+      cam: { type: 'chase', az: [[0, 120], [120, 175]], el: [[0, 6], [120, 9]], dist: [[0, 70], [120, 95]], aimUp: -1.6, lens: 35 }, // aimUp: 4 m above the runway (the orbiter's reference point rides 5.6 m above it)
+      captions: [{ at: 40, dur: 14, text: '4월 29일, 5일 동안의 비행을 마치고', en: 'April 29, after five days in space' }] },
+  ],
+};
