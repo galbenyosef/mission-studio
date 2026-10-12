@@ -160,7 +160,7 @@ function launchPhase(M, cfg, L, scMass, normal, opts = {}) {
   ship.add(new SampleSeg('earth', asc.samples, { phase: 'ascent' }));
   // configs per staging
   const nSt = L.stages.length;
-  const cfgAt = (stFrom, boosters, fairing, les, sac) => ({ key: 'launch', stFrom, boosters, fairing, les, sac: sac ?? true, launcher: cfg.launcher, variant: cfg.lvVariant });
+  const cfgAt = (stFrom, boosters, fairing, les, sac) => ({ key: 'launch', stFrom, boosters, fairing, les, sac: sac ?? true, launcher: cfg.launcher, variant: cfg.lvVariant, orbiter: cfg.orbiterId }); // (orbiter: which Shuttle orbiter rides the stack)
   ship.setConfig(t0 - 7200, 'launch', cfgAt(0, true, true, true));
   let stFrom = 0, boosters = L.stages[0].parallel, fairing = !!L.payloadFairing, les = L.jettison.some(j => j.part === 'LES'), saj = L.jettison.some(j => j.part === 'SAJ'), ist = L.jettison.some(j => j.part === 'IST');
   const lit = liftoffStages(L), liq = lit.filter(s => s.prop !== 'solid'), sol = lit.filter(s => s.prop === 'solid'); const IG = L.ign || { t: 3, ramp: 1.5 };
