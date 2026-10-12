@@ -516,7 +516,9 @@ uniform vec3 uColor; uniform vec3 uCore; uniform float uI; uniform float uTime; 
 varying vec2 vUv; varying vec3 vN; varying vec3 vP;
 void main(){
   #include <logdepthbuf_fragment>
-  float along = 1.0 - vUv.y;
+  // (clamped: with multisampling, a pixel on the cone's rim can be shaded at its centre just outside the cone, where vUv
+  // runs past 0…1, and pow() of a number below 0 is undefined: NaN on most GPUs, a black dot under the film look)
+  float along = clamp(1.0 - vUv.y, 0.0, 1.0);
   vec3 V = normalize(cameraPosition - vP);
   float edge = abs(dot(normalize(vN), V));
   float body = pow(edge, 1.3) * pow(1.0 - along, 1.6);

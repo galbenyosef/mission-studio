@@ -229,8 +229,8 @@ void aIntegrate(vec3 p0, vec3 d, float t0, float t1, vec3 L, int mode, int N, ou
     vec3 sR = aBR * de.x, sM = aBMs * de.y, ex = sR + aBMe * de.y + aBO * de.z;
     float mus = dot(p, L) / r;
     vec3 src = (sR * pR + sM * pM) * aSunlight(r, mus) + (sR + sM) * aMS(r, mus);
-    float muh = -sqrt(max(1.0 - aRg * aRg / (r * r), 0.0));
-    src += aGlow * exp(-pow((h - aGlowH.x) / aGlowH.y, 2.0)) * (1.0 - smoothstep(muh - 0.25, muh + 0.05, mus)) / aSunE; // airglow, night side
+    float muh = -sqrt(max(1.0 - aRg * aRg / (r * r), 0.0)), zg = (h - aGlowH.x) / aGlowH.y; // (squared by hand: pow() is undefined below 0)
+    src += aGlow * exp(-zg * zg) * (1.0 - smoothstep(muh - 0.25, muh + 0.05, mus)) / aSunE; // airglow, night side
     vec3 ts = exp(-ex * dt), thin = step(ex * dt, vec3(1e-3)); // ∫ e^(−ex·s) ds over the step (its series where 1 − e^… rounds away)
     S += T * src * (thin * dt * (1.0 - 0.5 * ex * dt) + (1.0 - thin) * (1.0 - ts) / max(ex, vec3(1e-12)));
     T *= ts;
