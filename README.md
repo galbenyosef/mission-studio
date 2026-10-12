@@ -24,7 +24,7 @@
   - the exhaust in the air: the plume swelling as the air thins, and the trail left through the atmosphere, which spreads, drifts and twists on the winds and fades over half an hour. Sunlight reaches it through the air, red at dawn and dusk; after sunset the exhaust high up is still in sunlight and glows against the night sky (the "twilight phenomenon")
   - the parking orbit and the transfer burns
   - flybys and gravity assists
-  - entry, parachutes and the sky crane
+  - entry: the air glowing in the shock layer in front of the faces that meet the flow (a capsule's heat shield, the Shuttle's belly at its 40° angle of attack) and streaming away behind; then parachutes and the sky crane
   - powered landings, rover drives, lunar ascent and rendezvous
   - the return home
   - the Space Shuttle: the roll program, booster separation and the falling External Tank, OMS burns, the payload bay doors opening and closing, docking with the International Space Station or the robot arm lifting the Hubble Space Telescope out of the bay and letting it go, a gliding entry that steers with roll reversals, and the landing on a runway

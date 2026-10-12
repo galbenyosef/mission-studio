@@ -284,6 +284,7 @@ function initScene() {
   R.scene.add(R.sunLight);
   R.ambient = new THREE.AmbientLight(0x8899bb, 0.05);
   R.scene.add(R.ambient);
+  R.plasmaLight = new THREE.PointLight(0xff8a48, 0, 0.1, 0); R.scene.add(R.plasmaLight); // an entry's glowing shock layer (updatePlasmaLight); always in the scene, so lighting it does not recompile the materials
   R.maxAniso = renderer.capabilities.getMaxAnisotropy();
   R.renderer.autoClear = false;
   R.bgScene = new THREE.Scene(); R.bgCam = new THREE.PerspectiveCamera(40, 1, 1, 1e10);

@@ -79,12 +79,14 @@ function renderFrame(forCapture) {
   const md = MV.md;
   const t = md ? STATE.t : STATE.idleT0 + (performance.now() - STATE.idleStart) / 1000 * 120;
   MV.tNow = t; MV.rate = STATE.playing ? STATE.rate : 1;
+  R.clock = (R.clock || 0) + (MV.realDt || 0.016); // s of rendering (real time; a video's own frame time), for things that shimmer
   if (md) for (const c of MV.crafts) computeCraft(c, t);
   updateCamera(t, MV.realDt || 0.016);
   updateBodies(t, CAM.camDist);
   const camD = CAM.camDist || 1;
   if (md) {
     for (const c of MV.crafts) updateCraft(c, t, R.camera.position);
+    updatePlasmaLight();
     updatePad(t); updateRunway(t); updateTrails(t, R.O, camD); updateExhaust(t); updateShadows(t); updateTracks(t);
   }
   updateOrbits(t, MV.layers.orbits, Math.max(camD, R.camera.position.length()), MV.frame);
