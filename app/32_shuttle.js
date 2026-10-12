@@ -105,7 +105,7 @@ function shuttleBayDoor(side, open) {
   for (let k = 0; k < n; k++) { const a = k, b = k + 1, c = n + 1 + k, d = c + 1; if (side > 0) { outer.push(a, c, b, b, c, d); inner.push(a, b, c, b, d, c); } else { outer.push(a, b, c, b, d, c); inner.push(a, c, b, b, c, d); } }
   const mk = (ix, m) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(ix); g.computeVertexNormals(); return new THREE.Mesh(g, m); };
   const grp = new THREE.Group(); grp.add(mk(outer, mat(SH_COL.white, 'paint'))); grp.add(mk(inner, mat(SH_COL.rad, 'metal')));
-  grp.position.set(side * hx, 0, hz); if (open) grp.rotation.y = -side * SH_DOOR.open;
+  grp.position.set(side * hx, 0, hz); if (open) grp.rotation.y = side * SH_DOOR.open;
   return grp;
 }
 // The payload bay's geometry: the door hinges (x, z) on the sills, the side walls, the floor and, for the scan, the arch of
@@ -283,7 +283,7 @@ function buildOrbiter(flags = {}) {
   const fb = orbiterBuiltIn(flags), open = flags.bay === 'open';
   const g = detailPart('orbiter', 'body', fb, { extra: d => {
     const P = DETAIL.ready.orbiter, doors = {};
-    for (const [k, side] of [['doorL', -1], ['doorR', 1]]) if (P[k]) { const n = P[k].clone(); if (open) n.rotation.y = -side * SH_DOOR.open; d.add(n); doors[k] = n; }
+    for (const [k, side] of [['doorL', -1], ['doorR', 1]]) if (P[k]) { const n = P[k].clone(); if (open) n.rotation.y = side * SH_DOOR.open; d.add(n); doors[k] = n; }
     if (flags.gear && P.gear) d.add(P.gear.clone()); else if (!flags.gear) d.add(shuttleWellCovers());
     d.userData.doors = doors; d.userData.rig = orbiterFittings(d, flags, SH_BAY_SCAN);
     wearLivery(d, flags.orbiter);
@@ -291,14 +291,16 @@ function buildOrbiter(flags = {}) {
   // doors and arm in motion (bay doors opening or closing from flags.bayT, the deploy from flags.armT)
   if (flags.bayT != null || flags.armT) g.userData.animate = t => {
     const D = g.userData.doors, [aL, aR] = bayDoorAngles(flags, t);
-    if (D && flags.bayT != null) { if (D.doorL) D.doorL.rotation.y = aL; if (D.doorR) D.doorR.rotation.y = -aR; }
+    if (D && flags.bayT != null) { if (D.doorL) D.doorL.rotation.y = -aL; if (D.doorR) D.doorR.rotation.y = aR; }
     if (g.userData.rig) g.userData.rig.userData.update(t);
   };
   return g;
 }
-// Payload bay doors in motion. The right door's edge laps over the left's on the centreline, so the right door opens first
-// and closes last. Opening, from bayT: the latches let go (60 s), the right door swings open (63 s), and 15 s later the
-// left; closing, from bayT: the left door, then the right, then the latches. The angles [left, right] at t (0 = shut).
+// Payload bay doors in motion. Each swings out about its hinge on the sill, its free edge rising off the centreline and over
+// the side (a turn about +Y of +angle for the right door, −angle for the left). The right door's edge laps over the left's
+// on the centreline, so the right door opens first and closes last. Opening, from bayT: the latches let go (60 s), the
+// right door swings open (63 s), and 15 s later the left; closing, from bayT: the left door, then the right, then the
+// latches. The angles [left, right] at t (0 = shut).
 const SH_DOOR = { latch: 60, swing: 63, gap: 15, open: 175.5 * DEG };
 function bayDoorAngles(flags, t) {
   const A = SH_DOOR.open, sw = x => smoothstep(clamp(x / SH_DOOR.swing, 0, 1));

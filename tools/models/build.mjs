@@ -103,6 +103,11 @@ const RECIPES = {
     },
     pivots: { doorL: [-2.70, 0, 0.6], doorR: [2.70, 0, 0.6] },
     inner: { parts: ['doorL', 'doorR'], color: [0.86, 0.88, 0.9], metal: 0.35, rough: 0.4 }, // the doors' inner faces: radiator panels
+    // Glass in the crew cabin's windows: the six forward windows, the two overhead ones and the side hatch's, and the seam
+    // in front of the windshield, all open in the scan (addPanes). Around the forward fuselage's axis, which runs from
+    // Z 0.35 at Y 26.8 down 0.143 m per metre forward; behind the Y 24.3 the bay doors are cut away, ahead of Y 29.95 the
+    // nose's thruster ports are open as they should be.
+    panes: { part: 'body', y: [24.3, 29.95], axis: [26.8, 0.35, -0.143], th: 105, close: 0.4, min: 0.05, area: 0.02, color: [0.02, 0.025, 0.03], metal: 0, rough: 0.1 },
     simplify: 0.001, // 3.7 cm on the body
     textures: { baseColor: 2048, other: 1024 }, // the colour map at 2048 px; the normal and occlusion-roughness-metalness maps at 1024
   },
@@ -420,6 +425,7 @@ async function buildScan(name, R, doc) {
   for (const n of root.listNodes()) if (!keep.has(n)) n.dispose();
   await doc.transform(prune({ keepLeaves: false }));
   if (R.simplify) for (const g of Object.values(groups)) for (const h of g.listChildren()) for (const prim of h.getMesh().listPrimitives()) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: 0, error: R.simplify, lockBorder: true });
+  if (R.panes) addPanes(doc, groups[R.panes.part].listChildren()[0].getMesh(), R.panes, name);
   if (R.inner) { // a copy facing inward, 1.5 cm in, in a plain material of its own
     const I = R.inner, m = doc.createMaterial(name + '-inner').setBaseColorFactor([...I.color, 1]).setMetallicFactor(I.metal).setRoughnessFactor(I.rough);
     for (const part of I.parts) { const h = groups[part] && groups[part].listChildren()[0]; if (!h) continue;
@@ -440,6 +446,80 @@ async function buildScan(name, R, doc) {
   const tri = root.listMeshes().reduce((a, m) => a + m.listPrimitives().reduce((s, p) => s + p.getIndices().getCount() / 3, 0), 0);
   const parts = Object.entries(groups).map(([p, g]) => p + ' ' + g.listChildren()[0].getMesh().listPrimitives().reduce((s, q) => s + q.getIndices().getCount() / 3, 0)).join(', ');
   console.log(`${name}: ${(fs.statSync(out).size / 1024).toFixed(0)} KB, ${tri} triangles (${parts}), ${root.listTextures().length} textures → ${path.relative(process.cwd(), out)}`);
+}
+
+// Glass for a scan's windows. A scanner sees through glass, so where a window is the scan has whatever lay behind it: the
+// cabin, deep inside the hull, or nothing. Light from outside the hull (an entry's glowing shock layer below the belly) then
+// shows through a vehicle that should hide it. Over the stretch of hull P names, the surface is taken as a heightfield:
+// its distance r from an axis along Y, at each Y and angle θ about the axis (θ = 0 straight up, toward +X positive). The
+// heightfield is closed (the largest r within P.close, then the smallest of those within P.close again), which fills the
+// dips narrower than about twice P.close and keeps the rest of the hull as it is. Where the fill is deeper than P.min, over
+// an area of more than P.area m², is a window. Its glass is the closed surface there, 8 mm in, reaching two cells under the
+// window's frame; it is added to the mesh as a primitive of its own, in a glass material.
+function addPanes(doc, mesh, P, name) {
+  const DY = 0.02, DT = 0.4 * Math.PI / 180, NT = Math.round(2 * Math.PI / DT), R0 = 2.4; // cells: 2 cm along Y, 0.4° (1.7 cm at R0)
+  const [y0, y1] = P.y, Y0 = y0 - P.close - 0.1, NY = Math.ceil((y1 + P.close + 0.1 - Y0) / DY);
+  const zc = y => P.axis[1] + (y - P.axis[0]) * P.axis[2];
+  const R = new Float32Array(NY * NT), v = [0, 0, 0], A = [0, 0, 0], B = [0, 0, 0], C = [0, 0, 0];
+  for (const prim of mesh.listPrimitives()) { // the outermost surface in each cell, from points 8 mm apart on every triangle
+    const pos = prim.getAttribute('POSITION'), idx = prim.getIndices(), n3 = idx ? idx.getCount() : pos.getCount();
+    for (let t = 0; t < n3; t += 3) {
+      pos.getElement(idx ? idx.getScalar(t) : t, A); pos.getElement(idx ? idx.getScalar(t + 1) : t + 1, B); pos.getElement(idx ? idx.getScalar(t + 2) : t + 2, C);
+      if (Math.max(A[1], B[1], C[1]) < Y0 || Math.min(A[1], B[1], C[1]) > Y0 + NY * DY) continue;
+      const e = Math.max(Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]), Math.hypot(B[0] - C[0], B[1] - C[1], B[2] - C[2]), Math.hypot(A[0] - C[0], A[1] - C[1], A[2] - C[2]));
+      const n = Math.max(1, Math.ceil(e / 0.008));
+      for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) {
+        const u = i / n, w = j / n, s = 1 - u - w; for (let k = 0; k < 3; k++) v[k] = s * A[k] + u * B[k] + w * C[k];
+        const iy = Math.floor((v[1] - Y0) / DY); if (iy < 0 || iy >= NY) continue;
+        const dz = v[2] - zc(v[1]), it = ((Math.floor((Math.atan2(v[0], dz) + Math.PI) / DT) % NT) + NT) % NT, r = Math.hypot(v[0], dz), q = iy * NT + it;
+        if (r > R[q]) R[q] = r;
+      }
+    }
+  }
+  const hy = Math.round(P.close / DY), ht = Math.round(P.close / R0 / DT);
+  const filt = (src, isMax) => { // a square's max (dilation) or min (erosion), along θ (round the axis) and then along Y
+    const a = new Float32Array(src.length), b = new Float32Array(src.length), op = isMax ? Math.max : Math.min;
+    for (let y = 0; y < NY; y++) for (let t = 0; t < NT; t++) { let m = src[y * NT + t]; for (let d = -ht; d <= ht; d++) m = op(m, src[y * NT + (t + d + NT) % NT]); a[y * NT + t] = m; }
+    for (let y = 0; y < NY; y++) for (let t = 0; t < NT; t++) { let m = a[y * NT + t]; for (let d = -hy; d <= hy; d++) { const yy = y + d; if (yy >= 0 && yy < NY) m = op(m, a[yy * NT + t]); } b[y * NT + t] = m; }
+    return b; };
+  const Cl = filt(filt(R, true), false);
+  const inRange = q => { const y = Y0 + (Math.floor(q / NT) + 0.5) * DY, th = -Math.PI + (q % NT + 0.5) * DT; return y >= y0 && y <= y1 && Math.abs(th) <= P.th * Math.PI / 180; };
+  const deep = q => Cl[q] - R[q] > P.min && inRange(q);
+  const win = new Uint8Array(NY * NT), seen = new Uint8Array(NY * NT), found = [];
+  const nb = q => { const y = Math.floor(q / NT), t = q % NT, o = []; for (const [dy, dt] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const yy = y + dy; if (yy >= 0 && yy < NY) o.push(yy * NT + (t + dt + NT) % NT); } return o; };
+  for (let q = 0; q < NY * NT; q++) { // the windows: connected dips of more than P.area
+    if (seen[q] || !deep(q)) continue;
+    const cells = [], st = [q]; seen[q] = 1;
+    while (st.length) { const c = st.pop(); cells.push(c); for (const k of nb(c)) if (!seen[k] && deep(k)) { seen[k] = 1; st.push(k); } }
+    const area = cells.length * DY * DT * R0; if (area < P.area) continue;
+    for (const c of cells) win[c] = 1;
+    const ys = cells.map(c => Y0 + (Math.floor(c / NT) + 0.5) * DY), ts = cells.map(c => (-Math.PI + (c % NT + 0.5) * DT) * 180 / Math.PI);
+    found.push(`Y ${Math.min(...ys).toFixed(2)}–${Math.max(...ys).toFixed(2)} θ ${Math.min(...ts).toFixed(0)}…${Math.max(...ts).toFixed(0)}° ${area.toFixed(2)} m²`);
+  }
+  for (let k = 0; k < 2; k++) { const w2 = win.slice(); for (let q = 0; q < NY * NT; q++) if (win[q]) for (const c of nb(q)) w2[c] = 1; win.set(w2); } // under the frames
+  // the glass: a quad per window cell, its corners on the closed surface 8 mm in (the mean of the cells about each corner)
+  const vid = new Map(), pos = [], ix = [];
+  const corner = (y, t) => { // corner y (0…NY) along Y, t along θ (wrapping)
+    const key = y * NT + (t % NT); if (vid.has(key)) return vid.get(key);
+    let s = 0, n = 0; for (const [dy, dt] of [[0, 0], [-1, 0], [0, -1], [-1, -1]]) { const yy = y + dy, tt = (t + dt + NT) % NT; if (yy >= 0 && yy < NY) { s += Cl[yy * NT + tt]; n++; } }
+    const r = s / n - 0.008, yv = Y0 + y * DY, th = -Math.PI + t * DT;
+    pos.push(r * Math.sin(th), yv, zc(yv) + r * Math.cos(th)); vid.set(key, pos.length / 3 - 1); return pos.length / 3 - 1; };
+  for (let q = 0; q < NY * NT; q++) { if (!win[q]) continue; const y = Math.floor(q / NT), t = q % NT;
+    const a = corner(y, t), b = corner(y + 1, t), c = corner(y + 1, t + 1), d = corner(y, t + 1); ix.push(a, d, b, b, d, c); } // facing out
+  const nor = new Float32Array(pos.length); // area-weighted face normals at the corners
+  for (let k = 0; k < ix.length; k += 3) { const [a, b, c] = [ix[k], ix[k + 1], ix[k + 2]].map(i => pos.slice(3 * i, 3 * i + 3));
+    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], f = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    for (const i of [ix[k], ix[k + 1], ix[k + 2]]) for (let e = 0; e < 3; e++) nor[3 * i + e] += f[e]; }
+  for (let i = 0; i < nor.length; i += 3) { const l = Math.hypot(nor[i], nor[i + 1], nor[i + 2]) || 1; nor[i] /= l; nor[i + 1] /= l; nor[i + 2] /= l; }
+  const glass = doc.createMaterial(name + '-glass').setBaseColorFactor([...P.color, 1]).setMetallicFactor(P.metal).setRoughnessFactor(P.rough).setDoubleSided(true);
+  const buf = mesh.listPrimitives()[0].getAttribute('POSITION').getBuffer();
+  const prim = doc.createPrimitive().setMaterial(glass)
+    .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(new Float32Array(pos)).setBuffer(buf))
+    .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(nor).setBuffer(buf))
+    .setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(ix)).setBuffer(buf));
+  simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: 0, error: 0.0005, lockBorder: true });
+  mesh.addPrimitive(prim);
+  console.log(`${name}: glass in ${found.length} windows (${prim.getIndices().getCount() / 3} triangles): ${found.join('; ')}`);
 }
 
 // Cut a primitive's triangles along the planes y = c: a triangle across one becomes two polygons, fanned into triangles,
