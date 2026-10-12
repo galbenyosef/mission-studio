@@ -1,13 +1,15 @@
 // Renders the scenes of a storyboard (scenes.js) from the video build of Mission Studio into clips.
-//   node render.js [--only id,id] [--stills N] [--w 1920 --h 1080] [--out dir] [--q 0.93]
+//   node render.js [--only id,id] [--stills N] [--w 1920 --h 1080] [--out dir] [--q 0.93] [--film [--no-grain]]
 // --stills N: N stills per scene (JPEG) instead of clips, for checking a storyboard. A scene with range: [a, b] renders only
-// τ a…b of itself (for previews).
+// τ a…b of itself (for previews). --film (or film: true on the board) renders with the app's film look: bloom, highlight
+// roll-off, vignette and grain; --no-grain (or grain: false) leaves the grain out, which costs a lot of bitrate.
 // A clip that already exists with all its frames is skipped, so an interrupted run resumes where it stopped.
 const fs = require('fs'), path = require('path'), { spawn, execFileSync } = require('child_process');
 const { launch } = require('./browser.js');
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const W = +arg('w', 1920), H = +arg('h', 1080), OUT = arg('out', path.join(__dirname, 'clips')), Q = +arg('q', 0.93), STILLS = +arg('stills', 0);
 const ONLY = arg('only', ''), SB = require(path.resolve(arg('board', path.join(__dirname, 'scenes.js'))));
+const FILM = process.argv.includes('--film') || !!SB.film, GRAIN = !process.argv.includes('--no-grain') && SB.grain !== false;
 const LIB = fs.readFileSync(path.join(__dirname, 'vidlib.js'), 'utf8');
 fs.mkdirSync(OUT, { recursive: true });
 const log = m => { const s = new Date().toISOString().slice(11, 19) + ' ' + m; console.log(s); fs.appendFileSync(path.join(OUT, 'render.log'), s + '\n'); };
@@ -31,8 +33,8 @@ async function session(scenes, aa) {
   await page.click('#goBtn'); await page.waitForTimeout(2000);
   await page.addScriptTag({ content: LIB });
   await page.waitForFunction(() => window.__vid.ready(), null, { timeout: 180000 });
-  await page.evaluate(() => window.__vid.setup());
-  log(`session aa=${aa} ${W}x${H} ready`);
+  await page.evaluate(([film, grain]) => window.__vid.setup({ film, grain }), [FILM, GRAIN]);
+  log(`session aa=${aa}${FILM ? ' film' + (GRAIN ? '' : ' (no grain)') : ''} ${W}x${H} ready`);
   for (const sc of scenes) {
     const N = frames(sc), file = path.join(OUT, sc.id + '.mp4');
     if (!STILLS && fs.existsSync(file) && clipDone(file) >= N) { log(`${sc.id} done already`); continue; }
