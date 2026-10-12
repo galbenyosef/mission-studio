@@ -236,37 +236,6 @@ function deployRig(flags, B) {
   g.userData.update(T.gr - 3600);
   return g;
 }
-// Hubble Space Telescope: +Y toward the aperture; origin at the middle of the 13.2 m body. flags.arrays: the solar array
-// wings and the high-gain antennas, deployed; with flags.deployable, userData.deploy(f) unfurls them, f from 0 to 1: the
-// wings swing out from along the aft shroud (to f 0.25), then their blankets unroll to 12.1 m; the antenna booms swing out
-// (to f 0.4). Without arrays: the wings rolled up on their drums. The aperture door: open with flags.door, opening over a
-// minute from flags.doorT (userData.animate).
-function hubbleModel(flags = {}) {
-  const g = new THREE.Group(), foil = mat('#d9dbdd', 'metal'), dark = mat('#2a2b2e', 'dark');
-  const tube = cyl(2.1, 2.1, 7.45, foil, 32); tube.position.y = -0.6; g.add(tube); // light shield + forward shell
-  const ap = new THREE.Mesh(new THREE.CircleGeometry(2.02, 32), dark); ap.rotation.x = -Math.PI / 2; ap.position.y = 6.86; g.add(ap); // the dark aperture
-  const aft = cyl(2.15, 2.15, 5.6, mat('#c5c8cb', 'metal'), 32); aft.position.y = -6.2; g.add(aft); // equipment section
-  const ring = cyl(2.17, 2.17, 0.35, mat('#9da2a7', 'metal'), 32); ring.position.y = -0.8; g.add(ring);
-  const lip = cyl(2.13, 2.13, 0.2, mat('#3a3c40', 'metal', { side: THREE.DoubleSide }), 32, true); lip.position.y = 6.82; g.add(lip);
-  const dg = new THREE.Group(); dg.position.set(0, 7.0, 2.1); const door = new THREE.Mesh(new THREE.CylinderGeometry(2.15, 2.15, 0.12, 32), mat('#e9ebed', 'metal')); door.position.set(0, 0, -2.1); dg.add(door); g.add(dg);
-  if (flags.doorT != null) g.userData.animate = t => { dg.rotation.x = -105 * DEG * smoothstep(clamp((t - flags.doorT) / 60, 0, 1)); };
-  else if (flags.door) dg.rotation.x = -105 * DEG;
-  if (flags.arrays) {
-    const wings = [-1, 1].map(s => { const piv = new THREE.Group(); piv.position.set(s * 2.3, -2.2, 0); g.add(piv);
-      const w = solarWing(12.1, 2.45, 6, '#2a3a64'); if (s < 0) w.rotation.y = Math.PI; w.rotation.x = Math.PI / 2; piv.add(w); return { piv, w, s }; });
-    const booms = [-1, 1].map(s => { const piv = new THREE.Group(); piv.position.set(0, -1.6, s * 2.15); g.add(piv);
-      const b = cyl(0.05, 0.05, 3.95, mat('#9aa0a6', 'metal'), 6); b.rotation.x = s * Math.PI / 2; piv.add(b); // out along ±Z
-      const d2 = dish(0.65); d2.position.set(0, 0, s * 3.95); d2.rotation.x = s > 0 ? -Math.PI / 2 : Math.PI / 2; piv.add(d2); return { piv, s }; });
-    g.userData.deploy = f => {
-      const sw = smoothstep(clamp(f / 0.25, 0, 1)), un = smoothstep(clamp((f - 0.25) / 0.75, 0, 1)), bm = smoothstep(clamp(f / 0.4, 0, 1));
-      for (const { piv, w, s } of wings) { piv.rotation.z = -s * Math.PI / 2 * (1 - sw); w.scale.x = 0.06 + 0.94 * un; } // stowed along the shroud, pointing aft
-      for (const { piv, s } of booms) piv.rotation.x = s * Math.PI / 2 * (1 - bm); // folded aft along the body
-    };
-    g.userData.deploy(flags.deployable ? 0 : 1);
-  } else for (const s of [-1, 1]) { const r = cyl(0.28, 0.28, 4.6, mat('#3b4a6b', 'paint'), 12); r.position.set(s * 2.45, -4.6, 0); g.add(r); }
-  const fix = cyl(0.25, 0.25, 0.5, mat('#e0e0e0', 'metal'), 10); fix.rotation.x = Math.PI / 2; fix.position.set(0, -3.0, 2.3); g.add(fix); // grapple fixture
-  g.userData.len = 13.2; g.userData.yc0 = 0; return g;
-}
 function shuttlePayload(kind, flags = {}, B = SH_BAY_BUILTIN) {
   const g = new THREE.Group();
   if (kind === 'dfi') { const p = box(3.6, 3.0, 1.6, mat('#c9c6bd', 'metal')); p.position.set(0, 8.4, -2.2); g.add(p); const t = cyl(0.5, 0.5, 1.6, mat('#d8d4c8', 'paint')); t.rotation.x = Math.PI / 2; t.position.set(1.1, 12.2, -1.4); g.add(t); }
