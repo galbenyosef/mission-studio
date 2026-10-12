@@ -13,10 +13,15 @@ const FILM_LEVELS = 6; // bloom levels, each half the size of the one before (fr
 const GLSL_FILM_V = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 const GLSL_FILM_LIB = `
 varying vec2 vUv;
+// A texel holding NaN or infinity (all its exponent bits set), taken as no light. A shader can slip one into the float
+// target (pow() of a negative number, a sum past the half float's 65504); on the screen it would be clamped away, but here
+// it stays, and every filter that reads it turns its whole footprint black.
+bvec3 nonFinite(vec3 c){ return equal(floatBitsToUint(c) & uvec3(0x7f800000u), uvec3(0x7f800000u)); }
+vec3 finite(vec3 c){ return mix(c, vec3(0.0), nonFinite(c)); }
 vec3 toLinear(vec3 c){ c = max(c, 0.0); return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
 vec3 toSRGB(vec3 c){ c = max(c, 0.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
 // a 2×2-texel box at the centre and four diagonal taps half a texel out (the "dual filter" downsample)
-vec3 down(sampler2D t, vec2 uv, vec2 h){ return (texture2D(t, uv).rgb * 4.0 + texture2D(t, uv - h).rgb + texture2D(t, uv + h).rgb + texture2D(t, uv + vec2(h.x, -h.y)).rgb + texture2D(t, uv - vec2(h.x, -h.y)).rgb) / 8.0; }
+vec3 down(sampler2D t, vec2 uv, vec2 h){ return (finite(texture2D(t, uv).rgb) * 4.0 + finite(texture2D(t, uv - h).rgb) + finite(texture2D(t, uv + h).rgb) + finite(texture2D(t, uv + vec2(h.x, -h.y)).rgb) + finite(texture2D(t, uv - vec2(h.x, -h.y)).rgb)) / 8.0; }
 // a tent of eight taps (the "dual filter" upsample)
 vec3 up(sampler2D t, vec2 uv, vec2 h){
   vec3 s = texture2D(t, uv + vec2(-2.0 * h.x, 0.0)).rgb + texture2D(t, uv + vec2(2.0 * h.x, 0.0)).rgb + texture2D(t, uv + vec2(0.0, 2.0 * h.y)).rgb + texture2D(t, uv + vec2(0.0, -2.0 * h.y)).rgb;
@@ -41,7 +46,12 @@ void main(){ gl_FragColor = vec4(texture2D(tAdd, vUv).rgb + uScatter * up(tSrc, 
   comp: `uniform sampler2D tSrc; uniform sampler2D tBloom; uniform vec2 uH; uniform float uBloom, uVig, uGrain, uGrainPx, uTime; uniform vec4 uFrame;
 float hash(vec2 p){ vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 void main(){
-  vec3 lin = toLinear(texture2D(tSrc, vUv).rgb) + uBloom * up(tBloom, vUv, uH);
+  vec3 s = texture2D(tSrc, vUv).rgb;
+  if (any(nonFinite(s))) { // a pixel the scene left without a number: its neighbours' light instead
+    vec2 px = 1.0 / vec2(textureSize(tSrc, 0));
+    s = 0.25 * (finite(texture2D(tSrc, vUv + vec2(px.x, 0.0)).rgb) + finite(texture2D(tSrc, vUv - vec2(px.x, 0.0)).rgb) + finite(texture2D(tSrc, vUv + vec2(0.0, px.y)).rgb) + finite(texture2D(tSrc, vUv - vec2(0.0, px.y)).rgb));
+  }
+  vec3 lin = toLinear(s) + uBloom * up(tBloom, vUv, uH);
   const float a = 0.85; // above this the light rolls off toward white instead of clipping
   lin = mix(lin, a + (1.0 - a) * (1.0 - exp(-(lin - a) / (1.0 - a))), step(a, lin));
   vec3 c = toSRGB(lin);
