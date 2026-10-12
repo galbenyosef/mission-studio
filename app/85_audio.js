@@ -206,7 +206,7 @@ const AUD_FX = {
   sonic(now, k) { for (const dt of [0, 0.38]) { audNoiseHit(now + dt, SND.g.brown, 'lowpass', 260, 1.0 * k, 0.002, 0.28); audThump(now + dt, 0.9 * k, 48, 26, 0.45); } }, // the orbiter's twin sonic boom
   clunk(now, k) { audThump(now, 0.6 * k, 150, 60, 0.18); audThump(now + 0.12, 0.5 * k, 130, 55, 0.2); audNoiseHit(now, SND.g.white, 'bandpass', 2400, 0.12 * k, 0.002, 0.3, 6); }, // docking latches
 };
-const AUD_EVENT = { staging: 'bang', sep: 'bang', jettison: 'bang', skycrane: 'bang', ignition: 'whoomp', burn: 'whoomp', powered: 'whoomp', chute: 'fwump', touchdown: 'thud', landing: 'thud', dock: 'clunk' };
+const AUD_EVENT = { staging: 'bang', sep: 'bang', jettison: 'bang', skycrane: 'bang', ignition: 'whoomp', burn: 'whoomp', powered: 'whoomp', chute: 'fwump', touchdown: 'thud', landing: 'thud', dock: 'clunk', trim: 'clunk' };
 function audioEvent(e) {
   const ctx = SND.ctx; if (!ctx || !SND.on || ctx.state !== 'running' || !STATE.playing || STATE.rate > 150) return;
   let fx = AUD_EVENT[e.kind];

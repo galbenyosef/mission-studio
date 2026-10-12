@@ -140,17 +140,14 @@ function runMarsEDL(SC, P, t0, r0, v0, bank, site, refOnly) {
   }
   return simulateEntry(opt);
 }
-// Mars 2020's landing in its parts (edl.skycrane). The configurations the app shows the entry vehicle in, from the heat
-// shield's going to the rover's lowering (app/33_mars2020.js), and the parts that go their own ways: the heat shield
-// falling away and the backshell coming down on its parachute, each through the air from where it let go to where it
-// lies; and the descent stage, once the rover is down, flying off: a second's hover, a climb, a turn to 45° from the
-// vertical and thrust (2.2 g here) for as long as it takes to come down edl.flyaway metres away along the ground track.
-// It is not seen after it hits the ground.
-function skyCraneParts(M, SC, ship, ent, site, mDS, tEnd) {
-  const edl = SC.edl, sc = SC.model, R = surfaceRadius('mars'), elev = site.elev || 0, at = n => ent.events.find(e => e.name === n);
-  const hs = at('Heat shield separation'), bs = at('Backshell separation · powered descent'), sky = at('Sky crane');
-  if (hs) ship.setConfig(hs.t, 'sc', { key: 'sc', sc, parts: ['aeroshell'], chute: 1, hs: false });
-  if (sky) ship.setConfig(sky.t, 'sc', { key: 'sc', sc, parts: ['lander'], powered: true, skyT: sky.t });
+// A Mars entry capsule's shells once they let go: the entry vehicle without its heat shield, the platform or descent stage
+// inside showing (and a trim wing out, edl.trimWing, from when it swung out); the heat shield falling away and the
+// backshell coming down on its parachute, each through the air from where it let go to where it lies.
+function shellParts(M, SC, ship, ent, site, tEnd) {
+  const edl = SC.edl, sc = SC.model, elev = site.elev || 0, at = n => ent.events.find(e => e.name === n), trim = edl.trimWing ? { trim: 1 } : {};
+  const hs = at('Heat shield separation'), bs = at('Backshell separation · powered descent'), tw = at('Trim wing deploys');
+  if (tw) ship.setConfig(tw.t, 'sc', { key: 'sc', sc, parts: ['aeroshell'], trimT: tw.t });
+  if (hs) ship.setConfig(hs.t, 'sc', { key: 'sc', sc, parts: ['aeroshell'], chute: 1, hs: false, hsT: hs.t, ...trim });
   const fall = (id, name, e, m, diam, cd, part, chute) => {
     if (!e) return;
     const f = simulateEntry({ body: 'mars', t0: e.t, r0: e.r, v0: e.v, m0: m, diam, cd, LD: 0, rn: diam / 2, siteElev: elev, maxTime: 900 });
@@ -161,9 +158,20 @@ function skyCraneParts(M, SC, ship, ent, site, mDS, tEnd) {
     o.add(new SampleSeg('mars', smp, { m }));
     if (f.landed) { o.setConfig(f.t, 'sc', { key: 'sc', sc, parts: [part], rest: true }); o.add(new SurfaceSeg('mars', f.t, tEnd, f.ll[0], f.ll[1], elev, m, { extra: { phase: 'on the ground' } })); }
   };
-  const mHS = edl.heatshieldMass ?? 440;
+  const shell = SC.modules.AEROSHELL || SC.modules.CAPS, mHS = edl.heatshieldMass ?? (SC.modules.AEROSHELL ? 440 : shell.dry * 0.45);
   fall('heatshield', 'Heat shield', hs, mHS, edl.diam, 1.0, 'heatshield', false);
-  fall('backshell', 'Backshell', bs, edl.backshellMass ?? (SC.modules.AEROSHELL.dry - mHS), edl.chute.diam, 0.62, 'backshell', true); // the parachute's drag, and a little of the backshell's
+  fall('backshell', 'Backshell', bs, edl.backshellMass ?? (shell.dry - mHS), edl.chute.diam, 0.62, 'backshell', true); // the parachute's drag, and a little of the backshell's
+}
+// Mars 2020's landing in its parts (edl.skycrane). The configurations the app shows the entry vehicle in, from the heat
+// shield's going to the rover's lowering (app/33_mars2020.js), and the parts that go their own ways: the heat shield and
+// the backshell (shellParts); and the descent stage, once the rover is down, flying off: a second's hover, a climb, a turn to 45° from the
+// vertical and thrust (2.2 g here) for as long as it takes to come down edl.flyaway metres away along the ground track.
+// It is not seen after it hits the ground.
+function skyCraneParts(M, SC, ship, ent, site, mDS, tEnd) {
+  const edl = SC.edl, sc = SC.model, R = surfaceRadius('mars'), elev = site.elev || 0, at = n => ent.events.find(e => e.name === n);
+  const sky = at('Sky crane');
+  shellParts(M, SC, ship, ent, site, tEnd);
+  if (sky) ship.setConfig(sky.t, 'sc', { key: 'sc', sc, parts: ['lander'], powered: true, skyT: sky.t });
   // the descent stage's flight in the site's own frame (metres along the ground track and up; m/s; thrust in m/s²; tilt)
   const g = BODIES.mars.mu / (R * R) * 1000, aT = 2.2 * g;
   const fly = tb => {
@@ -733,11 +741,14 @@ function orbitThenLand(M, cfg, SC, P, ship, nodes, lam, iLeg, t, r, v, body, mas
   for (const e of ent.events) M.ev(e.t, 'ship', e.name, e.desc, e.kind);
   M.ev(ent.tPeakHeat, 'ship', 'Peak heating', `Heat flux ≈ ${ent.maxHeat.toFixed(0)} W/cm².`, 'heat');
   const pdT = ent.samples.find(s => s.phase === 'powered descent')?.t; if (pdT) ship.setConfig(pdT, 'sc', { key: 'sc', sc: SC.model, parts: ['lander'], powered: true });
-  const chT = ent.samples.find(s => s.chute >= 1)?.t; if (chT) ship.setConfig(chT, 'sc', { key: 'sc', sc: SC.model, parts: ['aeroshell'], chute: 1 });
+  const chT = ent.samples.find(s => s.chute >= 1)?.t; if (chT) ship.setConfig(chT, 'sc', { key: 'sc', sc: SC.model, parts: ['aeroshell'], chute: 1, ...(SC.edl.trimWing ? { trim: 1 } : {}) });
+  const tEnd = ent.t + (cfg.surfaceDays ?? 5) * D;
+  shellParts(M, SC, ship, ent, site, tEnd);
   const miss = missF(ent);
   M.ev(ent.t, 'ship', cfg.landName || 'Touchdown', `Touchdown at ${ent.ll[0].toFixed(2)}°, ${ent.ll[1].toFixed(2)}° — ${miss.toFixed(1)} km from the target (${site.name}).`, 'landing');
-  ship.setConfig(ent.t, 'sc', { key: 'sc', sc: SC.model, parts: ['lander'], landed: true });
-  const tEnd = ent.t + (cfg.surfaceDays ?? 5) * D;
+  // a rover that rides down on the platform (cfg.roverOff, days after touchdown): it unfolds, the ramp opens, it drives off
+  const ro = cfg.roverOff, dT = k => ro && ro[k] != null ? ent.t + ro[k] * D : undefined;
+  ship.setConfig(ent.t, 'sc', { key: 'sc', sc: SC.model, parts: ['lander'], landed: true, ...(ro ? { wingsT: dT('wings'), rampT: dT('ramp'), rollT: dT('roll') } : {}) });
   ship.add(new SurfaceSeg('mars', ent.t, tEnd, ent.ll[0], ent.ll[1], site.elev || 0, ent.m, { extra: { phase: 'surface operations' } }));
   for (const e of (cfg.surfaceEvents || [])) M.ev(ent.t + e.afterLanding * D, 'ship', e.name, e.desc, e.kind || 'info');
   M.phase(tEIa, ent.t, 'Entry, descent & landing', '#ff5d5d');

@@ -291,7 +291,7 @@ const SPACECRAFT = {
       ROVER: { name: 'Zhurong rover', dry: 240, prop: 0 },
     },
     orbiter: ['ORB'], entry: ['CAPS', 'LDR', 'ROVER'], prop: { orbiter: 'ORB', lander: 'LDR' },
-    edl: { diam: 3.4, LD: 0.2, cd: 1.6, rn: 1.0, chute: { diam: 16, cd: 0.6, mach: 1.8 }, heatshieldSepMach: 0.8, backshellSepAlt: 1.5, skycrane: false },
+    edl: { diam: 3.4, LD: 0.2, cd: 1.6, rn: 1.0, chute: { diam: 16, cd: 0.6, mach: 1.8 }, heatshieldSepMach: 0.8, backshellSepAlt: 1.5, skycrane: false, trimWing: true, divert: [25, 12] },
     model: 'tianwen',
   },
   europaClipper: {
@@ -316,7 +316,7 @@ const SPACECRAFT = {
     },
     orbiter: ['RET', 'ORB'], entry: ['CAPS', 'LDR', 'MAV'], ascender: ['MAV'], prop: { orbiter: 'ORB', lander: 'LDR', ascender: 'MAV' }, capsule: 'RET', orbiterStays: true,
     edl: { diam: 4.0, LD: 0.22, cd: 1.6, rn: 1.0, chute: { diam: 18, cd: 0.6, mach: 1.8 }, heatshieldSepMach: 0.8, backshellSepAlt: 1.8, skycrane: false },
-    model: 'tianwen',
+    model: 'msr',
   },
   inspirationMars: {
     name: 'Crew capsule + inflatable habitat (Inspiration Mars concept)', crewMax: 2,
