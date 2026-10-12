@@ -24,6 +24,13 @@ function resState(res, t) { // Hermite state from integrator result at time t
   const T = res.t; let i = bsearch(T, t); if (i >= T.length - 1) i = T.length - 2; if (i < 0) i = 0;
   return hermiteState(T[i], res.y[i], res.f[i], T[i + 1], res.y[i + 1], res.f[i + 1], clamp(t, T[i], T[i + 1]), 7);
 }
+// an integrator result up to t, ending at t itself (where the next segment starts) rather than at its last step before it
+function resUntil(res, t) {
+  let k = res.t.findIndex(x => x > t); if (k < 0) k = res.t.length;
+  const out = { t: res.t.slice(0, k), y: res.y.slice(0, k) };
+  if (!out.t.length || out.t[out.t.length - 1] < t) { out.t.push(t); out.y.push(resState(res, t)); }
+  return out;
+}
 function seleno(t, y) { const m = moonGeo(t); return { r: [y[0] - m.r[0], y[1] - m.r[1], y[2] - m.r[2]], v: [y[3] - m.v[0], y[4] - m.v[1], y[5] - m.v[2]] }; }
 function geoFromSeleno(t, r, v) { const m = moonGeo(t); return { r: vadd(r, m.r), v: vadd(v, m.v) }; }
 // samples for a geocentric result
@@ -634,8 +641,7 @@ function finishReturn(M, cfg, SC, P, ship, t0, t, y, ref, rvpT, progress, tDepar
   const tEI = rEI.stopEvent.t;
   // CM/SM separation 15 min before EI
   const tSep = tEI - (cfg.smSepBeforeEI ?? 15) * 60;
-  const preSep = rEI.t.findIndex(x => x >= tSep);
-  { const part = { t: rEI.t.slice(0, Math.max(preSep, 2)), y: rEI.y.slice(0, Math.max(preSep, 2)) }; ship.add(new SampleSeg('earth', integToSamples(part, () => ({ phase: 'transearth coast' })))); }
+  ship.add(new SampleSeg('earth', integToSamples(resUntil(rEI, tSep), () => ({ phase: 'transearth coast' }))));
   const yS = resState(rEI, tSep);
   const capM = P.massOf([capsuleId]);
   if (SC.orbiter && SC.orbiter.length > 1) {
@@ -935,7 +941,7 @@ function doLanding(M, cfg, SC, P, ship, t0, getState, setState, progress) {
     if (best && tt > best.tt + 1.2 * perA && best.tot < 0.08) break;
   }
   const tTPI = best.tt, tDock = best.tt + best.tof;
-  ascObj.add(resToSeg({ t: lR.t.filter(x => x <= tTPI), y: lR.y.filter((_, i) => lR.t[i] <= tTPI) }, 'catch-up orbit'));
+  ascObj.add(resToSeg(resUntil(lR, tTPI), 'catch-up orbit'));
   const dv1 = vsub(best.Lb.v1, best.a.v);
   const yT = Array.from(resState(lR, tTPI)); yT[3] += dv1[0]; yT[4] += dv1[1]; yT[5] += dv1[2];
   const pT = P.burn(asId, yT[6], vnorm(dv1)); yT[6] -= pT.prop;

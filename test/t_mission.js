@@ -24,3 +24,16 @@ for (const o of M.objects) {
   }
   console.log(`continuity ${o.id}: max excess jump ${maxJump.toFixed(1)} km at GET ${fmtMET(at - M.t0)}`);
 }
+// segment junctions: the next segment starts where the earlier one ends (the end carried on over the gap between them), and
+// in a gap the craft keeps moving (stateAt bridges it) instead of holding still in space while the planet turns under it
+let junctionFail = 0;
+for (const o of M.objects) for (let i = 1; i < o.segs.length; i++) {
+  const a = o.segs[i - 1], b = o.segs[i], h = b.t0 - a.t1; if (h < 0) continue; // overlapping: the later segment takes over
+  const A = a.stateAt(a.t1), B = b.stateAt(b.t0); if (A.ref !== B.ref) continue;
+  const rB = B.surface ? vscale(B.r, 1 - SURF_LIFT / vnorm(B.r)) : B.r; // a landing ends on the ground
+  const miss = vnorm(vsub(rB, vadd(A.r, vscale(vadd(A.v, B.v), h / 2)))) * 1000;
+  const mid = h > 0 ? vnorm(vsub(o.stateAt(a.t1 + h / 2).r, vscale(vadd(A.r, rB), 0.5))) * 1000 - vnorm(vsub(A.v, B.v)) * h / 8 * 1000 : 0;
+  if (miss > 50 || mid > 10) { junctionFail++; console.log(`FAIL junction ${o.id} ${a.type}→${b.type} at GET ${fmtMET(b.t0 - M.t0)}: gap ${h.toFixed(3)} s, starts ${miss.toFixed(1)} m off, mid-gap ${mid.toFixed(1)} m off`); }
+}
+console.log(junctionFail ? `junctions: ${junctionFail} failed` : 'PASS segment junctions');
+if (junctionFail) process.exit(1);
