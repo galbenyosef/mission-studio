@@ -115,6 +115,7 @@
   - 그 뒤 진입 정렬 원뿔(HAC)을 돌아 가파른 활강 경로로 내려가고, 기수를 들어 활주로에 내려앉아요.
   - 주 바퀴가 닿으면 앞바퀴가 닿을 때까지 기수를 내려요. 디스커버리 스캔에서 보듯 궤도선은 착륙 기어 위에서 기수가 4.4° 숙여진 자세로 서요.
 - **대기 중의 배기:** 비행운의 짙기는 단마다 1미터 비행할 때 태우는 추진제의 양을 따라요(고체 부스터가 가장 짙고 수소 엔진이 가장 옅어요). 퍼지는 폭은 옅어지는 공기를, 흘러가는 모양은 발사마다 정해지는 바람(제트기류, 더 높은 곳에서는 고도에 따라 방향이 도는 바람)을 따라요. 햇빛은 공기를 지나 비행운에 닿기 때문에 지구 그림자 근처에서는 붉어지고 그림자 안에서는 어두워요.
+- **공기와 빛:** 지구와 화성의 대기는 물리 모델로 그려요. 레일리·미 산란과 오존 흡수를 넣고, 한 번 산란한 빛에 여러 번 산란한 빛의 근사를 더해요(Bruneton & Neyret 2008, Hillaire 2020). 땅에서 보는 하늘도, 궤도에서 보는 빛나는 지구 가장자리도 이 모델 하나로 그려요. 먼 지상이 대기에 묻히는 정도, 명암 경계로 갈수록 붉어지는 햇빛, 하늘이 땅에 비추는 빛도 이 모델에서 나와요. 지구의 구름은 6 km 높이에 떠서 그림자를 드리우고, 바다에는 햇빛이 반사되고, 해가 지면 도시에 불이 켜져요. 화성은 먼지 때문에 하늘이 누런 갈색(버터스카치)이고, 지는 해 둘레는 푸르게 빛나요. 지구·달·화성의 지형은 실제 경사에 따라 햇빛을 받아요.
 - **착륙:** 화성 낙하산과 스카이 크레인, 캡슐 대기권 진입, 동력 하강 유도를 모델링했어요. 스타십은 배를 앞세워 대기권에 들어온 뒤, 최대한 늦게 엔진을 켜고 몸을 세워 내려앉아요. 화성은 공기가 희박해 그때도 음속의 몇 배로 날고 있어서, 꼬리를 앞세워 엔진으로 먼저 감속(초음속 역추진)한 다음 몸을 세워요.
 
 ### 정확도
@@ -152,9 +153,10 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 - **우주왕복선 외부 연료탱크와 부스터:** [paburoviii](https://sketchfab.com/paburoviii)의 ["Space Shuttle Atlantis"](https://sketchfab.com/3d-models/space-shuttle-atlantis-2f04130e3c78439d9765b5ac71b333d2)([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))를 바탕으로 했어요. `tools/models`로 탱크와 부스터 하나만 남기고(반대쪽 부스터는 앱이 좌우를 뒤집어 그려요) 공개된 크기에 맞췄어요. 스캔한 궤도선과 어울리도록 탱크에는 분사 단열재(폼) 질감을 칠하고 부스터 도장에는 풍화 흔적을 더했어요.
 - **아폴로 사령·기계선, 다른 발사체:** 공개된 치수를 바탕으로 코드로 그렸어요.
 - **발사대:** 공개된 치수와 사진을 바탕으로 코드로 그렸어요. NASA와 케네디 우주센터 자료, 미국 역사공학기록(HAER)의 39번 발사 단지 기록, 《Moonport》(NASA SP-4204), NSTS 뉴스 참고 매뉴얼, ULA·SpaceX·CASC 자료를 참고했어요.
-- **지구 지도:** [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0, three.js 예제를 거쳐 받았어요.
-- **달 지도:** three.js 예제
-- **화성·금성·목성·토성 지도:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)
+- **지구 지도:** 지상은 NASA 지구관측소의 [블루 마블: 넥스트 제너레이션](https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/)(2004년 4월, Reto Stöckli)이에요. 지형과 바다는 그 GEBCO_08 지형·수심도에서 가져왔어요. 야경은 NASA의 블랙 마블 2016(수오미 NPP VIIRS), 구름은 [Solar System Scope](https://www.solarsystemscope.com/textures/)(CC BY 4.0)예요. `tools/textures`로 손봤어요.
+- **달 지도:** NASA 과학 시각화 스튜디오의 [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720)(Ernie Wright)예요. 달 정찰 궤도선(LRO)의 LROC 컬러 모자이크와 LOLA 고도 자료로 만들었어요.
+- **화성 지도:** 색은 [Solar System Scope](https://www.solarsystemscope.com/textures/)(CC BY 4.0)에서 가져와 채도를 조금 낮췄어요. 지형은 마스 글로벌 서베이어의 MOLA 고도 자료([NASA PDS](https://pds-geosciences.wustl.edu/missions/mgs/megdr.html))예요.
+- **금성·목성·토성 지도:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)
 - **별 목록:** [d3-celestial](https://github.com/ofrohn/d3-celestial)(BSD 3-Clause)의 XHIP 기반 데이터
 - **글꼴:** IBM Plex(SIL OFL)
 - **임무와 발사체 정보:** NASA 임무 보고서와 보도 자료(우주왕복선 보도 자료, 승무원 운용 매뉴얼, NSTS 참고 매뉴얼 포함), NASA/JPL, CNSA, SpaceX, ISRO 공개 자료
