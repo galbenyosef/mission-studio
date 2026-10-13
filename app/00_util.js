@@ -23,6 +23,10 @@ function h(tag, attrs, ...kids) {
 }
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
+// run f when the browser is next idle, but within ms at the latest: on a machine where every frame runs long (software
+// rendering, a slow laptop) idle time may never come, and work left to it (the atmosphere tables, the entry glow's points)
+// would never be done
+const whenIdle = (f, ms) => window.requestIdleCallback ? window.requestIdleCallback(f, { timeout: ms }) : setTimeout(f, Math.min(ms, 200));
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
 
 // ---------------- number formatting ----------------

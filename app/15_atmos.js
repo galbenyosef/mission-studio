@@ -154,7 +154,7 @@ function atmosUniforms(name, later) {
     aGlow: { value: v3(A.glow) }, aGlowH: { value: new THREE.Vector2(A.glowH, A.glowW) }, aSunE: { value: ATMO_SUN_E }, aGrade: { value: new THREE.Vector3(1, 1, 0) }, aExpo: { value: 1 }, aWB: { value: new THREE.Vector3(1, 1, 1) },
     aCam: { value: new THREE.Vector3(0, 0, A.Rg + 1000) }, aCamR: { value: A.Rg + 1000 }, aCamH: { value: 1000 }, aSun: { value: new THREE.Vector3(1, 0, 0) }, aRgE: { value: A.Rg } };
   const ready = () => { if (!A.lutT) atmosTables(A); A.U.tTrans.value = A.texT; A.U.tMS.value = A.texM; A.U.tSkyI.value = A.texI; };
-  if (later) (window.requestIdleCallback || (f => setTimeout(f, 200)))(ready); else ready();
+  if (later) whenIdle(ready, 2000); else ready();
   return A.U;
 }
 // the air between the camera and the Sun: its transmittance (reddens and dims the Sun near the horizon), or null when the
