@@ -75,11 +75,12 @@
 
 | | |
 |---|---|
-| ![STS-135: 국제우주정거장에 도킹한 아틀란티스](media/screenshot-iss.jpg) | ![STS-135: 새벽 케네디 우주센터 15번 활주로에서 감속 낙하산을 펴고 달리는 아틀란티스](media/screenshot-landing.jpg) |
-| ![STS-135 발사 105초 뒤: 옅은 공기 속에서 퍼지는 부스터의 불꽃, 검어지는 하늘](media/screenshot-ascent.jpg) | ![STS-31: 디스커버리의 로봇 팔이 허블을 화물칸 위로 들고 있다](media/screenshot-hubble.jpg) |
-| ![재진입 중인 STS-135: 배 아래에서 빛나는 충격층](media/screenshot-entry.jpg) | ![STS-31: 재진입이 끝나갈 무렵 고도 25 km의 푸른 공기 속을 활공하는 디스커버리](media/screenshot-glide.jpg) |
+| ![STS-135: 국제우주정거장에 도킹한 아틀란티스](media/screenshot-iss.jpg) | ![STS-135 발사 105초 뒤: 옅은 공기 속에서 퍼지는 부스터의 불꽃, 검어지는 하늘](media/screenshot-ascent.jpg) |
+| ![STS-31: 디스커버리의 로봇 팔이 허블을 화물칸 위로 들고 있다](media/screenshot-hubble.jpg) | ![재진입 중인 STS-135: 배 아래에서 빛나는 충격층](media/screenshot-entry.jpg) |
+| ![STS-31: 재진입이 끝나갈 무렵 고도 25 km의 푸른 공기 속을 활공하는 디스커버리](media/screenshot-glide.jpg) | ![STS-31: 에드워즈 활주로로 최종 접근하는 디스커버리, 날개 끝의 와류 비행운](media/screenshot-approach.jpg) |
+| ![STS-135: 새벽 케네디 우주센터 15번 활주로에서 감속 낙하산을 펴고 달리는 아틀란티스](media/screenshot-landing.jpg) | ![달 궤도 진입을 위해 달에 다가가는 아폴로 11호](media/screenshot-loi.jpg) |
 | ![화성의 버터스카치색 하늘 아래 퍼서비어런스를 내리는 스카이 크레인](media/screenshot-skycrane.jpg) | ![첫 주행 중인 퍼서비어런스와 바퀴 자국](media/screenshot-drive.jpg) |
-| ![화성 스윙바이를 앞둔 유로파 클리퍼](media/screenshot-clipper.jpg) | ![달 궤도 진입을 위해 달에 다가가는 아폴로 11호](media/screenshot-loi.jpg) |
+| ![화성 스윙바이를 앞둔 유로파 클리퍼](media/screenshot-clipper.jpg) |  |
 
 ## 임무 목록
 

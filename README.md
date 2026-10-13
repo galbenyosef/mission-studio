@@ -58,11 +58,12 @@
 
 | | |
 |---|---|
-| ![STS-135: Atlantis docked to the International Space Station](media/screenshot-iss.jpg) | ![STS-135: Atlantis rolling out on Runway 15 at Kennedy before dawn, drag chute out](media/screenshot-landing.jpg) |
-| ![STS-135 at T+105 s: the boosters' plumes spread in the thin air, the sky turning black](media/screenshot-ascent.jpg) | ![STS-31: Discovery's arm holds Hubble over the payload bay](media/screenshot-hubble.jpg) |
-| ![STS-135 in entry: the shock layer glows under the belly](media/screenshot-entry.jpg) | ![STS-31: Discovery gliding 25 km up in the blue air at the end of entry](media/screenshot-glide.jpg) |
+| ![STS-135: Atlantis docked to the International Space Station](media/screenshot-iss.jpg) | ![STS-135 at T+105 s: the boosters' plumes spread in the thin air, the sky turning black](media/screenshot-ascent.jpg) |
+| ![STS-31: Discovery's arm holds Hubble over the payload bay](media/screenshot-hubble.jpg) | ![STS-135 in entry: the shock layer glows under the belly](media/screenshot-entry.jpg) |
+| ![STS-31: Discovery gliding 25 km up in the blue air at the end of entry](media/screenshot-glide.jpg) | ![STS-31: Discovery on final approach to Edwards, vortex trails off its wingtips](media/screenshot-approach.jpg) |
+| ![STS-135: Atlantis rolling out on Runway 15 at Kennedy before dawn, drag chute out](media/screenshot-landing.jpg) | ![Apollo 11 arriving at the Moon for lunar orbit insertion](media/screenshot-loi.jpg) |
 | ![The sky crane lowers Perseverance under Mars's butterscotch sky](media/screenshot-skycrane.jpg) | ![Perseverance on its first drive, wheel tracks behind it](media/screenshot-drive.jpg) |
-| ![Europa Clipper before its Mars flyby](media/screenshot-clipper.jpg) | ![Apollo 11 arriving at the Moon for lunar orbit insertion](media/screenshot-loi.jpg) |
+| ![Europa Clipper before its Mars flyby](media/screenshot-clipper.jpg) |  |
 
 ## Missions
 
