@@ -134,7 +134,10 @@ function poseFor(mode, prm, P, t) {
     let up = [0, 0, 1]; if (c && c.s) up = vunit(c.rD || c.s.r);
     let u3 = vsub(up, vscale(Ld, vdot(up, Ld))); if (vnorm(u3) < 1e-6) u3 = vperp(Ld); u3 = vunit(u3); const u2 = vcross(u3, Ld);
     const D = vadd(vadd(vscale(Ld, Math.cos(prm.el) * Math.cos(prm.az)), vscale(u2, Math.cos(prm.el) * Math.sin(prm.az))), vscale(u3, Math.sin(prm.el)));
-    return { pos: keepAboveGround(P, vscale(D, -dist), t), up: u3, look: vsub(PL, P), center: false };
+    const pos = keepAboveGround(P, vscale(D, -dist), t);
+    if (prm.centreK > 0) { // turned toward the craft (the director's look-at shot dragged past its frame): between the body and the craft
+      const Lc = vunit(vlerp(Ld, vunit(vscale(pos, -1)), prm.centreK)); return { pos, up: u3, look: vadd(pos, vscale(Lc, Math.max(dist, 1e-6))), center: false }; }
+    return { pos, up: u3, look: vsub(PL, P), center: false };
   }
   if (mode === 'site') { // a camera on the ground by the launch site, looking up at the target
     const g = groundSite(t);
@@ -274,14 +277,17 @@ function directorUpdate(t, realDt) {
   if (shot.aimH == null) DIR.aimH = null; // look above the base point (a standing rocket is framed around its middle)
   else DIR.aimH = DIR.aimH == null || jump ? shot.aimH : DIR.aimH + (shot.aimH - DIR.aimH) * Math.min(1, realDt * 1.5);
   const aim = DIR.aimH != null && c.s ? vscale(vunit(c.rD || c.s.r), DIR.aimH) : null;
-  let az, el;
+  let az, el, centreK = 0;
   if (shot.mode === 'lookat') { // keep the craft inside the middle of the film frame, whatever the lens and screen shape
     const fr = frameRect(), tH = 18 / CAM.lens, tV = tH * fr.h / fr.w;
     const aL = Math.atan(0.42 * tH), eL = Math.atan(0.5 * tV);
-    DIR.offAz = clamp(DIR.offAz, -aL - shot.az, aL - shot.az); DIR.offEl = clamp(DIR.offEl, -eL - shot.el, eL - shot.el);
-    az = clamp(shot.az + DIR.offAz + Math.sin(drift) * Math.min(0.05, aL * 0.3), -aL, aL); el = clamp(shot.el + DIR.offEl, -eL, eL);
+    // Dragged past the edge of that frame the camera turns from the body to the craft (centreK), so the craft can be looked
+    // at from every side; back inside it the body comes back into view
+    az = shot.az + DIR.offAz + Math.sin(drift) * Math.min(0.05, aL * 0.3); el = clamp(shot.el + DIR.offEl, -1.5, 1.5);
+    const outA = Math.max(Math.abs(az) - aL, 0) / 0.25, outE = Math.max(Math.abs(el) - eL, 0) / 0.25;
+    centreK = smoothstep(Math.max(outA, outE));
   } else { az = shot.az + DIR.offAz + drift; el = clamp(shot.el + DIR.offEl, -1.5, 1.5); }
-  DIR.prm = { mode: shot.mode, look: shot.look, from: shot.from, off: shot.off, az, el, dist: DIR.dist, aim };
+  DIR.prm = { mode: shot.mode, look: shot.look, from: shot.from, off: shot.off, az, el, dist: DIR.dist, aim, centreK };
   DIR.shot = shot;
   const lens = DIR.lensUser || shot.lens;
   if (Math.abs(CAM.lens - lens) > 0.5) { CAM.lens = jump ? lens : Math.exp(Math.log(CAM.lens) + (Math.log(lens) - Math.log(CAM.lens)) * Math.min(1, realDt * 2)); applyLens(); syncCamUI(); }
