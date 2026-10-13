@@ -365,13 +365,7 @@ function buildSC(model, parts, flags = {}) {
       else if (has('os')) { inner = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), mat('#e0e0e0', 'metal')); inner.userData.len = 0.3; }
       break;
     }
-    case 'clipper': {
-      inner = new THREE.Group(); const body = cyl(0.8, 0.8, 3.0, mat('#e6e3dc', 'paint')); inner.add(body);
-      const hga = dish(1.5, '#f2f2ee'); hga.position.y = 3.6; inner.add(hga);
-      for (const s of [-1, 1]) { const w = solarWing(13.5, 4.1, 5, '#16223e'); w.position.set(s * 0.8, 1.3, 0); if (s < 0) w.rotation.y = Math.PI; inner.add(w); }
-      const mag = cyl(0.03, 0.03, 8.5, mat('#9aa0a6', 'metal')); mag.rotation.x = Math.PI / 2; mag.position.set(0, 0.6, 4.2); inner.add(mag);
-      inner.userData.len = 3.0; mounts.push({ y: -0.1, r: 0.3, tag: 'SC' }); break;
-    }
+    case 'clipper': { inner = clipperModel(flags); mounts.push(...inner.userData.mounts); break; } // app/39_clipper.js
     case 'starshipPayload': {
       inner = starshipShip(flags.landed, flags.landed || flags.powered); mounts.push({ y: inner.userData.engineY, r: 3.6, tag: 'upper' }); break;
     }
@@ -413,6 +407,11 @@ function buildStowed(model, rBelow, fl = {}) {
     g.userData = { len: y, mounts: [{ y: 1.6, r: 0.6, tag: 'ESM' }] }; return g;
   }
   if (model === 'starshipPayload') { g.userData = { len: 0, mounts: [] }; return g; }
+  if (model === 'clipper') { // on the Falcon Heavy's adapter, the arrays folded against its sides (app/39_clipper.js)
+    const ad = cyl(Math.min(rBelow, 1.6), 0.7, 0.8, mat('#bdbdbd', 'metal')); g.add(ad);
+    const sc = buildSC(model, ['orbiter'], { stowed: true }); sc.position.y = 0.8; g.add(sc);
+    g.userData = { len: 0.8 + sc.userData.len, mounts: sc.userData.mounts.map(m => ({ ...m, y: m.y + 0.8 })) }; return g;
+  }
   if (model === 'mariner') { // on the Agena's adapter (app/35_atlas.js), the panels folded up
     const sc = buildSC(model, ['orbiter'], { stowed: true }); sc.position.y = 0.35; g.add(sc);
     g.userData = { len: 0.35 + 2.89, mounts: sc.userData.mounts.map(m => ({ ...m, y: m.y + 0.35 })) }; return g;
