@@ -144,9 +144,9 @@ const LAUNCHERS = {
     blurb: 'Fully reusable methalox two-stage vehicle (33 + 6 Raptor engines). Mars missions require refilling the Ship with ~8–10 tanker flights in Earth orbit.',
     stages: [
       { id: 'Super Heavy', name: 'Super Heavy booster (33 × Raptor 2)', prop: 'methalox', engine: 'Raptor 2', n: 33, thrustSL: 73.5e6, thrustVac: 78.0e6, ispSL: 327, ispVac: 347, dry: 275000, propMass: 3400000, maxG: 3.5, minThr: 0.4,
-        geom: [[69.0, 4.5, 4.5, C.steel, { chines: true }], [2.0, 4.5, 4.5, C.dark]], eng: { n: 33, len: 2.5, r: 0.65, layout: 'raptor33', spread: 4.0 }, gridfins: true },
+        geom: [[69.0, 4.5, 4.5, C.steel], [2.0, 4.5, 4.5, C.dark]], eng: { n: 33, len: 2.5, r: 0.65, layout: 'raptor33', spread: 4.0 }, look: 'starshipBooster' }, // look: drawn by hand (app/3a_starship.js)
       { id: 'Ship', name: 'Ship (3 Raptor + 3 Raptor Vacuum)', prop: 'methalox', engine: 'Raptor / RVac', n: 6, thrustSL: 10.5e6, thrustVac: 15.0e6, ispSL: 327, ispVac: 368, dry: 100000, propMass: 1500000, restart: true,
-        geom: [[44.0, 4.5, 4.5, C.steel, { tiles: true }], [8.1, 4.5, 0.6, C.steel, { tiles: true }]], eng: { n: 6, len: 2.8, r: 0.9, layout: 'ship6', spread: 2.2 }, flaps: true },
+        geom: [[44.0, 4.5, 4.5, C.steel], [8.1, 4.5, 0.6, C.steel]], eng: { n: 6, len: 2.8, r: 0.9, layout: 'ship6', spread: 2.2 }, look: 'starshipShip' },
     ],
     jettison: [], payloadFairing: null, ascent: { hp: 200, ha: 200, vert: 8, kickGuess: 1.5 },
   },

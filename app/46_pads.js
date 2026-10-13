@@ -422,14 +422,24 @@ function padFH(md) {
 // SpaceX's launch and catch tower ("Mechazilla", as at Starbase and on Pad 39A): 143 m of dark steel modules, about 12 m
 // square, a 3-m lightning rod; the two 36-m catch arms ("chopsticks") on their carriage and the ship's quick-disconnect
 // arm, both reaching toward the launch mount (facing +E from a tower at e, n: arms toward dir, radians from east)
-function padStarshipTower(k, e, n, dir = 0) {
+function padStarshipTower(k, e, n, dir = 0, g = null) {
   const M = padMats(), w = 12;
   padLattice(k, M.black, e, n, w, 0, 143, { step: 6, core: 6, coreMat: M.greyD, floors: false, col: 1.1, beam: 0.7 });
   k.cyl(M.galv, e, 143, n, 0.25, 0.1, 3, 6);
   const ce = Math.cos(dir), cn = Math.sin(dir), pe = -cn, pn = ce, y = 74, f0 = PV(e + ce * w / 2, y, n + cn * w / 2);
-  k.box(M.greyD, e + ce * (w / 2 + 1), y - 3, n + cn * (w / 2 + 1), 5, 7, 5);
-  for (const s of [-1, 1]) k.beam(M.greyD, f0.clone().add(PV(pe * s * 3, 0, pn * s * 3)), PV(e + ce * (w / 2 + 34) + pe * s * 7, y, n + cn * (w / 2 + 34) + pn * s * 7), 1.6, 3.2); // the chopsticks, opened
-  k.beam(M.greyD, PV(e + ce * w / 2, 91, n + cn * w / 2), PV(e + ce * (w / 2 + 14), 91, n + cn * (w / 2 + 14)), 1.4, 2.0); // the ship's quick-disconnect arm
+  k.box(M.greyD, e + ce * (w / 2 + 1), y - 3, n + cn * (w / 2 + 1), 5, 7, 5); // the carriage
+  if (!g) { // still: the chopsticks opened a little, the quick-disconnect arm out
+    for (const s of [-1, 1]) k.beam(M.greyD, f0.clone().add(PV(pe * s * 3, 0, pn * s * 3)), PV(e + ce * (w / 2 + 34) + pe * s * 7, y, n + cn * (w / 2 + 34) + pn * s * 7), 1.6, 3.2);
+    k.beam(M.greyD, PV(e + ce * w / 2, 91, n + cn * w / 2), PV(e + ce * (w / 2 + 14), 91, n + cn * (w / 2 + 14)), 1.4, 2.0);
+    return null;
+  }
+  // in motion (g: the pad group): each chopstick a lattice arm on its own pivot at the carriage (rotation.y opens it), the
+  // quick-disconnect arm on a pivot at the tower's face (rotation.y swings it back along the face)
+  const mkArm = (len, wd, hg, yy, side) => { const piv = new THREE.Group(); piv.position.copy(PV(e + ce * (w / 2 + 1.5) + pe * side * 2.6, yy, n + cn * (w / 2 + 1.5) + pn * side * 2.6)); const a = padArm(len, wd, hg, M.greyD, {}); a.rotation.y = Math.atan2(-ce, cn) + Math.PI; piv.add(a); g.add(piv); return piv; };
+  const sticks = [mkArm(36, 1.6, 3.2, y - 1.6, -1), mkArm(36, 1.6, 3.2, y - 1.6, 1)];
+  for (const [i, st] of sticks.entries()) { const s = i ? 1 : -1; const tip = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.4, 2.8), M.yellow); tip.position.set(0, 1.6, -35.5); st.children[0].add(tip); st.userData.side = s; }
+  const qd = mkArm(14, 1.4, 2.0, 91 - 1, 0); qd.position.copy(PV(e + ce * w / 2, 90, n + cn * w / 2));
+  return { sticks, qd, base: Math.atan2(-ce, cn) + Math.PI };
 }
 // ---------------- Atlas V on Space Launch Complex 41 (Perseverance, 2020) ----------------
 // A "clean pad": the rocket rolls the 550 m from the Vertical Integration Facility on its Mobile Launch Platform (16.8 ×
@@ -506,12 +516,32 @@ function padStarbase(md) {
     const tbl = new THREE.CylinderGeometry(10.5, 10.5, 2.5, 36, 1, true); tbl.translate(0, top - 1.25, 0); k.geo(M.greyD, tbl);
     const inn = new THREE.CylinderGeometry(5.6, 5.6, 2.5, 36, 1, true); inn.translate(0, top - 1.25, 0); k.geo(M.greyD, inn);
     ring.translate(0, top, 0); k.geo(M.greyD, ring); const ring2 = ring.clone(); ring2.rotateX(Math.PI); ring2.translate(0, 2 * top - 2.5, 0); k.geo(M.greyD, ring2); }
-  for (let i = 0; i < 20; i++) { const a = i * TAU / 20; k.box(M.steelD, Math.cos(a) * 5.0, top, Math.sin(a) * 5.0, 0.8, 1.4, 1.2, -a); }
-  padStarshipTower(k, -28, -3, 0);
+  for (let i = 0; i < 20; i++) { const a = i * TAU / 20; k.box(M.steelD, Math.cos(a) * 5.4, top - 0.4, Math.sin(a) * 5.4, 0.9, 0.5, 1.4, -a); } // the clamps' seats on the table
+  const tower = padStarshipTower(k, -28, -3, 0, g);
   for (let r = 0; r < 3; r++) for (let i = 0; i < 6; i++) { const geo = new THREE.CylinderGeometry(3.2, 3.2, 26, 20); geo.rotateX(Math.PI / 2); geo.translate(-(-150 - i * 9), 3.6, -60 + r * 34); k.geo(M.white, geo); } // horizontal tanks
   k.build(g); padGround(g, { sea: 90, shore: 700, roads: [[-400, -80, 400, -80, 12]], roadMat: M.asphalt });
   const glow = padGlow(), lit = new THREE.Mesh(new THREE.CircleGeometry(10, 32), glow); lit.rotation.x = -Math.PI / 2; lit.position.y = 1.2; g.add(lit);
-  return { group: g, stand, glow, deckY: top, foot: 11, trenchD: 25, block: [padBlock(-28, -3, 6, 9)] };
+  // the twenty hold-down clamps: each on a vertical pivot at its seat, its jaw over the booster's skirt; they swing out at liftoff
+  const clamps = [];
+  for (let i = 0; i < 20; i++) { const a = i * TAU / 20, piv = new THREE.Group(); piv.position.set(-Math.cos(a) * 5.4, top + 0.1, Math.sin(a) * 5.4); piv.rotation.y = a; g.add(piv);
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.3, 0.8), M.steelD); jaw.position.set(0.55, 0.65, 0); piv.add(jaw); clamps.push(piv); }
+  // the booster quick-disconnect at the mount (the tower's side): a plate against the skirt on a short arm, which pulls back
+  const bqd = new THREE.Group(); bqd.position.set(7.5, top + 1.5, 0); g.add(bqd); // (pad frame: +X is west, toward the tower)
+  const bqdArm = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.2, 1.6), M.greyD); bqdArm.position.set(-1.2, 0, 0); bqd.add(bqdArm);
+  const bqdPlate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.4, 2.6), M.steelD); bqdPlate.position.set(-2.9, 0, 0); bqd.add(bqdPlate);
+  // Timing (approximate, from the webcasts): the chopsticks open from the ship to their launch position over the last
+  // quarter hour; the ship's quick-disconnect arm swings back along the tower about 30 s before liftoff; the booster's
+  // quick-disconnect pulls back and the clamps swing out as the engines come up to thrust at T−0
+  const open = (tl, t0, t1) => smoothstep(clamp((tl - t0) / (t1 - t0), 0, 1));
+  const animate = t => {
+    const tl = t - md.M.t0;
+    const o = open(tl, -900, -720); for (const st of tower.sticks) st.rotation.y = st.userData.side * (0.06 + 0.5 * o);
+    tower.qd.rotation.y = -1.9 * open(tl, -32, -20);
+    const rel = open(tl, -0.3, 0.9); for (const c of clamps) c.rotation.y = c.userData.a0 ?? (c.userData.a0 = c.rotation.y), c.rotation.y = c.userData.a0 + 1.1 * rel;
+    bqd.position.x = 7.5 + 1.8 * open(tl, -1.0, 0.0); bqd.rotation.z = 0.5 * open(tl, 0.2, 1.4);
+  };
+  animate(md.M.t0 - 3600);
+  return { group: g, stand, glow, deckY: top, animate, foot: 11, trenchD: 25, block: [padBlock(-28, -3, 6, 9)] };
 }
 // which pad a mission stands on
 function padModel(md) {
