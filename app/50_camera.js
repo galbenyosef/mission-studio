@@ -67,7 +67,9 @@ function groundSite(t) {
   const md = MV.md; const P = targetPos(CAM.target, t) || helio('earth', t).r;
   const near = (b, d) => vnorm(vsub(P, helio(b, t).r)) < d;
   const cfg = md.cfg;
-  const off = (body, lat, lon, elev, dE, dN) => { const Rb = surfaceRadius(body); return { body, lat: lat + dN / Rb * RAD, lon: lon + dE / (Rb * Math.cos(lat * DEG)) * RAD, alt: (elev || 0) + 0.0018 }; };
+  // flat: the site stands on the pad's flat ground (app/46_pads.js), which lies above the sphere by d²/2R out at d from
+  // the pad — 2.7 m at the launch camera's 5.9 km, so a camera at its height over the sphere would look up from under it
+  const off = (body, lat, lon, elev, dE, dN, flat) => { const Rb = surfaceRadius(body); return { body, lat: lat + dN / Rb * RAD, lon: lon + dE / (Rb * Math.cos(lat * DEG)) * RAD, alt: (elev || 0) + 0.0018 + (flat ? (dE * dE + dN * dN) / (2 * Rb) : 0) }; };
   if (near('moon', 30000)) { const sp = surfaceSpotOn('moon') || (typeof cfg.landing === 'object' ? cfg.landing : null); if (sp) return off('moon', sp.lat, sp.lon, sp.elev || 0, -0.35, -0.12); }
   if (near('mars', 50000)) { const l = (cfg.legs || []).find(x => x.body === 'mars' && x.site); const sp = surfaceSpotOn('mars') || (l && l.site); if (sp) return off('mars', sp.lat, sp.lon, sp.elev || 0, -0.6, -0.25); }
   if (near('earth', 60000)) {
@@ -75,7 +77,7 @@ function groundSite(t) {
     if (rw && t > md.M.t0 + 3 * 3600) { // a Shuttle landing: beside the runway, 1.2 km past the threshold, like the photographers at the landing strip
       const pe = sitePosEcl('earth', rw.lat, rw.lon, 0, t); if (vnorm(vsub(vsub(P, helio('earth', t).r), pe)) < 800) { const hd = rw.hdg * DEG, a = 1.2, sd = 0.42; return off('earth', rw.lat, rw.lon, rw.elev || 0, a * Math.sin(hd) - sd * Math.cos(hd), a * Math.cos(hd) + sd * Math.sin(hd)); } }
     if (t > md.M.t0 + 3 * 3600) { const sp = surfaceSpotOn('earth', md.M.t0 + 3600); if (sp) { const pe = sitePosEcl('earth', sp.lat, sp.lon, 0, t); if (vnorm(vsub(vsub(P, helio('earth', t).r), pe)) < 1500) return off('earth', sp.lat, sp.lon, 0, -4, -3); } }
-    return off('earth', S.lat, S.lon, 0, -2.2, -5.5);
+    return off('earth', S.lat, S.lon, 0, -2.2, -5.5, true);
   }
   return null;
 }

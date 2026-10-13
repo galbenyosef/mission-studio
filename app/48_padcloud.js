@@ -35,9 +35,11 @@ function pclMix(L) {
 // g: the pad group (metres, scaled to km); blast(te): how hard the engines hit the pad at te; sC: the vehicle's size of
 // blast (1 for the Saturn V); sunUp: sine of the Sun's elevation at the pad
 function updatePadCloud(g, t, tIgn, span, blast, sC, L, sunUp) {
-  const cl = g.children.find(o => o.userData.isPadCloud); if (!cl) return;
+  const cl = g.children.find(o => o.userData.isPadCloud); if (!cl || cl.userData.off) return;
   const ud = g.userData, trenchD = ud.trenchD, foot = ud.foot, deckY = ud.deckY;
   if (!cl.userData.mix) cl.userData.mix = pclMix(L);
+  if (!cl.userData.wind) { const md = MV.md; let seed = 0; for (const ch of md.cfg.launch + md.cfg.site) seed = (seed * 31 + ch.charCodeAt(0)) | 0; cl.userData.wind = exhWind(seed)(0.05); } // the launch's wind near the ground (m/s east, north), the one the exhaust trail drifts on
+  const wind = cl.userData.wind;
   const { soot } = cl.userData.mix, col = cl.userData.mix.col.map(x => x * (1 - 0.3 * soot)); // sooty exhaust is darker
   // light on the cloud: the Sun through the air (reddened low down), the sky's blue, and the flames; at night only the flames
   const day = clamp(0.1 + sunUp * 3, 0, 1), sunC = R.sunLight.color, sunR = 0.5 * sunC.r * day, sunG = 0.5 * sunC.g * day, sunB = 0.5 * sunC.b * day;
@@ -59,14 +61,18 @@ function updatePadCloud(g, t, tIgn, span, blast, sC, L, sunUp) {
       const side = kind % 2 ? 1 : -1, v0 = (70 + 60 * r2) * (0.35 + 0.65 * k) * (0.6 + 0.4 * S3), tauV = 2.4 + 1.2 * r3;
       const d = trenchD + v0 * tauV * (1 - Math.exp(-a / tauV)) + (1.2 + 1.5 * r4) * a; // along the trench, slowing, then drifting on
       const rise = a < 14 ? 2.5 * a + 0.3 * a * a : 2.5 * 14 + 0.3 * 196 + 10.9 * (a - 14); // buoyant: up to 11 m/s
-      const spread = (r3 - 0.5) * (18 + 2.4 * a) * S3, lift = (0.3 + 0.7 * r4) * rise * (0.8 + 0.4 * S3);
-      x = spread + 10 * Math.sin(0.7 * a + 6 * r2) * Math.min(a / 5, 1); z = side * d; y = 7 + lift * (0.25 + 0.75 * Math.min(a / 2, 1));
+      const lift = (0.3 + 0.7 * r4) * rise * (0.8 + 0.4 * S3), top = Math.min(lift / Math.max(rise, 1) * 1.4, 1); // how near the parcel is to the top of the column
+      // the cap: the hot column's top rolls over as a vortex ring, its parcels going out and round and down; the ring widens as it climbs
+      const ring = 0.3 * lift * smoothstep((a - 3) / 8), th = r2 * TAU + 0.35 * a * top, roll = ring * top;
+      const spread = (r3 - 0.5) * (18 + 2.4 * a) * S3 + roll * Math.cos(th) * Math.sign(r3 - 0.5);
+      x = spread + 10 * Math.sin(0.7 * a + 6 * r2) * Math.min(a / 5, 1); z = side * d + roll * 0.5 * Math.sin(th); y = 7 + lift * (0.25 + 0.75 * Math.min(a / 2, 1)) + roll * 0.6 * Math.sin(th);
       sz = (18 + 65 * (1 - Math.exp(-a / 7)) + 1.1 * a) * (0.5 + 0.5 * S3) * (0.8 + 0.4 * r2);
       od = (1.8 + 1.4 * soot) * Math.pow(18 / sz, 0.8) * (0.5 + 0.5 * k); glow = Math.exp(-a / 1.6) * (0.4 + 0.6 * k) * 1.4;
     } else { // steam from the deluge water, boiling up round the launch mount
       const ang = r2 * TAU, rr = foot + 4 + 14 * r3 + 2.5 * a; x = Math.cos(ang) * rr; z = Math.sin(ang) * rr; y = deckY + 2 + (3 + 4 * r1) * a + 0.1 * a * a;
       sz = (9 + 30 * (1 - Math.exp(-a / 5)) + 0.7 * a) * (0.5 + 0.5 * S3); od = 1.6 * Math.pow(10 / sz, 0.7) * (0.5 + 0.5 * k); glow = 0.35 * Math.exp(-a / 1.5) * k;
     }
+    const wd = 0.7 * Math.max(a - 2, 0); x -= wind[0] * wd; z += wind[1] * wd; // the surface wind carries the cloud off (pad frame: +X west, +Z north)
     const life = Math.exp(-a / (70 + 40 * sC)) * (1 - smoothstep((a - 150) / 90));
     const o = 4 * n, hs = sz; // the quad's half-size (the puff's radius is 0.75 of it)
     for (let c = 0; c < 4; c++) {
