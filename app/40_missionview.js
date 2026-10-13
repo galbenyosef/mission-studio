@@ -9,7 +9,7 @@ const PROP_LOOK = { // plume look per propellant: [intensity, diamonds, core]
 };
 function disposeTree(o) { o.traverse(n => { if (n.userData.keep) return; if (n.geometry) n.geometry.dispose(); if (n.material && !Object.values(MATS).includes(n.material) && !Object.values(TEX).includes(n.material)) { if (Array.isArray(n.material)) n.material.forEach(m => m.dispose()); else n.material.dispose(); } }); }
 function clearMissionView() {
-  for (const c of MV.crafts) { R.scene.remove(c.node); disposeTree(c.node); c.label && c.label.remove(); if (c.shadow) { R.scene.remove(c.shadow); c.shadow.geometry.dispose(); c.shadow.material.dispose(); } }
+  for (const c of MV.crafts) { contrailDispose(c); R.scene.remove(c.node); disposeTree(c.node); c.label && c.label.remove(); if (c.shadow) { R.scene.remove(c.shadow); c.shadow.geometry.dispose(); c.shadow.material.dispose(); } }
   if (MV.tracks) { MV.tracks.parent && MV.tracks.parent.remove(MV.tracks); MV.tracks.geometry.dispose(); MV.tracks.material.dispose(); MV.tracks = null; }
   for (const tr of MV.trails) tr.dispose();
   for (const cp of MV.caps) { cp.parent && cp.parent.remove(cp); cp.geometry.dispose(); }
@@ -255,6 +255,7 @@ function updateCraft(c, t, camPos) {
   if (ud.animate) ud.animate(t); // parts in motion on their own timeline (the Shuttle's bay doors and robot arm, Hubble's door)
   // plumes
   updatePlumes(c, s, t, act, model);
+  if (c.o.model === 'shuttle' || c.ctr) updateContrails(c, s, t, cfgL, model); // wingtip vortex trails in the glide home
   // parachutes
   const ch = cfgL && (cfgL.chutes || cfgL.chute) ? (cfgL.chutes || cfgL.chute) : 0;
   const chKey = ch ? (cfgL.key + ch + (model.userData.dgb ? 'd' : '')) : null;
@@ -381,24 +382,6 @@ function padIgnition(md, t) {
   const liq = liftoffStages(L).filter(s => s.prop !== 'solid');
   return { f, full: f > 0.985, thrust: liq.reduce((a, s) => a + s.thrustSL, 0) * f, core: (liq.find(s => !s.parallel) || liq[0] || {}).id, liq, dt };
 }
-const GLSL_CLOUD_V = `
-#include <common>
-#include <logdepthbuf_pars_vertex>
-attribute float aSize; attribute float aA; attribute float aG; varying float vA; varying float vG; uniform float uPx;
-void main(){ vA = aA; vG = aG; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = clamp(aSize * uPx / max(-mv.z, 1e-9), 1.0, 1000.0);
-#include <logdepthbuf_vertex>
-}`;
-const GLSL_CLOUD_F = `
-#include <common>
-#include <logdepthbuf_pars_fragment>
-uniform vec3 uCol; uniform vec3 uGlow; varying float vA; varying float vG;
-void main(){
-  #include <logdepthbuf_fragment>
-  vec2 q = gl_PointCoord - 0.5; float d = length(q) * 2.0; float a = (1.0 - smoothstep(0.2, 1.0, d)) * vA; if (a < 0.01) discard;
-  vec3 c = mix(uCol * (0.8 + 0.25 * (0.5 - q.y)), uGlow, vG);
-  gl_FragColor = vec4(c, a);
-}`;
-const CLOUD_N = 420;
 const hash01 = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 function buildPad(md) {
   const L = md.L, P = padModel(md); let g = new THREE.Group(), holeMat, foot, stand = PAD_TOP + MOUNT_H, deckY = PAD_TOP, trenchD = 70;
@@ -416,12 +399,7 @@ function buildPad(md) {
     const postMat = mat('#6d6a64', 'metal'), rP = foot + 1.8;
     for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + k * Math.PI / 2; const p = box(2.4, MOUNT_H, 2.4, postMat); p.position.set(Math.cos(a) * rP, PAD_TOP, Math.sin(a) * rP); g.add(p); }
   }
-  // exhaust and steam billowing out of the flame trench (fixed to the pad, so it stays put as Earth turns)
-  const cg = new THREE.BufferGeometry();
-  cg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * CLOUD_N), 3)); cg.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(CLOUD_N), 1));
-  cg.setAttribute('aA', new THREE.BufferAttribute(new Float32Array(CLOUD_N), 1)); cg.setAttribute('aG', new THREE.BufferAttribute(new Float32Array(CLOUD_N), 1));
-  const cm = new THREE.ShaderMaterial({ vertexShader: GLSL_CLOUD_V, fragmentShader: GLSL_CLOUD_F, uniforms: { uPx: { value: 800 }, uCol: { value: new THREE.Color('#e8e4dc') }, uGlow: { value: new THREE.Color('#ffb15c') } }, transparent: true, depthWrite: false });
-  const cloud = new THREE.Points(cg, cm); cloud.frustumCulled = false; cloud.renderOrder = 4; g.add(cloud);
+  const cloud = buildPadCloud(); g.add(cloud); // fire, exhaust and steam billowing out of the flame trench (app/48_padcloud.js)
   g.scale.setScalar(0.001); g.userData = { site: LAUNCH_SITES[md.cfg.site], hole: holeMat, cloud, foot, stand, deckY, trenchD, animate: P && P.animate, block: P && P.block };
   R.scene.add(g); MV.pad = g;
 }
@@ -442,32 +420,10 @@ function updatePad(t) {
   const blast = te => { if (te < tIgn) return 0; if (te < t0) { const ig = padIgnition(md, te); return ig ? ig.f : 0; } return clamp(1 - altM(te) / fadeAlt, 0, 1); };
   const bNow = blast(t);
   g.userData.hole.color.setRGB(0.08 + 0.92 * bNow, 0.07 + 0.55 * bNow, 0.06 + 0.2 * bNow);
-  // sunlight on the cloud (night launches get a dim cloud lit orange by the flames)
-  const sunUp = vdot(vunit(vscale(E, -1)), vunit(r)); const day = clamp(0.2 + sunUp * 3, 0.12, 1);
-  const cl = g.userData.cloud, A = cl.geometry.attributes, pos = A.position.array, size = A.aSize.array, al = A.aA.array, gl = A.aG.array;
-  cl.material.uniforms.uCol.value.setRGB(0.91 * day, 0.89 * day, 0.86 * day);
-  cl.material.uniforms.uPx.value = R.height / (2 * Math.tan(R.camera.fov * DEG / 2));
-  const span = (IG.t || 0) + 24, foot = g.userData.foot; let live = 0;
-  for (let i = 0; i < CLOUD_N; i++) {
-    const r1 = hash01(3 * i + 1), r2 = hash01(3 * i + 2), r3 = hash01(3 * i + 3);
-    const te = tIgn + (i / CLOUD_N) * span + r1 * 0.15, a = t - te; const k = a >= 0 ? blast(te) : 0;
-    if (k < 0.03 || a > 200) { al[i] = 0; continue; }
-    let x, y, z, sz; const kind = i % 5;
-    if (kind < 4) { // fire, then smoke and steam, blasting out of both ends of the flame trench
-      const side = kind % 2 ? 1 : -1, v0 = (45 + 40 * r2) * (0.35 + 0.65 * k) * (0.55 + 0.45 * sC), tau = 3.0;
-      const d = g.userData.trenchD + v0 * tau * (1 - Math.exp(-a / tau)) + 1.5 * a;
-      x = (r3 - 0.5) * (12 + 10 * a); z = side * d; y = 7 + (1.8 + 3 * r1) * a + 0.1 * a * a; sz = (20 + 9 * a + 14 * r2) * (0.45 + 0.55 * sC);
-      gl[i] = clamp(k * (1 - a / (1.2 + 0.8 * sC)), 0, 1) * 0.9;
-    } else { // steam from the water deluge, boiling up around the launch mount
-      const ang = r2 * TAU, rr = foot + 6 + 8 * r3 + 3 * a; x = Math.cos(ang) * rr; z = Math.sin(ang) * rr; y = g.userData.deckY + 2 + (4 + 4 * r1) * a; sz = (10 + 6 * a) * (0.5 + 0.5 * sC);
-      gl[i] = clamp(k * (1 - a / 1.2), 0, 1) * 0.5;
-    }
-    pos[3 * i] = x; pos[3 * i + 1] = y; pos[3 * i + 2] = z; size[i] = sz * 0.001;
-    al[i] = k * 0.8 * clamp(a / 0.4, 0, 1) * Math.exp(-a / 60); live++;
-  }
-  A.position.needsUpdate = true; A.aSize.needsUpdate = true; A.aA.needsUpdate = true; A.aG.needsUpdate = true;
-  cl.visible = live > 0;
+  const span = (IG.t || 0) + 24;
+  updatePadCloud(g, t, tIgn, span, blast, sC, md.L, sunUpAt(E, r));
 }
+const sunUpAt = (E, r) => vdot(vunit(vscale(E, -1)), vunit(r)); // the Sun's elevation (sine) at the pad
 function camDistTo(v) { return R.camera.position.distanceTo(v); }
 // local high-resolution patch of a planet's surface around a site; an elevation offset (e.g. a crater floor
 // below the Martian datum) blends smoothly back to the mean radius at the patch edge

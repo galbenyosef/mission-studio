@@ -281,6 +281,7 @@ function wearLivery(g, id) {
 // arm and the payloads; the built-in model until the scan arrives (or if it cannot be loaded).
 function buildOrbiter(flags = {}) {
   const fb = orbiterBuiltIn(flags), open = flags.bay === 'open';
+  fb.userData.wingtips = [[-11.9, 2.0, -0.3], [11.9, 2.0, -0.3]]; // the wing tips' trailing corners, for the vortex trails of the glide home (app/49_contrail.js)
   const g = detailPart('orbiter', 'body', fb, { extra: d => {
     const P = DETAIL.ready.orbiter, doors = {};
     for (const [k, side] of [['doorL', -1], ['doorR', 1]]) if (P[k]) { const n = P[k].clone(); if (open) n.rotation.y = side * SH_DOOR.open; d.add(n); doors[k] = n; }
