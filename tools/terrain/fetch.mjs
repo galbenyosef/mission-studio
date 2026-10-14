@@ -3,7 +3,7 @@
 // as a relief with water, streams and roads:
 //
 //   elevation  USGS 3DEP (the National Map's seamless 1/3-arc-second elevation, ~10 m), as a grid of heights
-//   water      USGS National Hydrography Dataset: the sea, lagoons, rivers, lakes and marsh as polygons, streams as lines
+//   water      U.S. Census Bureau TIGERweb hydrography: the sea, lagoons, rivers, lakes and marsh as polygons, streams as lines
 //   roads      U.S. Census Bureau TIGERweb: primary, secondary and local roads as lines
 //   land cover MRLC National Land Cover Database (NLCD): a grid of classes (scrub, wetland, sand, built-up, …)
 //
@@ -31,7 +31,7 @@ export const SITES = {
 };
 const N = 384; // grid cells across a site
 const DEM = 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage';
-const NHD = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer';
+const HYDRO = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Hydro/MapServer';
 const TIGER = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer';
 const NLCD_WMS = 'https://www.mrlc.gov/geoserver/mrlc_display/wms';
 // the NLCD legend: class code and its colour on the map (the WMS gives the colours; the classes come back from them)
@@ -48,7 +48,7 @@ async function get(url, what, kind = 'json') {
       if (kind === 'json') { const j = await r.json(); if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 200)); return j; }
       if (kind === 'text') return await r.text();
       const b = Buffer.from(await r.arrayBuffer()); if (b.length < 200) throw new Error('short reply: ' + b.toString('utf8').slice(0, 160)); return b;
-    } catch (e) { console.log(`  ${what}: ${e.message} (retry ${k + 1})`); await new Promise(f => setTimeout(f, 2500 * (k + 1))); }
+    } catch (e) { console.log(`  ${what}: ${e.message}${e.cause ? ' — ' + e.cause.message : ''} (retry ${k + 1})`); await new Promise(f => setTimeout(f, 2500 * (k + 1))); }
   }
   throw new Error(`could not fetch ${what}: ${url}`);
 }
@@ -75,7 +75,7 @@ async function elevation(S, F) {
 async function features(server, layer, F, fields, what) {
   const out = []; let off = 0;
   for (;;) {
-    const url = `${server}/${layer}/query?where=1%3D1&geometry=${F.bbox}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=${fields}&outSR=4326&returnGeometry=true&geometryPrecision=6&resultOffset=${off}&resultRecordCount=1000&f=json`;
+    const url = `${server}/${layer}/query?geometry=${F.bbox}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=${fields}&outSR=4326&returnGeometry=true&geometryPrecision=6&maxAllowableOffset=0.00002&resultOffset=${off}&resultRecordCount=500&f=json`;
     const j = await get(url, `${what} (from ${off})`);
     const fs = j.features || []; out.push(...fs); off += fs.length;
     if (!j.exceededTransferLimit || !fs.length) break;
@@ -148,16 +148,14 @@ function lines(feats, F, tol = 3) {
   }
   return out;
 }
-// ---- water: NHD areas (rivers, the sea), waterbodies (lakes, ponds, estuaries), flowlines (streams) ----
-const WATER_KIND = fc => { const t = Math.floor(fc / 100); return t === 445 ? 'sea' : t === 390 ? 'lake' : t === 460 ? 'river' : t === 466 ? 'swamp' : t === 436 ? 'reservoir' : t === 493 ? 'estuary' : t === 312 ? 'bay' : t === 403 ? 'inundation' : t === 361 ? 'playa' : t === 364 ? 'foreshore' : 'water'; };
+// ---- water: TIGER areal hydrography (the sea, bays, lakes, ponds, wide rivers, marsh) and linear hydrography (streams,
+// canals), by their MTFCC codes ----
+const WATER_KIND = c => ({ H2053: 'sea', H2051: 'bay', H2030: 'lake', H2040: 'reservoir', H2060: 'lake', H2081: 'playa', H3010: 'river', H3013: 'river', H3020: 'canal', H2025: 'swamp', H2041: 'swamp' }[c] || 'water');
 async function water(F) {
-  const area = await features(NHD, 9, F, 'ftype,fcode,gnis_name', 'water areas');
-  const body = await features(NHD, 12, F, 'ftype,fcode,gnis_name', 'waterbodies');
-  const flow = await features(NHD, 6, F, 'ftype,fcode,gnis_name', 'flowlines');
-  const polys = [...polygons(area, F), ...polygons(body, F)].map(p => ({ kind: WATER_KIND(p.a.fcode || p.a.FCODE || 0), name: p.a.gnis_name || p.a.GNIS_NAME || undefined, rings: p.rings }))
-    .filter(p => !['inundation', 'foreshore'].includes(p.kind));
-  const streams = lines(flow, F).filter(l => { const fc = l.a.fcode || l.a.FCODE || 0; return Math.floor(fc / 100) === 460 || Math.floor(fc / 100) === 336; }) // stream/river and canal/ditch centrelines
-    .map(l => ({ kind: Math.floor((l.a.fcode || l.a.FCODE || 0) / 100) === 336 ? 'canal' : 'stream', paths: l.paths }));
+  const area = await features(HYDRO, 1, F, 'MTFCC,NAME', 'water areas');
+  const flow = await features(HYDRO, 0, F, 'MTFCC,NAME', 'streams');
+  const polys = polygons(area, F).map(p => ({ kind: WATER_KIND(p.a.MTFCC), name: p.a.NAME || undefined, rings: p.rings }));
+  const streams = lines(flow, F).filter(l => /^H3/.test(l.a.MTFCC || '')).map(l => ({ kind: l.a.MTFCC === 'H3020' ? 'canal' : 'stream', paths: l.paths }));
   return { polys, streams };
 }
 // ---- roads: TIGERweb, the layers named Primary / Secondary / Local Roads ----
@@ -196,7 +194,7 @@ for (const [id, S] of Object.entries(SITES)) {
   console.log(`${id}: ${S.name}`);
   const F = frame(S);
   const site = { id, name: S.name, lat: S.lat, lon: S.lon, km: S.km, n: N, fetched: new Date().toISOString().slice(0, 10),
-    sources: ['USGS 3DEP elevation', 'USGS National Hydrography Dataset', 'U.S. Census Bureau TIGERweb', 'MRLC NLCD land cover'] };
+    sources: ['USGS 3DEP elevation', 'U.S. Census Bureau TIGERweb hydrography and roads', 'MRLC NLCD land cover'] };
   site.elev = await elevation(S, F);
   Object.assign(site, await water(F));
   site.roads = await roads(F);

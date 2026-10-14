@@ -19,8 +19,8 @@ node tools/terrain/fetch.mjs ksc          # one
 | In the file | From | Notes |
 |---|---|---|
 | `elev` | [USGS 3DEP](https://www.usgs.gov/3d-elevation-program) seamless 1/3 arc-second elevation, through the National Map's ImageServer | 384 × 384 heights, bilinear, as decimetres above `elev.base` (Uint16 LE, base64, rows from the south) |
-| `polys` | [USGS National Hydrography Dataset](https://www.usgs.gov/national-hydrography): areas (rivers, the sea) and waterbodies (lakes, ponds, estuaries, marsh) | polygons in local metres east/north of the centre, clipped to the square, simplified to 4 m; `kind` from the NHD feature type (sea, lake, river, swamp, reservoir, estuary, bay, playa) |
-| `streams` | NHD flowlines | stream and canal centrelines, clipped, simplified to 3 m |
+| `polys` | [U.S. Census Bureau TIGERweb](https://tigerweb.geo.census.gov/tigerwebmain/TIGERweb_main.html) areal hydrography | polygons in local metres east/north of the centre, clipped to the square, simplified to 4 m; `kind` from the MTFCC code (sea, bay, lake, reservoir, river, swamp, playa) |
+| `streams` | TIGERweb linear hydrography | stream and canal centrelines, clipped, simplified to 3 m |
 | `roads` | [U.S. Census Bureau TIGERweb](https://tigerweb.geo.census.gov/tigerwebmain/TIGERweb_main.html): primary, secondary and local roads | lines, simplified to 2 m, with the MTFCC code and name |
 | `cover` | [MRLC NLCD](https://www.mrlc.gov/) land cover, latest CONUS release, through the MRLC WMS | 384 × 384 NLCD class codes (Uint8, base64): 11 water, 21–24 developed, 31 barren, 41–43 forest, 52 shrub, 71 grass, 81–82 farmland, 90 woody wetland, 95 herbaceous wetland |
 
