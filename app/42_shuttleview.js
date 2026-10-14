@@ -135,7 +135,7 @@ function shuttleGround(c, s, t) {
 // The runway is drawn on the true sphere, SH_RWY_TOP above its elevation, while the surface patch under it is made of flat
 // facets that sag up to ~0.7 m below the sphere between their corners. Radius (km) of the drawn runway under a direction
 // in the planet's mesh frame, or null off the runway: what an orbiter standing on it rests on.
-const SH_RWY_TOP = 0.00003;
+const SH_RWY_TOP = 0.0006; // (60 cm: above the site's terrain too, app/43_terrain.js)
 function runwayRadius(body, dLoc) {
   const rw = SHV.rwy; if (!rw || body !== 'earth') return null;
   const b = R.bodies.earth, C = meshDir(rw.lat, rw.lon), { E, N } = meshEN(rw.lat, rw.lon), hd = rw.hdg * DEG;

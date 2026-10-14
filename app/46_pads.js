@@ -163,9 +163,8 @@ function padWire(g, a, b, sag) {
 // The ground around a pad: scrub and grass (a repeating mottled texture, 80 m to a tile) out to r, cut off at the coast
 // (o.sea: the bearing of the sea, degrees; o.shore: the shoreline's distance) with a beach before it, and the roads given
 // as strips [[e0, n0, e1, n1, width] …]. Without it the pad would stand on the globe's coarse texture (often sea there).
-function padGround(g, o = {}) {
-  const M = padMats(), R = o.r || 2200;
-  const tex = padGround.tex || (padGround.tex = stripeTex((c, w, h) => {
+function padGroundTex() {
+  return padGround.tex || (padGround.tex = stripeTex((c, w, h) => {
     // tileable value noise in five octaves (random lattices that wrap at the edges): scrub, grass and bare patches with no
     // regular pattern to repeat from tile to tile
     const rnd = mulberry32(5), v = new Float32Array(w * h);
@@ -181,6 +180,9 @@ function padGround(g, o = {}) {
     for (let i = 0; i < w * h; i++) { const n = clamp((v[i] - 0.5) * 1.6 + 0.5, 0, 1), o4 = 4 * i; img.data[o4] = 92 + 70 * n; img.data[o4 + 1] = 102 + 54 * n; img.data[o4 + 2] = 64 + 38 * n; img.data[o4 + 3] = 255; }
     c.putImageData(img, 0, 0);
   }, 256, 256));
+}
+function padGround(g, o = {}) {
+  const M = padMats(), R = o.r || 2200, tex = padGroundTex();
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   const sea = o.sea != null ? o.sea * DEG : null, se = sea != null ? Math.sin(sea) : 0, sn = sea != null ? Math.cos(sea) : 0, shore = o.shore || 1e9;
   // the land: the disc on this side of the shoreline, as rings of modest triangles (long thin ones lose depth precision
@@ -201,7 +203,7 @@ function padGround(g, o = {}) {
       diffuseColor.rgb *= 0.45 + 0.55 * (pgA + pgB) / (2.0 * 0.2);`); };
     m.customProgramCacheKey = () => 'padGround';
   }
-  const land = new THREE.Mesh(geo, padGround.mat); g.add(land);
+  const land = new THREE.Mesh(geo, padGround.mat); land.userData.padGround = true; g.add(land);
   const k = padKit();
   // strips on the land (the beach along the shoreline, the roads), cut into pieces of about 80 m for the same reason
   const strip = (m, e0, n0, e1, n1, w, y) => { const dx = e1 - e0, dn = n1 - n0, l = Math.hypot(dx, dn), px = -dn / l * w / 2, pn = dx / l * w / 2, ns = Math.max(1, Math.ceil(l / 80));
@@ -210,7 +212,7 @@ function padGround(g, o = {}) {
   if (sea != null) { const L = Math.sqrt(Math.max(R * R - shore * shore, 0)), b = 45, c = shore - b / 2; // the beach along the shoreline
     strip(M.sand, c * se + sn * L, c * sn - se * L, c * se - sn * L, c * sn + se * L, b, 0.07); }
   for (const [e0, n0, e1, n1, w] of o.roads || []) strip(o.roadMat || M.rock, e0, n0, e1, n1, w, 0.1);
-  const built = new THREE.Group(); k.build(built); g.add(built);
+  const built = new THREE.Group(); k.build(built); built.userData.padGround = true; g.add(built); // (hidden when the site's terrain is drawn, app/43_terrain.js)
 }
 // Launch Complex 39's raised pad: a flat concrete top 99 m east–west by 119 m north–south, h above the ground on a mound
 // sloping out at 1 in 2.5 (grassed); the flame trench, 17.7 m wide with its floor at ground level, cut through it north–
