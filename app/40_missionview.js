@@ -14,7 +14,7 @@ function clearMissionView() {
   for (const tr of MV.trails) tr.dispose();
   for (const cp of MV.caps) { cp.parent && cp.parent.remove(cp); cp.geometry.dispose(); }
   if (MV.pad) { R.scene.remove(MV.pad); disposeTree(MV.pad); MV.pad = null; }
-  disposeExhaust(); disposeRunway(); disposeSiteImages();
+  disposeExhaust(); disposeRunway();
   MV.crafts = []; MV.trails = []; MV.caps = []; MV.capInfo = [];
 }
 function setupMissionView(md) {
@@ -39,7 +39,6 @@ function setupMissionView(md) {
   buildSurfaceCaps(md);
   buildTracks(md);
   buildPad(md);
-  buildSiteImages(md); // the real ground round the site, where its photograph is in assets/ (app/43_sites.js)
   buildExhaust(md); // the trail through the air after liftoff (app/47_exhaust.js)
   MV.frameBuilt = null;
 }
