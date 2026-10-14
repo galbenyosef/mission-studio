@@ -478,7 +478,7 @@ function buildInterstage(lkey) {
 function finishModel(g) {
   const len = g.userData.len || 1; const yc = g.userData.yc0 ?? len * 0.45; // yc0: models whose origin is their reference point (the orbiter's, the ISS's)
   const wrap = new THREE.Group(); g.position.y = -yc; wrap.add(g);
-  wrap.userData = { ...g.userData, yc, wrapped: true };
+  wrap.userData = { ...g.userData, yc, wrapped: true }; delete wrap.userData.wingtips; // (the wing tips are given in the model's own frame, 'yc' below the wrapper's: left to the model's node, app/49_contrail.js)
   wrap.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(wrap); const sz = new THREE.Vector3(); bb.getSize(sz);
   wrap.userData.sizeM = Math.max(sz.x, sz.y, sz.z, 1); // largest dimension in metres (solar arrays included)
   wrap.userData.bbox = { w: sz.x, h: sz.y, d: sz.z };

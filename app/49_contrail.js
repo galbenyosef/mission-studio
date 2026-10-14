@@ -48,9 +48,14 @@ function contrailInit(c) {
   c.ctr = tr; return tr;
 }
 function contrailDispose(c) { const tr = c.ctr; if (!tr) return; R.scene.remove(tr.mesh); tr.mesh.geometry.dispose(); tr.mesh.material.dispose(); c.ctr = null; }
+// the node that carries the tips (the model's own, below finishModel's wrapper, so the tips are read in the model's frame)
+function ctrTipNode(model) {
+  const u = model.userData; if (u.ctrTip === undefined) { u.ctrTip = null; model.traverse(n => { if (!u.ctrTip && n.userData && n.userData.wingtips) u.ctrTip = n; }); }
+  return u.ctrTip;
+}
 // how strongly the tips condense now: the air's density and humidity, and the lift the wings make (the angle of attack)
 function contrailStrength(c, s, t, cfgL, model) {
-  if (!model.userData.wingtips || !s || s.ref !== 'earth' || s.surface || !(cfgL && cfgL.key === 'sc')) return 0;
+  if (!ctrTipNode(model) || !s || s.ref !== 'earth' || s.surface || !(cfgL && cfgL.key === 'sc')) return 0;
   const ex = s.extra || {}; if (!(ex.q > 1500) || ex.alpha == null) return 0;
   const h = (ex.alt != null ? ex.alt : vnorm(s.r) - BODIES.earth.R), humid = CTR_HUMID[MV.md.cfg.runway] ?? 0.6;
   const dens = 1 - smoothstep((h - 1.5) / 9), lift = smoothstep((ex.alpha - 4) / 6), q = smoothstep((ex.q - 1500) / 4000);
@@ -64,7 +69,7 @@ function updateContrails(c, s, t, cfgL, model) {
   if (jump) { tr.n = 0; tr.head = 0; } // a leap in time: the old threads are long gone
   bodyQuat('earth', t, _ctrQ); const E = helio('earth', t).r, O = R.O;
   if (k > 0 && t !== tr.lastT && !(MV.rate > 30)) { // a sample at each tip, Earth-fixed
-    if (tr.tipKey !== model) { tr.tipNode = null; model.traverse(n => { if (!tr.tipNode && n.userData && n.userData.wingtips) tr.tipNode = n; }); tr.tipKey = model; }
+    if (tr.tipKey !== model) { tr.tipNode = ctrTipNode(model); tr.tipKey = model; }
     if (tr.tipNode) {
       const i = tr.head; _ctrC.copy(_ctrQ).invert();
       for (let side = 0; side < 2; side++) {
