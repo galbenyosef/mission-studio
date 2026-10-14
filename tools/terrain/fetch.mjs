@@ -43,7 +43,7 @@ const DEG = Math.PI / 180;
 async function get(url, what, kind = 'json') {
   for (let k = 0; k < 4; k++) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'mission-studio terrain fetch (github.com/sean-lab/mission-studio)' } });
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) mission-studio-terrain/1.0', Accept: kind === 'json' ? 'application/json' : '*/*' } });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       if (kind === 'json') { const txt = await r.text(); let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('not JSON: ' + txt.replace(/\s+/g, ' ').slice(0, 160)); } if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 200)); return j; }
       if (kind === 'text') return await r.text();
@@ -55,7 +55,7 @@ async function get(url, what, kind = 'json') {
 // the site's square: half-widths in degrees, and the map from lon/lat to local metres
 function frame(S) {
   const mPerLat = 110574, mPerLon = 111320 * Math.cos(S.lat * DEG), h = S.km * 500;
-  return { dLat: h / mPerLat, dLon: h / mPerLon, h, toM: ([lon, lat]) => [(lon - S.lon) * mPerLon, (lat - S.lat) * mPerLat], bbox: `${S.lon - h / mPerLon},${S.lat - h / mPerLat},${S.lon + h / mPerLon},${S.lat + h / mPerLat}` };
+  return { dLat: h / mPerLat, dLon: h / mPerLon, h, toM: ([lon, lat]) => [(lon - S.lon) * mPerLon, (lat - S.lat) * mPerLat], bbox: [S.lon - h / mPerLon, S.lat - h / mPerLat, S.lon + h / mPerLon, S.lat + h / mPerLat].map(v => v.toFixed(5)).join(',') };
 }
 // ---- elevation ----
 async function elevation(S, F) {
