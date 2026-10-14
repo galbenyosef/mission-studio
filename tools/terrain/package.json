@@ -1,0 +1,7 @@
+{
+  "name": "mission-studio-terrain",
+  "private": true,
+  "type": "module",
+  "description": "Fetches the ground round the launch and landing sites (USGS, Census, MRLC) into assets/terrain_<id>.json",
+  "dependencies": { "geotiff": "^2.1.3", "sharp": "^0.34.2" }
+}
