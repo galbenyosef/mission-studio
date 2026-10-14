@@ -370,3 +370,16 @@ legend { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; colo
 }
 .idle #left, .idle #right, .idle #bottom, .idle #vecLabels, .idle #minimap { display: none; }
 .idle #btnHide, .idle #btnTele, .idle #btnSide { display: none; }
+/* tall screens (a phone or tablet held upright, a 9:16 recording): the view on top, the panels side by side in a band
+   below it, the map small in the top corner, so the craft has the whole width */
+@media (max-aspect-ratio: 3/4) and (min-width: 700px) {
+  #left, #right { top: auto; bottom: calc(var(--bottomH, 128px) + 8px); height: 34vh; width: calc(50% - 14px); }
+  #left { left: 8px; }
+  #right { right: 8px; }
+  #minimap { left: auto; right: 8px; top: 54px; bottom: auto; width: 220px; }
+  #mmc { height: 150px; }
+  .mm-tabs, .mm-info { display: none; }
+  #caption { bottom: calc(var(--bottomH, 128px) + 34vh + 22px); width: min(640px, calc(100% - 32px)); }
+  #countdown { top: 96px; }
+  #prop { max-width: calc(100vw - 260px); }
+}

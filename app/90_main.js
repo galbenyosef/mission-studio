@@ -1,13 +1,13 @@
 // ============================================================================
 // Main: state, playback & auto time-warp, frame loop, UI wiring, boot.
 // ============================================================================
-const STATE = { t: 0, playing: false, rate: 1, rateTarget: 1, auto: true, last: performance.now(), dwellUntil: 0, lastCaptionEv: -1, teleAt: 0, idle: true, idleT0: 0, idleStart: performance.now(), hudAt: 0 };
+const STATE = { filming: false, filmMs: 0, filmDt: 1 / 30, t: 0, playing: false, rate: 1, rateTarget: 1, auto: true, last: performance.now(), dwellUntil: 0, lastCaptionEv: -1, teleAt: 0, idle: true, idleT0: 0, idleStart: performance.now(), hudAt: 0 };
 const WARPS = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 21600, 86400, 259200, 864000, 2592000];
 function setTime(t) {
   const md = MV.md; if (!md) return; STATE.t = clamp(t, md.tStart, md.tEnd);
   for (const c of MV.crafts) c.qInit = false; PANEL.curEv = -2; STATE.lastCaptionEv = -1;
 }
-function syncPlayUI() { $('#bPlay').textContent = STATE.playing ? '❚❚' : '▶'; $('#autoWarp').checked = STATE.auto; }
+function syncPlayUI() { $('#bPlay').textContent = STATE.playing || STATE.filming ? '❚❚' : '▶'; $('#autoWarp').checked = STATE.auto; }
 function fmtRate(r) { if (r < 1.5) return '1×'; if (r < 100) return Math.round(r) + '×'; if (r < 3600) return fx(r / 60, r < 600 ? 1 : 0) + ' min/s'; if (r < 86400) return fx(r / 3600, r < 36000 ? 1 : 0) + ' h/s'; return fx(r / 86400, r < 864000 ? 1 : 0) + ' d/s'; }
 function stepWarp(dir) {
   STATE.auto = false; let i = WARPS.findIndex(w => w >= STATE.rate * 0.999); if (i < 0) i = WARPS.length - 1;
@@ -58,13 +58,13 @@ function crossEvents(t0, t1) {
   if (last >= 0 && last !== STATE.lastCaptionEv) {
     STATE.lastCaptionEv = last; const e = md.events[last];
     if (!['heat', 'gload', 'ascent', 'los', 'terminal', 'approach'].includes(e.kind) || STATE.rate < 20) showCaption(e);
-    STATE.dwellUntil = performance.now() + 2600;
+    STATE.dwellUntil = clockMs() + 2600;
   }
 }
 // ---------------- frame loop ----------------
 function frame(now) {
   requestAnimationFrame(frame);
-  const realDt = clamp((now - STATE.last) / 1000, 0, 0.1); STATE.last = now; MV.realDt = realDt;
+  const realDt = STATE.filming ? STATE.filmDt : clamp((now - STATE.last) / 1000, 0, 0.1); STATE.last = now; MV.realDt = realDt;
   if (MV.md && STATE.playing) {
     if (STATE.auto) autoWarp(realDt);
     const md = MV.md; const t1 = clamp(STATE.t + realDt * STATE.rate, md.tStart, md.tEnd);
@@ -112,7 +112,7 @@ function renderFrame(forCapture) {
   updateAudio(t, tele);
   updateLabels(t, focus);
   if (md && MV.layers.minimap !== false) drawMinimap(t, forCapture);
-  const bc = R.bgCam; bc.quaternion.copy(R.camera.quaternion); if (bc.fov !== R.camera.fov || bc.aspect !== R.camera.aspect) { bc.fov = R.camera.fov; bc.aspect = R.camera.aspect; bc.updateProjectionMatrix(); }
+  const bc = R.bgCam; bc.quaternion.copy(R.camera.quaternion); if (bc.fov !== R.camera.fov || bc.aspect !== R.camera.aspect || bc.userData.shift !== VSHIFT) { bc.fov = R.camera.fov; bc.aspect = R.camera.aspect; bc.userData.shift = VSHIFT; if (VSHIFT) bc.setViewOffset(R.width, R.height, 0, VSHIFT, R.width, R.height); else bc.clearViewOffset(); bc.updateProjectionMatrix(); }
   const film = filmBegin(); // the film look: draw into its target, then finish onto the screen (app/25_film.js)
   R.renderer.clear(); R.renderer.render(R.bgScene, bc); R.renderer.clearDepth(); R.renderer.render(R.scene, R.camera);
   if (film) filmEnd();
@@ -143,7 +143,7 @@ function updateHUD(t) {
   if (md) {
     const met = fMET(t - md.M.t0); if ($('#met').textContent !== met) $('#met').textContent = met;
     const utc = fmtUTC(t) + ' UTC'; if ($('#utc').textContent !== utc) $('#utc').textContent = utc;
-    const w = STATE.playing ? fmtRate(STATE.rate) : 'paused'; if ($('#warp').textContent !== w) $('#warp').textContent = w;
+    const w = STATE.playing || STATE.filming ? fmtRate(STATE.rate) : 'paused'; if ($('#warp').textContent !== w) $('#warp').textContent = w;
     drawTimeline(t);
     if (MV.layers.burnin) { const ph = md.phaseAt(t); const ps = PSTAT.cur; $('#burnin').textContent = `${md.M.name}\n${met}   ${fmtUTC(t)} UTC\n${Math.round(CAM.lens)} mm · ${CAM.aspect ? CAM.aspect + ':1' : 'full'} · ${ph ? ph.name : ''}${ps ? ' · ' + (ps.k === 'burn' ? 'ENGINE ON' : ps.l) : ''}`; }
   } else { const utc = fmtUTC(t, false) + ' UTC'; if ($('#utc').textContent !== utc) $('#utc').textContent = utc; }

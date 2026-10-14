@@ -22,7 +22,7 @@ function setTarget(id, opts = {}) {
   let dist = CAM.dist;
   if (rT > 0) dist = Math.max(dist, rT * 3.2); else if (c && c.cur) dist = Math.max(0.03, (c.cur.userData.len || 10) * 0.001 * 3.5);
   if (opts.dist) dist = opts.dist;
-  if (from) CAM.trans = { fromId: prevId, fromP: from, t0: performance.now(), dur: 1100, distFrom: CAM.dist, distTo: dist };
+  if (from) CAM.trans = { fromId: prevId, fromP: from, t0: clockMs(), dur: 1100, distFrom: CAM.dist, distTo: dist };
   CAM.dist = dist;
   if (CAM.mode === 'ground' && id.startsWith('body:')) setMode('orbit');
   if (CAM.mode === 'auto' && !opts.keepMode) setMode(id.startsWith('body:') ? 'orbit' : 'chase');
@@ -39,6 +39,15 @@ function setMode(m) {
   if (m === 'lookat') { CAM.az = 12 * DEG; CAM.el = 6 * DEG; }
   applyLens(); syncCamUI();
 }
+// The point the camera looks at sits at the middle of the part of the screen the panels leave free, not of the whole
+// screen: on a tall screen the panels fill the bottom third, and the craft would otherwise sit just above them. The
+// frustum is shifted (an off-centre projection), so nothing else changes.
+let VSHIFT = 0;
+function applyViewShift() {
+  const W = R.width, H = R.height, b = screenBand(), d = Math.round(H / 2 - (b.top + b.bot) / 2);
+  if (Math.abs(d) < 4) { if (VSHIFT) { R.camera.clearViewOffset(); VSHIFT = 0; } return; }
+  if (d !== VSHIFT) { R.camera.setViewOffset(W, H, 0, d, W, H); VSHIFT = d; }
+}
 function frameRect() {
   const W = R.width, Hh = R.height, A = CAM.aspect;
   if (!A) return { x: 0, y: 0, w: W, h: Hh };
@@ -49,7 +58,7 @@ function applyLens() {
   const fr = frameRect();
   const tanH = 18 / CAM.lens; // 36 mm wide full-frame sensor
   const tanV = tanH * R.height / fr.w;
-  R.camera.fov = 2 * Math.atan(tanV) * RAD; R.camera.aspect = R.width / R.height; R.camera.updateProjectionMatrix();
+  R.camera.fov = 2 * Math.atan(tanV) * RAD; R.camera.aspect = R.width / R.height; applyViewShift(); R.camera.updateProjectionMatrix();
   R.pxPerRad = R.height / (2 * tanV);
   const lb = (id, css) => { $(id).style.cssText = css; };
   lb('#lbT', `left:0;right:0;top:0;height:${fr.y}px`); lb('#lbB', `left:0;right:0;bottom:0;height:${R.height - fr.y - fr.h}px`);
@@ -97,14 +106,15 @@ function keepAboveGround(P, off, t) {
 // the top on phones. The card's place is remembered after it hides, so the framing holds steady through liftoff.
 const BAND = { at: 0, W: 0, H: 0, v: null, card: null, cardKey: '' };
 function screenBand() {
-  const now = performance.now(), W = R.width, H = R.height;
+  const now = clockMs(), W = R.width, H = R.height;
   if (BAND.v && now - BAND.at < 500 && BAND.W === W && BAND.H === H) return BAND.v;
   const fr = frameRect(), cx = W / 2, half = clamp(W * 0.12, 60, 110), clean = $('#app').classList.contains('hide-ui');
   const rectOf = sel => { const el = $(sel); if (!el || el.hidden) return null; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.right > cx - half && r.left < cx + half ? r : null; };
   let top = fr.y, bot = fr.y + fr.h, card = null;
   if (!clean) {
     top = Math.max(top, 84); // the top bar (48 px) and the propulsion pill under it (shown from liftoff on)
-    for (const sel of ['#bottom', '#minimap']) { const r = rectOf(sel); if (r) bot = Math.min(bot, r.top); }
+    for (const sel of ['#bottom', '#minimap', '#left', '#right']) { const r = rectOf(sel); if (r) bot = Math.min(bot, r.top); } // (the panels only on a tall screen, where they sit under the view)
+    { const cap = $('#caption'); if (cap && !cap.classList.contains('fade')) { const r = rectOf('#caption'); if (r && r.top > top + 0.4 * (bot - top)) bot = Math.min(bot, r.top - 6); } } // the event caption, so the craft is framed above it
     const key = W + 'x' + H; card = rectOf('#countdown');
     if (card) { BAND.card = { top: card.top, bottom: card.bottom }; BAND.cardKey = key; }
     else card = BAND.cardKey === key ? BAND.card : H <= 520 ? null : W <= 860 ? { top: 96, bottom: 270 } : { top: 0.6 * H - 78, bottom: 0.6 * H + 78 }; // (on short screens the card sits at the side)
@@ -118,7 +128,7 @@ function screenBand() {
 // camera distance and aim height (km above the base point) that put a vertical column — from the base point up to zTop km —
 // exactly between screen rows yT and yB, for a chase camera at elevation el looking at the aim point (pinhole projection)
 function fitColumn(zTop, el, yT, yB) {
-  const k = R.pxPerRad, Hc = R.height / 2, ce = Math.cos(el), se = Math.sin(el);
+  const k = R.pxPerRad, Hc = R.height / 2 - VSHIFT, ce = Math.cos(el), se = Math.sin(el); // (the optical centre, shifted on a tall screen)
   const p1 = Hc - yT, p2 = Hc - yB, q1 = ce * k + p1 * se, q2 = ce * k + p2 * se; // px above the centre (negative below)
   const den = p1 / q1 - p2 / q2;
   if (!(zTop > 0) || !(den > 1e-6) || !(q1 > 0) || !(q2 > 0)) return null;
@@ -267,7 +277,7 @@ function shuttleShot(c, t, s, ex, cfgL, L) {
 }
 function directorUpdate(t, realDt) {
   const md = MV.md; const c = activeCraft(t); if (!c) return;
-  const now = performance.now();
+  const now = clockMs();
   const jump = DIR.lastT == null || Math.abs(t - DIR.lastT) > Math.max(120, (STATE.playing ? STATE.rate : 1) * 0.6);
   DIR.lastT = t;
   if (CAM.target !== 'obj:' + c.o.id) { if (jump) { CAM.target = 'obj:' + c.o.id; CAM.trans = null; syncCamUI(); } else setTarget('obj:' + c.o.id, { force: true, keepMode: true }); }
@@ -301,13 +311,14 @@ function directorUpdate(t, realDt) {
 }
 function updateCamera(t, realDt) {
   const cam = R.camera;
+  { const d0 = VSHIFT; applyViewShift(); if (VSHIFT !== d0) cam.updateProjectionMatrix(); }
   if (CAM.mode === 'auto' && MV.md) directorUpdate(t, realDt);
   let P = targetPos(CAM.target, t);
   if (!P) P = targetPos('obj:ship', t) || helio('earth', t).r; // target not in flight yet (e.g. a lander still docked): follow the ship meanwhile
   // transition between targets
   let dist = CAM.dist;
   if (CAM.trans) {
-    const f = clamp((performance.now() - CAM.trans.t0) / CAM.trans.dur, 0, 1); const e = f * f * (3 - 2 * f);
+    const f = clamp((clockMs() - CAM.trans.t0) / CAM.trans.dur, 0, 1); const e = f * f * (3 - 2 * f);
     const from = targetPos(CAM.trans.fromId, t) || CAM.trans.fromP;
     P = vlerp(from, P, e); dist = Math.exp(Math.log(CAM.trans.distFrom) + (Math.log(CAM.trans.distTo) - Math.log(CAM.trans.distFrom)) * e);
     if (f >= 1) CAM.trans = null;
@@ -332,7 +343,7 @@ function updateCamera(t, realDt) {
   if (CAM.mode === 'auto' && MV.md && DIR.prm) {
     const pose = poseFor(DIR.prm.mode, DIR.prm, P, t); setPose(pose);
     if (DIR.blend) {
-      const f = smoothstep((performance.now() - DIR.blend.t0) / DIR.blend.dur);
+      const f = smoothstep((clockMs() - DIR.blend.t0) / DIR.blend.dur);
       if (f >= 1) DIR.blend = null;
       else {
         const pT = cam.position.clone(), qT = cam.quaternion.clone();

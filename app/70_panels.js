@@ -168,9 +168,9 @@ function showCaption(e) {
   if (!MV.layers.captions) return;
   const el = $('#caption'); el.querySelector('.cap-name').textContent = e.name;
   let d = e.desc || ''; const sentences = d.split(/(?<=[.!?”])\s+/); d = sentences.slice(0, 2).join(' ');
-  el.querySelector('.cap-desc').textContent = d; el.classList.remove('fade'); CAP.until = performance.now() + clamp(3500 + d.length * 45, 4000, 11000); CAP.ev = e;
+  el.querySelector('.cap-desc').textContent = d; el.classList.remove('fade'); CAP.until = clockMs() + clamp(3500 + d.length * 45, 4000, 11000); CAP.ev = e;
 }
-function updateCaption() { if (CAP.until && performance.now() > CAP.until) { $('#caption').classList.add('fade'); CAP.until = 0; } }
+function updateCaption() { if (CAP.until && clockMs() > CAP.until) { $('#caption').classList.add('fade'); CAP.until = 0; } }
 // ---------------- storyboard ----------------
 const SHOTS = { list: [], key: '' };
 function shotsKey() { return 'mstudio-shots-' + (MV.md ? (MV.md.scn ? MV.md.scn.id : 'custom') : 'none'); }
