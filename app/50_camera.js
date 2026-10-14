@@ -146,7 +146,13 @@ function poseFor(mode, prm, P, t) {
   }
   if (mode === 'from') { // a camera on another craft (the station's windows), looking at the target
     const fc = prm.from && craftById(prm.from.slice(4));
-    if (fc && fc.P && fc.s) { const F = lvlh(fc.rD || fc.s.r, fc.vD || fc.s.v), off = prm.off || [0, 0, 0], pos = vadd(vsub(fc.P, P), fromLvlh(F, vscale(off, 0.001)));
+    if (fc && fc.P && fc.s) { const F = lvlh(fc.rD || fc.s.r, fc.vD || fc.s.v), off = prm.off || [0, 0, 0]; let pos = vadd(vsub(fc.P, P), fromLvlh(F, vscale(off, 0.001)));
+      if ((prm.fromAz || prm.fromEl || (prm.zoomK && prm.zoomK !== 1)) && c && c.s) { // dragged or zoomed: the camera leaves the window and goes round the craft, from where it was
+        const rr = c.rD || c.s.r, vv0 = c.vD || c.s.v, up = vunit(rr); let vh = vsub(vv0, vscale(up, vdot(vv0, up))); if (vnorm(vh) < 1e-6) vh = vperp(up); const e1 = vunit(vh), e3 = up, e2 = vcross(e3, e1);
+        const d = vnorm(pos) * (prm.zoomK || 1), az0 = Math.atan2(vdot(pos, e2), vdot(pos, e1)), el0 = Math.asin(clamp(vdot(pos, e3) / d, -1, 1)), az = az0 + prm.fromAz, el = clamp(el0 + prm.fromEl, -1.5, 1.5);
+        pos = vadd(vadd(vscale(e1, d * Math.cos(el) * Math.cos(az)), vscale(e2, d * Math.cos(el) * Math.sin(az))), vscale(e3, d * Math.sin(el)));
+        return { pos, up: e3, look: [0, 0, 0], center: true, basis: [e1, e2, e3] };
+      }
       return { pos, up: Math.abs(vdot(vunit(pos), F.z)) > 0.85 ? F.x : F.z, look: [0, 0, 0], center: false }; } // looking straight down: keep the direction of flight up the frame
     mode = 'chase';
   }
@@ -287,7 +293,7 @@ function directorUpdate(t, realDt) {
     const outA = Math.max(Math.abs(az) - aL, 0) / 0.25, outE = Math.max(Math.abs(el) - eL, 0) / 0.25;
     centreK = smoothstep(Math.max(outA, outE));
   } else { az = shot.az + DIR.offAz + drift; el = clamp(shot.el + DIR.offEl, -1.5, 1.5); }
-  DIR.prm = { mode: shot.mode, look: shot.look, from: shot.from, off: shot.off, az, el, dist: DIR.dist, aim, centreK };
+  DIR.prm = { mode: shot.mode, look: shot.look, from: shot.from, off: shot.off, az, el, dist: DIR.dist, aim, centreK, fromAz: shot.mode === 'from' ? DIR.offAz : 0, fromEl: shot.mode === 'from' ? DIR.offEl : 0, zoomK: DIR.zoomK };
   DIR.shot = shot;
   const lens = DIR.lensUser || shot.lens;
   if (Math.abs(CAM.lens - lens) > 0.5) { CAM.lens = jump ? lens : Math.exp(Math.log(CAM.lens) + (Math.log(lens) - Math.log(CAM.lens)) * Math.min(1, realDt * 2)); applyLens(); syncCamUI(); }

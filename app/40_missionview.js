@@ -63,7 +63,7 @@ function craftState(c, t) {
 function cfgAt(c, t) { const x = c.o.configAt(t); if (x) return x.label; return c.o.configs.length ? c.o.configs[0].label : null; }
 
 // ---------------- crafts ----------------
-const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _axTumble = new THREE.Vector3(0.3, 0.2, 1).normalize();
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _vDock = new THREE.Vector3(), _axTumble = new THREE.Vector3(0.3, 0.2, 1).normalize();
 const _qHalfY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 function basisQuat(nose, upRef, q) {
   const Y = new THREE.Vector3(nose[0], nose[1], nose[2]).normalize();
@@ -220,6 +220,7 @@ function computeCraft(c, t) {
 function updateCraft(c, t, camPos) {
   const s = c.s;
   if (!s) { c.node.visible = false; return; }
+  if (c.upT === t) return; c.upT = t; // (already done this frame: a docked craft updates the station it hangs on first)
   const P = c.P;
   const O = R.O; c.node.position.set(P[0] - O[0], P[1] - O[1], P[2] - O[2]); c.node.visible = true;
   const cfgL = cfgAt(c, t);
@@ -238,8 +239,21 @@ function updateCraft(c, t, camPos) {
   // inertial space lets the model trail the planet's spin, and under a fast time-warp (a frame can be most of a sol)
   // a lander standing still would lean and tumble end over end.
   if (!jump && s.surface && c.qGround === s.ref && t !== c.lastT) { bodyQuat(s.ref, c.lastT, _q2).invert(); c.q.premultiply(_q2).premultiply(bodyQuat(s.ref, t, _q2)); }
-  if (jump) c.q.copy(_q1); else c.q.slerp(_q1, 1 - Math.exp(-realDt * 5));
+  if (jump) c.q.copy(_q1); else c.q.slerp(_q1, 1 - Math.exp(-realDt * 5 * Math.max(1, (MV.rate || 1) / 20))); // (quicker under a time-warp, or the lag behind an orbit's turning frame would show as a lean)
   c.qInit = true; c.lastT = t; c.qGround = s.surface ? s.ref : null;
+  (c.qTarget || (c.qTarget = new THREE.Quaternion())).copy(_q1);
+  // Docked to the station: the two are one rigid body. Each craft's drawn attitude eases toward its target, and under a
+  // fast time-warp the lag would turn each about its own centre, opening the docking interface; so the docked craft takes
+  // the station's drawn attitude and hangs off its drawn position at the fixed relative pose.
+  const host = cfgL && cfgL.docked && craftById('iss');
+  if (host && host !== c && host.s && host.P) {
+    if (host.upT !== t) updateCraft(host, t, camPos);
+    if (host.qTarget) {
+      _q2.copy(host.qTarget).invert(); const d = vsub(P, host.P); _vDock.set(d[0], d[1], d[2]).applyQuaternion(_q2).applyQuaternion(host.q);
+      c.node.position.copy(host.node.position).add(_vDock);
+      c.q.copy(host.q).multiply(_q2.multiply(c.qTarget));
+    }
+  }
   c.node.quaternion.copy(c.q);
   // scale: metres → km; optionally enlarge distant craft
   const dist = Math.max(1e-9, camPos.distanceTo(c.node.position));
