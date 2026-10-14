@@ -45,7 +45,7 @@ async function get(url, what, kind = 'json') {
     try {
       const r = await fetch(url, { headers: { 'User-Agent': 'mission-studio terrain fetch (github.com/sean-lab/mission-studio)' } });
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      if (kind === 'json') { const j = await r.json(); if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 200)); return j; }
+      if (kind === 'json') { const txt = await r.text(); let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('not JSON: ' + txt.replace(/\s+/g, ' ').slice(0, 160)); } if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 200)); return j; }
       if (kind === 'text') return await r.text();
       const b = Buffer.from(await r.arrayBuffer()); if (b.length < 200) throw new Error('short reply: ' + b.toString('utf8').slice(0, 160)); return b;
     } catch (e) { console.log(`  ${what}: ${e.message}${e.cause ? ' — ' + e.cause.message : ''} (retry ${k + 1})`); await new Promise(f => setTimeout(f, 2500 * (k + 1))); }
@@ -71,14 +71,14 @@ async function elevation(S, F) {
   console.log(`  elevation ${lo.toFixed(1)}…${hi.toFixed(1)} m`);
   return { base, min: lo, max: hi, data: Buffer.from(q.buffer).toString('base64') };
 }
-// ---- ArcGIS feature queries (esri JSON: rings for polygons, paths for lines), paged ----
+// ---- ArcGIS feature queries (esri JSON: rings for polygons, paths for lines): the ids in the square first, then the
+// features in small batches by id (a bbox query with geometry can answer with an error page when the reply is large) ----
 async function features(server, layer, F, fields, what) {
-  const out = []; let off = 0;
-  for (;;) {
-    const url = `${server}/${layer}/query?geometry=${F.bbox}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=${fields}&outSR=4326&returnGeometry=true&geometryPrecision=6&maxAllowableOffset=0.00002&resultOffset=${off}&resultRecordCount=500&f=json`;
-    const j = await get(url, `${what} (from ${off})`);
-    const fs = j.features || []; out.push(...fs); off += fs.length;
-    if (!j.exceededTransferLimit || !fs.length) break;
+  const ids = (await get(`${server}/${layer}/query?geometry=${F.bbox}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&returnIdsOnly=true&f=json`, `${what} (ids)`)).objectIds || [];
+  const out = [], B = 25;
+  for (let i = 0; i < ids.length; i += B) {
+    const j = await get(`${server}/${layer}/query?objectIds=${ids.slice(i, i + B).join(',')}&outFields=${fields}&outSR=4326&returnGeometry=true&geometryPrecision=6&maxAllowableOffset=0.00002&f=json`, `${what} (${i + 1}–${Math.min(i + B, ids.length)} of ${ids.length})`);
+    out.push(...(j.features || []));
   }
   console.log(`  ${what}: ${out.length} features`);
   return out;
