@@ -172,6 +172,7 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 - **지구 지도:** 지상은 NASA 지구관측소의 [블루 마블: 넥스트 제너레이션](https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/)(2004년 4월, Reto Stöckli)이에요. 지형과 바다는 그 GEBCO_08 지형·수심도에서 가져왔어요. 야경은 NASA의 블랙 마블 2016(수오미 NPP VIIRS), 구름은 [Solar System Scope](https://www.solarsystemscope.com/textures/)(CC BY 4.0)예요. `tools/textures`로 손봤어요.
 - **달 지도:** NASA 과학 시각화 스튜디오의 [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720)(Ernie Wright)예요. 달 정찰 궤도선(LRO)의 LROC 컬러 모자이크와 LOLA 고도 자료로 만들었어요.
 - **화성 지도:** 색은 [Solar System Scope](https://www.solarsystemscope.com/textures/)(CC BY 4.0)에서 가져와 채도를 조금 낮췄어요. 지형은 마스 글로벌 서베이어의 MOLA 고도 자료([NASA PDS](https://pds-geosciences.wustl.edu/missions/mgs/megdr.html))예요.
+- **미국 발사장·착륙장 주변 지면:** 미국 지질조사국(USGS) National Map의 항공사진(NAIP, 퍼블릭 도메인)이에요. `tools/sites/fetch.mjs`가 `assets/site_*.jpg`로 받아 오고, 앱이 케네디 우주센터와 케이프 커내버럴, 스타베이스, 에드워즈, 화이트샌즈 둘레의 지면에 씌워요(app/43_sites.js). 발사 당일이 아니라 지금의 모습이에요.
 - **금성·목성·토성 지도:** [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources)
 - **별 목록:** [d3-celestial](https://github.com/ofrohn/d3-celestial)(BSD 3-Clause)의 XHIP 기반 데이터
 - **글꼴:** IBM Plex(SIL OFL)
