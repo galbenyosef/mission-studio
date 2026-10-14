@@ -169,6 +169,7 @@ python3 -m http.server -d dist 8000   # 또는 npx serve dist
 - **유로파 클리퍼:** NASA/JPL이 공개한 치수(보도 자료의 우주선 페이지)로 코드로 그렸어요. 3 m 추진 모듈, 전자장비 금고(vault), 3 m 고이득 안테나, 다섯 장씩인 14.2 × 4.1 m 태양 전지판 두 개, 8.5 m 자력계 붐, 레이더의 HF·VHF 안테나예요. 전지판은 분리 뒤에 펼쳐지고, 붐과 안테나는 그 뒤 몇 주에 걸쳐 펼쳐져요. 치수가 공개되지 않은 부분(금고, 요크, 안테나가 전지판에 붙는 자리)은 사진을 보고 맞췄어요.
 - **아폴로 사령·기계선, 다른 발사체:** 공개된 치수를 바탕으로 코드로 그렸어요.
 - **발사대:** 공개된 치수와 사진을 바탕으로 코드로 그렸어요. NASA와 케네디 우주센터 자료, 미국 역사공학기록(HAER)의 39번 발사 단지 기록, 《Moonport》(NASA SP-4204), NSTS 뉴스 참고 매뉴얼, ULA·SpaceX·CASC 자료를 참고했어요.
+- **미국 발사장·착륙장 주변 지면:** 미국 정부 공개 자료(모두 퍼블릭 도메인)로 그렸어요. 지형은 [USGS 3D Elevation Program](https://www.usgs.gov/3d-elevation-program), 바다·석호·강·호수·도로는 [미국 센서스국 TIGERweb](https://tigerweb.geo.census.gov/tigerwebmain/TIGERweb_main.html), 지표 색은 [MRLC 토지피복 데이터베이스(NLCD)](https://www.mrlc.gov/)예요. `tools/terrain/fetch.mjs`가 파일을 만들고, 건물·크롤러웨이·다른 발사대는 공개된 치수로 직접 그렸어요.
 - **지구 지도:** 지상은 NASA 지구관측소의 [블루 마블: 넥스트 제너레이션](https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/)(2004년 4월, Reto Stöckli)이에요. 지형과 바다는 그 GEBCO_08 지형·수심도에서 가져왔어요. 야경은 NASA의 블랙 마블 2016(수오미 NPP VIIRS), 구름은 [Solar System Scope](https://www.solarsystemscope.com/textures/)(CC BY 4.0)예요. `tools/textures`로 손봤어요.
 - **달 지도:** NASA 과학 시각화 스튜디오의 [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720)(Ernie Wright)예요. 달 정찰 궤도선(LRO)의 LROC 컬러 모자이크와 LOLA 고도 자료로 만들었어요.
 - **화성 지도:** 색은 [Solar System Scope](https://www.solarsystemscope.com/textures/)(CC BY 4.0)에서 가져와 채도를 조금 낮췄어요. 지형은 마스 글로벌 서베이어의 MOLA 고도 자료([NASA PDS](https://pds-geosciences.wustl.edu/missions/mgs/megdr.html))예요.

@@ -45,7 +45,7 @@ const SITE_FEATURES = {
 };
 function buildBuildings(id, grp, T, md) {
   const F = SITE_FEATURES[id]; if (!F) return;
-  const { hAt, toLocal, at, Pc } = grp.userData, M = padMats();
+  const { hAt, toLocal, at, Pc } = grp.userData;
   const put = (geo, m, order = 4) => { const mesh = new THREE.Mesh(geo, m); mesh.renderOrder = order; grp.add(mesh); return mesh; };
   // a block standing on the ground: its corners draped on the sphere, its walls vertical in the local frame
   const block = (B) => {
@@ -59,7 +59,7 @@ function buildBuildings(id, grp, T, md) {
     face(C4.map(([x, y]) => [x, y, base + B.h]), roof);
     for (let i = 0; i < 4; i++) { const a = C4[i], b = C4[(i + 1) % 4]; const shade = 0.78 + 0.22 * ((i + (B.hdg || 0) / 90) % 2); const c = wall.clone().multiplyScalar(shade); face([[a[0], a[1], base], [b[0], b[1], base], [b[0], b[1], base + B.h], [a[0], a[1], base + B.h]], c); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
-    return put(g, SITE_FEATURES.mat || (SITE_FEATURES.mat = padExactDepth(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05 }))));
+    return put(g, terrainMat({ vertexColors: true }));
   };
   for (const B of F.buildings || []) block(B);
   // the crawlerway: two lanes of grey-brown rock
@@ -75,9 +75,9 @@ function buildBuildings(id, grp, T, md) {
       }
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-    put(g, padExactDepth(new THREE.MeshStandardMaterial({ color: new THREE.Color(c), roughness: 0.95, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })), 3);
+    put(g, terrainMat({ color: c, offset: -2 }), 3);
   };
-  lanes(F.crawlerway, 12, 15, '#9c9382'); lanes(F.crawlerwayB, 12, 15, '#9c9382');
+  lanes(F.crawlerway, 12, 15, '#b3aa97'); lanes(F.crawlerwayB, 12, 15, '#b3aa97');
   // the other pads: a mound 13 m high with the hardstand on top (the mission's own pad is the real model, app/46_pads.js)
   for (const P of F.pads || []) {
     if (P.site === md.cfg.site) continue;
@@ -85,10 +85,10 @@ function buildBuildings(id, grp, T, md) {
     for (const [r, h] of rings) for (let i = 0; i < NA; i++) { const a = i * TAU / NA; const p = at(cx + Math.cos(a) * r * 1.1, cy + Math.sin(a) * r, h0 + h); pos.push(p[0] - Pc[0], p[1] - Pc[1], p[2] - Pc[2]); }
     for (let k = 0; k < rings.length - 1; k++) for (let i = 0; i < NA; i++) { const a = k * NA + i, b = k * NA + (i + 1) % NA, c = a + NA, d = b + NA; idx.push(a, b, c, b, d, c); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-    put(g, M.grass);
+    put(g, terrainMat({ color: '#6f7c57' }));
     const top = new THREE.CircleGeometry(1, NA); const tp = top.attributes.position; const arr = new Float32Array(tp.count * 3);
     for (let i = 0; i < tp.count; i++) { const p = at(cx + tp.getX(i) * 66, cy + tp.getY(i) * 60, h0 + 12.85); arr[3 * i] = p[0] - Pc[0]; arr[3 * i + 1] = p[1] - Pc[1]; arr[3 * i + 2] = p[2] - Pc[2]; }
-    top.setAttribute('position', new THREE.BufferAttribute(arr, 3)); top.computeVertexNormals(); put(top, M.concrete);
+    top.setAttribute('position', new THREE.BufferAttribute(arr, 3)); top.computeVertexNormals(); put(top, terrainMat({ color: '#aeaba3' }));
   }
   // runways not drawn by the Shuttle code: a plain concrete strip with a centreline
   for (const rw of F.runways || []) {
@@ -97,6 +97,6 @@ function buildBuildings(id, grp, T, md) {
     for (let i = 0; i <= nL; i++) { const x = x0 + f[0] * rw.len * i / nL, y = y0 + f[1] * rw.len * i / nL, h = hAt(x, y) + 0.35; for (const j of [-1, 1]) { const p = at(x + l[0] * j * rw.wid / 2, y + l[1] * j * rw.wid / 2, h); pos.push(p[0] - Pc[0], p[1] - Pc[1], p[2] - Pc[2]); } }
     for (let i = 0; i < nL; i++) { const a = 2 * i; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-    put(g, padExactDepth(new THREE.MeshStandardMaterial({ color: new THREE.Color('#6d6c69'), roughness: 0.92, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })), 3);
+    put(g, terrainMat({ color: '#6d6c69', offset: -2 }), 3);
   }
 }
