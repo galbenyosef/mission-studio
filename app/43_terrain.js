@@ -26,7 +26,7 @@ const TER_COVER = {
   81: ['#93a65c', 0.7], 82: ['#a89060', 0.6], 90: ['#4e6a45', 1.1], 95: ['#7a8a58', 0.9],
 };
 const TER_WATER = { sea: '#22486b', bay: '#23486a', estuary: '#264c69', lake: '#254a68', reservoir: '#254a68', river: '#284e6a', swamp: '#3d5c56', playa: '#cfc6ae', water: '#254a68' };
-const TER_ROAD = { primary: [14, '#4c4e52'], secondary: [9, '#55575a'], local: [5.5, '#6a6a66'] };
+const TER_ROAD = { primary: [18, '#4c4e52'], secondary: [12, '#55575a'], local: [7, '#62625e'] }; // (a little wider than life, so they read from a few kilometres up)
 // the site whose square holds the point (a little inside its edge)
 function terrainSiteFor(lat, lon) {
   for (const [id, S] of Object.entries(TERRAIN_SITES)) {
@@ -90,7 +90,7 @@ function terrainBuild(id, T, md) {
     const pos = new Float32Array(3 * N * N), uv = new Float32Array(2 * N * N), fade = new Float32Array(N * N), idx = [];
     // the classes' colours pulled toward the globe's own map colour here, so the square's ground is the same country as
     // the land round it (the Mojave pale, Florida green), the classes giving the detail
-    const G = globeColorAt(S.lat, S.lon), cc = {}; for (const k in TER_COVER) { const c = new THREE.Color(TER_COVER[k][0]); if (G) c.lerp(G, 0.55); cc[k] = c.convertLinearToSRGB(); }
+    const G = globeColorAt(S.lat, S.lon), cc = {}; for (const k in TER_COVER) { const c = new THREE.Color(TER_COVER[k][0]); if (G) c.lerp(G, 0.35); cc[k] = c.convertLinearToSRGB(); }
     const water = new THREE.Color(TER_WATER.sea).convertLinearToSRGB();
     const hash = (i, j) => { const x = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return x - Math.floor(x); };
     const tex = new Uint8Array(3 * N * N);
@@ -177,7 +177,7 @@ function terrainBuild(id, T, md) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aFade', new THREE.Float32BufferAttribute(fd, 1)); g.setIndex(idx); g.computeVertexNormals(); return g;
   };
   const addStrips = (g, color, rough, order) => { if (!g) return; const mesh = new THREE.Mesh(g, terrainMat({ color, offset: -2 })); mesh.renderOrder = order; grp.add(mesh); };
-  addStrips(strips((T.streams || []).filter(s => s.kind === 'stream').flatMap(s => s.paths), 3, 0.08), TER_WATER.river, 0.3, 2);
+  addStrips(strips((T.streams || []).filter(s => s.kind === 'stream').flatMap(s => s.paths), 4, 0.08), TER_WATER.river, 0.3, 2);
   addStrips(strips((T.streams || []).filter(s => s.kind === 'canal').flatMap(s => s.paths), 5, 0.08), TER_WATER.river, 0.3, 2);
   for (const cls of ['local', 'secondary', 'primary']) { const [w, c] = TER_ROAD[cls]; addStrips(strips((T.roads || []).filter(r => r.cls === cls).flatMap(r => r.paths), w, 0.25), c, 0.9, 3); }
   // --- place it: metres → the mesh frame (unit sphere scaled by R)
@@ -229,7 +229,9 @@ void main() {
   float mus = dot(N, L), muv = max(dot(N, V), 0.0);
   vec3 sun = aSunlight(aRg, mus) * (aSunE / PI), sky = aSkyLight(aRg, mus);
   vec3 alb = (uHasMap > 0.5 ? texture2D(tMap, vUv).rgb : uColor) * vCol;
-  if (uRep > 0.0) { vec2 suv = vUv * uRep; float sA = texture2D(tScrub, suv * 0.071 + vec2(0.37, 0.11)).g, sB = texture2D(tScrub, suv * 0.23 + vec2(0.71, 0.53)).g, sC = texture2D(tScrub, suv).g; alb *= 0.55 + 0.6 * (sA + sB + sC) / (3.0 * 0.22); }
+  if (uRep > 0.0) { // the scrub texture at four scales (1.1 km, 350 m, 80 m, 20 m tiles): patches of brush, bare ground and washes
+    vec2 suv = vUv * uRep; float sA = texture2D(tScrub, suv * 0.071 + vec2(0.37, 0.11)).g, sB = texture2D(tScrub, suv * 0.23 + vec2(0.71, 0.53)).g, sC = texture2D(tScrub, suv).g, sD = texture2D(tScrub, suv * 4.0 + vec2(0.13, 0.61)).g;
+    alb *= 0.45 + 1.0 * (0.35 * sA + 0.3 * sB + 0.25 * sC + 0.1 * sD) / 0.22 * 0.55; }
   vec3 col = alb * (sun * max(dot(Nb, L), 0.0) + sky);
   if (uOcean > 0.0) { // the water: glint off its ruffled surface and the sky's reflection (as the globe's sea)
     vec3 H = normalize(L + V); float nh = max(dot(N, H), 1e-3), vh = max(dot(V, H), 0.0);
@@ -243,7 +245,7 @@ void main() {
   float t0 = 0.0; // the air between the camera and this point
   if (aCamH > aRt - aRg) { float b = dot(aCam, d); vec3 pc = aCam - b * d; float Dt = aRt * aRt - dot(pc, pc); t0 = Dt > 0.0 ? clamp(-b - sqrt(Dt), 0.0, dist) : dist; }
   vec3 S, T; aIntegrate(aCam, d, t0, dist, L, 2, aCamH > aRt - aRg ? 12 : 16, S, T);
-  col = col * T * aWB * aExpo + aDisplay(S);
+  col = col * T * aWB * aExpo + aHaze(S, dist);
   gl_FragColor = vec4(col, vFade);
   #include <colorspace_fragment>
 }`;

@@ -110,7 +110,7 @@ void main() {
   float t0 = 0.0;
   if (aCamH > aRt - aRg) { float b = dot(aCam, d); vec3 pc = aCam - b * d; float Dt = aRt * aRt - dot(pc, pc); t0 = Dt > 0.0 ? clamp(-b - sqrt(Dt), 0.0, dist) : dist; }
   vec3 S, T; aIntegrate(aCam, d, t0, dist, L, 2, aCamH > aRt - aRg ? 12 : 16, S, T);
-  col = col * T * aWB * aExpo + aDisplay(S);
+  col = col * T * aWB * aExpo + aHaze(S, dist);
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
@@ -145,7 +145,7 @@ void main() {
   float t0 = 0.0;
   if (aCamH > aRt - aRg) { float b = dot(aCam, d); vec3 pc = aCam - b * d; float Dt = aRt * aRt - dot(pc, pc); t0 = Dt > 0.0 ? clamp(-b - sqrt(Dt), 0.0, dist) : dist; }
   vec3 S, T; aIntegrate(aCam, d, t0, dist, L, 2, 12, S, T);
-  col = col * T * aWB * aExpo + aDisplay(S);
+  col = col * T * aWB * aExpo + aHaze(S, dist);
 #else
   vec3 col = alb * (shade + uAmb) + alb * uFill * (1.0 - smoothstep(0.0, 0.25, mu0)); // night fill (earthshine on the Moon, cinematic elsewhere)
   col = mix(col, uFogColor, 1.0 - exp(-dist * uFogK));

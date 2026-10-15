@@ -242,4 +242,7 @@ vec3 aDisplay(vec3 S) {
   vec3 x = S * aWB * aGrade.x; float l = dot(x, vec3(0.2126, 0.7152, 0.0722));
   x = max(mix(vec3(l), x, aGrade.y), 0.0);
   return x / (1.0 + x * aGrade.z);
-}`;
+}
+// the air's light in front of a surface dist km away: at the ground's own exposure close by (the sky's grade would veil
+// the ground a few kilometres off three times over), going over to the sky's look far off, where the ground meets the sky
+vec3 aHaze(vec3 S, float dist) { return mix(S * aWB * aExpo, aDisplay(S), smoothstep(20.0, 200.0, dist)); }`;
