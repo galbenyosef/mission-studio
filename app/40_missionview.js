@@ -423,7 +423,7 @@ function updatePad(t) {
   const r = sitePosEcl('earth', S.lat, S.lon, 0, t); const E = helio('earth', t).r;
   g.position.set(E[0] + r[0] - O[0], E[1] + r[1] - O[1], E[2] + r[2] - O[2]);
   basisQuat(vunit(r), localFrame('earth', r, t).north, g.quaternion);
-  g.visible = t < md.M.t0 + 3600 && camDistTo(g.position) < 400;
+  g.visible = camDistTo(g.position) < 400; // (whenever the camera is near: a return to the launch site lands beside the tower)
   if (!g.visible) return;
   if (g.userData.animate) g.userData.animate(t); // arms swinging away
   const t0 = md.M.t0, IG = md.L.ign || { t: 0 }, tIgn = t0 - (IG.t || 0);
