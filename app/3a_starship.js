@@ -43,15 +43,25 @@ function ssSkin(g, tiles) {
     const h = o.geometry.parameters.height, mm = m.clone(); mm.map = m.map.clone(); mm.map.repeat.set(1, h / 3.66); mm.map.needsUpdate = true; o.material = mm;
   }
 }
-// a flap: a tapered slab hinged along the body (its hinge line along +Y at the group's origin, the flap out along +Z),
-// tiles on its −X face, steel on the back; w: chord at the root, h: span along the body, tip: chord at the tip
-function ssFlap(w, h, tip) {
-  const s = new THREE.Shape(); s.moveTo(0, 0); s.lineTo(w, 0); s.lineTo(tip, h); s.lineTo(0, h); s.closePath();
-  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.5, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.12, bevelSegments: 2 });
-  geo.rotateY(-Math.PI / 2); // the shape's x → +Z (out from the body), the extrusion → −X
+// a flap: hinged along the body (its hinge line along +Y at the group's origin, the flap out along +Z), its planform the
+// Ship's (the outer edge straight, the leading corner cut back to the body), thick at the root and thinning to the
+// edges, tiles on its −X (windward) face and steel on the back. pts: the outline in (out, along) metres, from the hinge
+// at the aft corner round to the hinge at the forward corner
+function ssFlap(pts, thick) {
+  const s = new THREE.Shape(); pts.forEach(([x, y], i) => i ? s.lineTo(x, y) : s.moveTo(x, y)); s.closePath();
+  const span = Math.max(...pts.map(p => p[0]));
+  const geo = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: true, bevelThickness: 0.18, bevelSize: 0.22, bevelSegments: 3 });
+  const p = geo.attributes.position; for (let i = 0; i < p.count; i++) { const k = 1 - 0.65 * clamp(p.getX(i) / span, 0, 1); p.setZ(i, (p.getZ(i) - thick / 2) * k); } // thinner toward the outer edge
+  geo.rotateY(-Math.PI / 2); geo.computeVertexNormals(); // the shape's x → +Z (out from the body), its thickness along X
   const f = new THREE.Mesh(geo, mat('#b4b9bf', 'metal'));
-  const cap = new THREE.Mesh(new THREE.ShapeGeometry(s), mat('#1a1b1e', 'tile')); cap.rotation.y = -Math.PI / 2; cap.position.x = -0.6; f.add(cap); // the windward face, tiled
+  const cap = new THREE.Mesh(new THREE.ShapeGeometry(s), mat('#1a1b1e', 'tile')); cap.rotation.y = -Math.PI / 2; cap.position.x = -thick / 2 - 0.2; f.add(cap); // the windward face, tiled
   return f;
+}
+// the nose: a tangent ogive L long on the body radius R, as a lathe (tiles on its windward half like the body's)
+function ssOgive(L, R, seg = 40, from = 0) {
+  const rho = (R * R + L * L) / (2 * R), pts = [];
+  for (let i = 0; i <= seg; i++) { const y = from + (L - from) * i / seg, r = Math.sqrt(Math.max(rho * rho - y * y, 0)) + R - rho; pts.push(new THREE.Vector2(Math.max(r, 0.02) * 1.0, y)); }
+  return new THREE.LatheGeometry(pts, 64);
 }
 const STAGE_LOOK_SS = {
   // Super Heavy: the steel tank, the hot-staging ring on top (dark, vented), the grid fins below it, the engine skirt
@@ -72,18 +82,24 @@ const STAGE_LOOK_SS = {
     for (let k = 0; k < 4; k++) { const a = k * TAU / 4 + TAU / 8; const p = box(1.1, 10, 0.5, mat('#9ea3a8', 'metal')); p.position.set(Math.cos(a) * 4.55, 3, Math.sin(a) * 4.55); p.rotation.y = -a; g.add(p); } // raceways and the catch pins' housings
     for (const s of [1, -1]) { const pin = cyl(0.45, 0.45, 1.2, steel, 12); pin.rotation.z = -Math.PI / 2 * s; pin.position.set(s * 4.7, top - 7.2, 0); g.add(pin); } // the lift pins the tower catches it by
   },
-  // the Ship: the steel body with tiles on its windward half, the four flaps, the nose
+  // the Ship: the steel body with tiles on its windward half, the ogive nose with its black tip, the four flaps
   starshipShip(g, st) {
     ssSkin(g, true);
-    const body = st.geom[0][0], top = body + st.geom[1][0];
-    const nose = g.children[1]; if (nose && nose.isMesh) { const m = ssSkinMat(true).clone(); m.map = m.map.clone(); m.map.repeat.set(1, st.geom[1][0] / 3.66); m.map.needsUpdate = true; nose.material = m; }
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 10), mat('#8d9297', 'metal')); cap.position.y = top - 0.1; g.add(cap);
-    // the aft flaps (±Z, hinged along the tile edge, their tiled face to −X): 9.5 m along the body, 4.3 m out at the root
-    for (const s of [-1, 1]) { const f = ssFlap(4.3, 9.5, 3.0); f.position.set(-0.6, 1.6, s * 4.1); f.scale.z = s; g.add(f);
-      const hinge = cyl(0.4, 0.4, 9.5, mat('#4a4d52', 'metal'), 12); hinge.position.set(-0.3, 1.6, s * 4.25); g.add(hinge); }
-    // the forward flaps (Block 2): smaller, 5 m along the body, set back from the nose and round toward the lee side (+X)
-    for (const s of [-1, 1]) { const phi = 0.42, f = ssFlap(2.6, 5.2, 1.6); f.position.set(Math.sin(phi) * 4.2, body - 1.4, s * Math.cos(phi) * 4.2); f.scale.z = s; f.rotation.y = s * phi; g.add(f);
-      const hinge = cyl(0.3, 0.3, 5.2, mat('#4a4d52', 'metal'), 10); hinge.position.set(Math.sin(phi) * 4.35, body - 1.4, s * Math.cos(phi) * 4.35); g.add(hinge); }
+    const body = st.geom[0][0], L = st.geom[1][0], top = body + L;
+    const nose = g.children[1]; if (nose && nose.isMesh) { // the plain cone becomes the ogive, in the tiled skin
+      nose.geometry.dispose(); nose.geometry = ssOgive(L, 4.5); nose.position.y = body;
+      const m = ssSkinMat(true).clone(); m.map = m.map.clone(); m.map.repeat.set(1, L / 3.66); m.map.needsUpdate = true; nose.material = m;
+    }
+    const tip = new THREE.Mesh(ssOgive(L, 4.5, 16, L - 4.2), mat('#141517', 'tile')); tip.scale.set(1.01, 1, 1.01); tip.position.y = body; g.add(tip); // the tip, tiled all round for its last 4 m
+    // the aft flaps (±Z, hinged along the body with their tiled face to −X): 9.6 m along the body, 4.4 m out at the root,
+    // the leading corner cut back to the body; the hinge fairings (aerocovers) at their roots on the windward side
+    const aft = [[0, 0], [4.4, 0], [4.4, 3.2], [3.5, 5.8], [1.0, 9.3], [0, 9.6]];
+    for (const s of [-1, 1]) { const f = ssFlap(aft, 0.9); f.position.set(-0.3, 0.6, s * 4.25); f.scale.z = s; g.add(f);
+      const cov = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 9.6, 14, 1, false, 0, Math.PI), mat('#1a1b1e', 'tile')); cov.rotation.y = -Math.PI / 2; cov.position.set(-0.9, 5.4, s * 4.0); g.add(cov); }
+    // the forward flaps (Block 2): small, 5.2 m along the lower nose, set round toward the lee side (+X) out of the airflow
+    const fwd = [[0, 0], [2.9, 0], [2.9, 1.3], [0.5, 5.6], [0, 5.9]]; // (a triangle swept back to the body, two thirds of Block 1's)
+    for (const s of [-1, 1]) { const phi = 0.5, r = 4.3, f = ssFlap(fwd, 0.55); f.position.set(Math.sin(phi) * r, body + 1.2, s * Math.cos(phi) * r); f.scale.z = s; f.rotation.y = s * phi; g.add(f);
+      const cov = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 5.6, 12, 1, false, 0, Math.PI), mat('#1a1b1e', 'tile')); cov.rotation.y = -Math.PI / 2 + s * phi; cov.position.set(Math.sin(phi) * (r - 0.4), body + 4.0, s * Math.cos(phi) * (r - 0.4)); g.add(cov); }
     const skirt = cyl(4.5, 4.5, 1.6, mat('#6d7176', 'metal', { side: THREE.DoubleSide }), 48, true); skirt.position.y = -0.2; g.add(skirt); // the engine skirt
     const shield = new THREE.Mesh(new THREE.CircleGeometry(4.45, 48), mat('#3a3d41', 'dark')); shield.rotation.x = Math.PI / 2; shield.position.y = -0.15; g.add(shield);
   },
