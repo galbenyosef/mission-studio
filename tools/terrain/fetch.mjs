@@ -23,13 +23,12 @@ import { fromArrayBuffer } from 'geotiff';
 import sharp from 'sharp';
 
 export const SITES = {
-  ksc: { name: 'Kennedy Space Center: Pads 39A and 39B, the VAB and the Shuttle Landing Facility', lat: 28.615, lon: -80.655, km: 16 },
-  cape: { name: 'Cape Canaveral: SLC-41 and LC-12', lat: 28.53, lon: -80.57, km: 12 },
-  starbase: { name: 'Starbase, Texas', lat: 25.997, lon: -97.155, km: 8 },
-  edwards: { name: 'Edwards Air Force Base and Rogers Dry Lake', lat: 34.93, lon: -117.85, km: 24 },
-  whitesands: { name: 'White Sands Space Harbor', lat: 32.99, lon: -106.425, km: 16 },
+  ksc: { name: 'Kennedy Space Center and Cape Canaveral: Pads 39A and 39B, the VAB, the Shuttle Landing Facility, SLC-41', lat: 28.615, lon: -80.655, km: 32 },
+  starbase: { name: 'Starbase, Texas', lat: 25.997, lon: -97.155, km: 12 },
+  edwards: { name: 'Edwards Air Force Base and Rogers Dry Lake', lat: 34.93, lon: -117.85, km: 48 },
+  whitesands: { name: 'White Sands Space Harbor', lat: 32.99, lon: -106.425, km: 32 },
 };
-const N = 384; // grid cells across a site
+const N = 512; // grid cells across a site
 const DEM = 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage';
 const HYDRO = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Hydro/MapServer';
 const TIGER = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer';

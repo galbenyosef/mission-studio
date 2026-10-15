@@ -11,11 +11,10 @@
 // pad's procedural ground stays, as before.
 // ============================================================================
 const TERRAIN_SITES = {
-  ksc: { lat: 28.615, lon: -80.655, km: 16 },
-  cape: { lat: 28.53, lon: -80.57, km: 12 },
-  starbase: { lat: 25.997, lon: -97.155, km: 8 },
-  edwards: { lat: 34.93, lon: -117.85, km: 24 },
-  whitesands: { lat: 32.99, lon: -106.425, km: 16 },
+  ksc: { lat: 28.615, lon: -80.655, km: 32 },
+  starbase: { lat: 25.997, lon: -97.155, km: 12 },
+  edwards: { lat: 34.93, lon: -117.85, km: 48 },
+  whitesands: { lat: 32.99, lon: -106.425, km: 32 },
 };
 const TER = { groups: [], missing: {}, pending: 0 };
 // the land's colours by NLCD class (sRGB), with how rough the scrub texture should show on each

@@ -245,7 +245,7 @@ void main() {
   #include <colorspace_fragment>
 }`;
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-function makeDetailTexture() { // tileable value noise + craters, used to add surface texture below the resolution of the global maps
+function makeDetailTexture(craters = true) { // tileable value noise (+ craters for the airless worlds), used to add surface texture below the resolution of the global maps
   const N = 512, rnd = mulberry32(7); const v = new Float32Array(N * N);
   for (const [S, amp] of [[8, 0.30], [16, 0.22], [32, 0.16], [64, 0.11], [128, 0.07], [256, 0.05]]) {
     const L = new Float32Array(S * S); for (let i = 0; i < S * S; i++) L[i] = rnd() * 2 - 1;
@@ -256,7 +256,7 @@ function makeDetailTexture() { // tileable value noise + craters, used to add su
       v[y * N + x] += amp * ((a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy);
     }
   }
-  for (let k = 0; k < 260; k++) { // craters with raised rims, power-law sizes
+  for (let k = 0; k < (craters ? 260 : 0); k++) { // craters with raised rims, power-law sizes
     const r = 3 + 60 * Math.pow(rnd(), 3.2), cx = rnd() * N, cy = rnd() * N, depth = 0.35 + rnd() * 0.25;
     const R2 = Math.ceil(r * 1.6);
     for (let dy = -R2; dy <= R2; dy++) for (let dx = -R2; dx <= R2; dx++) {
@@ -317,7 +317,7 @@ function initScene() {
   R.envRT = new THREE.WebGLCubeRenderTarget(64, { type: THREE.HalfFloatType }); R.envCam = new THREE.CubeCamera(0.5, 50, R.envRT); R.envScene.add(R.envCam);
   R.pmrem = new THREE.PMREMGenerator(renderer); R.envN = 0; R.envPM = null;
   R.loader = new THREE.TextureLoader();
-  R.detailTex = makeDetailTexture();
+  R.detailTex = makeDetailTexture(); R.detailTexEarth = makeDetailTexture(false); // (Earth's ground without the craters, which from a few kilometres up read as cloud shadows)
   buildStars();
   buildBodies();
   buildPlanetOrbits();
@@ -423,7 +423,7 @@ function bodyMaterial(name) {
     // earth_aux: R the sea, G and B the slopes east and north (128 + slope·1000), drawn 5× steeper
     const m = new THREE.ShaderMaterial({ vertexShader: GLSL_V, fragmentShader: GLSL_EARTH_F, uniforms: { tDay: { value: loadTex('earth_day.jpg') }, tNight: { value: loadTex('earth_night.jpg', false, true) },
       tClouds: { value: loadTex('earth_clouds.jpg', false, true) }, tAux: { value: loadTex('earth_aux.jpg', false) }, uSlopeK: { value: 1000 }, uRelief: { value: 5 }, uReliefNear: { value: new THREE.Vector2(20, 120) }, uPole: { value: new THREE.Vector3(0, 0, 1) },
-      uSunDir: sunU, uLights: { value: 1 }, uFill: { value: new THREE.Vector3(0, 0, 0) }, tDetail: { value: R.detailTex }, uDetailAmp: { value: 0.55 }, uDetailRep: { value: new THREE.Vector2(512, 256) },
+      uSunDir: sunU, uLights: { value: 1 }, uFill: { value: new THREE.Vector3(0, 0, 0) }, tDetail: { value: R.detailTexEarth }, uDetailAmp: { value: 0.5 }, uDetailRep: { value: new THREE.Vector2(512, 256) },
       ...capUniforms(), ...atmosUniforms('earth') } });
     const big = f => [{ file: f, near: 25, far: 60, big: true }];
     texLOD('earth', m.uniforms.tDay, big('earth_day_8k.jpg'), true, false); texLOD('earth', m.uniforms.tClouds, big('earth_clouds_8k.jpg'), false, true); texLOD('earth', m.uniforms.tNight, big('earth_night_8k.jpg'), false, true);
