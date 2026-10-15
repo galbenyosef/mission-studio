@@ -40,14 +40,14 @@ const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 
 const DEG = Math.PI / 180;
 
 async function get(url, what, kind = 'json') {
-  for (let k = 0; k < 4; k++) {
+  for (let k = 0; k < 8; k++) { // (the servers are sometimes slow or briefly down: eight tries, waiting longer each time)
     try {
       const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) mission-studio-terrain/1.0', Accept: kind === 'json' ? 'application/json' : '*/*' } });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       if (kind === 'json') { const txt = await r.text(); let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('not JSON: ' + txt.replace(/\s+/g, ' ').slice(0, 160)); } if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 200)); return j; }
       if (kind === 'text') return await r.text();
       const b = Buffer.from(await r.arrayBuffer()); if (b.length < 200) throw new Error('short reply: ' + b.toString('utf8').slice(0, 160)); return b;
-    } catch (e) { console.log(`  ${what}: ${e.message}${e.cause ? ' — ' + e.cause.message : ''} (retry ${k + 1})`); await new Promise(f => setTimeout(f, 2500 * (k + 1))); }
+    } catch (e) { console.log(`  ${what}: ${e.message}${e.cause ? ' — ' + e.cause.message : ''} (retry ${k + 1})`); await new Promise(f => setTimeout(f, 5000 * (k + 1))); }
   }
   throw new Error(`could not fetch ${what}: ${url}`);
 }
