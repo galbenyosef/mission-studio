@@ -63,6 +63,15 @@ function ssOgive(L, R, seg = 40, from = 0) {
   for (let i = 0; i <= seg; i++) { const y = from + (L - from) * i / seg, r = Math.sqrt(Math.max(rho * rho - y * y, 0)) + R - rho; pts.push(new THREE.Vector2(Math.max(r, 0.02) * 1.0, y)); }
   return new THREE.LatheGeometry(pts, 64);
 }
+// the corrugated steel of the engine skirts (vertical hat stringers)
+function ssCorrugated() {
+  if (SS.corr) return SS.corr;
+  const c = document.createElement('canvas'); c.width = 512; c.height = 64; const g = c.getContext('2d');
+  for (let x = 0; x < 512; x++) { const ph = (x % 8) / 8, v = 150 + 70 * Math.cos(ph * TAU); g.fillStyle = `rgb(${v},${v + 3},${v + 6})`; g.fillRect(x, 0, 1, 64); }
+  g.fillStyle = 'rgba(60,64,70,0.6)'; g.fillRect(0, 0, 512, 2); g.fillRect(0, 62, 512, 2);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(18, 1); t.anisotropy = 8;
+  return (SS.corr = new THREE.MeshStandardMaterial({ map: t, roughness: 0.4, metalness: 0.75, side: THREE.DoubleSide }));
+}
 const STAGE_LOOK_SS = {
   // Super Heavy: the steel tank, the hot-staging ring on top (dark, vented), the grid fins below it, the engine skirt
   starshipBooster(g, st) {
@@ -77,7 +86,10 @@ const STAGE_LOOK_SS = {
       for (let i = 1; i < 4; i++) { const b = box(3.0, 0.22, 0.06, steel); b.position.set(1.5, 0, -1 + i * 0.5); fin.add(b); }
       const shaft = cyl(0.3, 0.3, 0.6, steel, 12); shaft.rotation.z = -Math.PI / 2; shaft.position.set(0.3, 0, 0); fin.add(shaft);
     }
-    const skirt = cyl(4.55, 4.55, 3.2, mat('#6d7176', 'metal', { side: THREE.DoubleSide }), 48, true); skirt.position.y = -0.4; g.add(skirt); // the engine skirt (a little below the tank)
+    // the engine section: the corrugated steel skirt round the engines, and the twenty heat-shield cowls over the outer
+    // ring's engine mounts, a pod each at the skirt's rim
+    const skirt = cyl(4.55, 4.55, 3.8, ssCorrugated(), 48, true); skirt.position.y = -0.6; g.add(skirt);
+    for (let k = 0; k < 20; k++) { const a = k * TAU / 20 + 0.1; const pod = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 1.1, 4, 12), mat('#c3c7cb', 'metal')); pod.position.set(Math.cos(a) * 4.45, 0.75, Math.sin(a) * 4.45); pod.scale.set(1, 1, 0.7); pod.rotation.y = -a; g.add(pod); }
     const shield = new THREE.Mesh(new THREE.CircleGeometry(4.5, 48), mat('#3a3d41', 'dark')); shield.rotation.x = Math.PI / 2; shield.position.y = -0.35; g.add(shield); // the engine shield the Raptors hang from
     for (let k = 0; k < 4; k++) { const a = k * TAU / 4 + TAU / 8; const p = box(1.1, 10, 0.5, mat('#9ea3a8', 'metal')); p.position.set(Math.cos(a) * 4.55, 3, Math.sin(a) * 4.55); p.rotation.y = -a; g.add(p); } // raceways and the catch pins' housings
     for (const s of [1, -1]) { const pin = cyl(0.45, 0.45, 1.2, steel, 12); pin.rotation.z = -Math.PI / 2 * s; pin.position.set(s * 4.7, top - 7.2, 0); g.add(pin); } // the lift pins the tower catches it by
@@ -100,7 +112,7 @@ const STAGE_LOOK_SS = {
     const fwd = [[0, 0], [2.9, 0], [2.9, 1.3], [0.5, 5.6], [0, 5.9]]; // (a triangle swept back to the body, two thirds of Block 1's)
     for (const s of [-1, 1]) { const phi = 0.5, r = 4.3, f = ssFlap(fwd, 0.55); f.position.set(Math.sin(phi) * r, body + 1.2, s * Math.cos(phi) * r); f.scale.z = s; f.rotation.y = s * phi; g.add(f);
       const cov = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 5.6, 12, 1, false, 0, Math.PI), mat('#1a1b1e', 'tile')); cov.rotation.y = -Math.PI / 2 + s * phi; cov.position.set(Math.sin(phi) * (r - 0.4), body + 4.0, s * Math.cos(phi) * (r - 0.4)); g.add(cov); }
-    const skirt = cyl(4.5, 4.5, 1.6, mat('#6d7176', 'metal', { side: THREE.DoubleSide }), 48, true); skirt.position.y = -0.2; g.add(skirt); // the engine skirt
+    const skirt = cyl(4.5, 4.5, 2.4, ssCorrugated(), 48, true); skirt.position.y = -0.6; g.add(skirt); // the engine skirt
     const shield = new THREE.Mesh(new THREE.CircleGeometry(4.45, 48), mat('#3a3d41', 'dark')); shield.rotation.x = Math.PI / 2; shield.position.y = -0.15; g.add(shield);
   },
 };
