@@ -182,7 +182,7 @@ function terrainBuild(id, T, md) {
   for (const cls of ['local', 'secondary', 'primary']) { const [w, c] = TER_ROAD[cls]; addStrips(strips((T.roads || []).filter(r => r.cls === cls).flatMap(r => r.paths), w, 0.25), c, 0.9, 3); }
   // --- place it: metres → the mesh frame (unit sphere scaled by R)
   const k = 1 / Rb; grp.position.set(Pc[0] * k, Pc[1] * k, Pc[2] * k); grp.scale.setScalar(k);
-  grp.userData = { id, hAt, toLocal, at, Pc, capE };
+  grp.userData = { id, hAt, toLocal, at, Pc, capE, L };
   b.mesh.add(grp); TER.groups.push(grp);
   if (MV.pad) MV.pad.traverse(n => { if (n.userData.padGround) n.visible = false; }); // the pad's scrub, beach and roads give way
   if (typeof buildBuildings === 'function') buildBuildings(id, grp, T, md);
@@ -249,6 +249,16 @@ void main() {
   gl_FragColor = vec4(col, vFade);
   #include <colorspace_fragment>
 }`;
+// the ground's height at a point, km above the sphere (the relief, the flats, and the cap it is cut from), or null where
+// no terrain is loaded: for whatever must stand on the ground, like the launch camera (app/50_camera.js)
+function terrainHeightAt(lat, lon) {
+  for (const g of TER.groups) {
+    const ud = g.userData; if (!ud.hAt) continue; const [x, y] = ud.toLocal(lat, lon);
+    if (Math.abs(x) > ud.L * 0.5 || Math.abs(y) > ud.L * 0.5) continue;
+    return (ud.capE + ud.hAt(x, y)) / 1000;
+  }
+  return null;
+}
 function terrainMat(o) {
   const EU = R.bodies.earth.mat.uniforms, scrub = padGroundTex(); scrub.wrapS = scrub.wrapT = THREE.RepeatWrapping;
   const m = new THREE.ShaderMaterial({ vertexShader: GLSL_TERRAIN_V, fragmentShader: GLSL_TERRAIN_F, transparent: true, side: o.map ? THREE.DoubleSide : THREE.FrontSide,

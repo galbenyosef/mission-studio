@@ -78,7 +78,10 @@ function groundSite(t) {
   const cfg = md.cfg;
   // flat: the site stands on the pad's flat ground (app/46_pads.js), which lies above the sphere by d²/2R out at d from
   // the pad — 2.7 m at the launch camera's 5.9 km, so a camera at its height over the sphere would look up from under it
-  const off = (body, lat, lon, elev, dE, dN, flat) => { const Rb = surfaceRadius(body); return { body, lat: lat + dN / Rb * RAD, lon: lon + dE / (Rb * Math.cos(lat * DEG)) * RAD, alt: (elev || 0) + 0.0018 + (flat ? (dE * dE + dN * dN) / (2 * Rb) : 0) }; };
+  // (where the real ground is drawn, app/43_terrain.js, the camera stands on it instead)
+  const off = (body, lat, lon, elev, dE, dN, flat) => { const Rb = surfaceRadius(body), la = lat + dN / Rb * RAD, lo = lon + dE / (Rb * Math.cos(lat * DEG)) * RAD;
+    let alt = (elev || 0) + (flat ? (dE * dE + dN * dN) / (2 * Rb) : 0); const th = body === 'earth' ? terrainHeightAt(la, lo) : null; if (th != null) alt = Math.max(alt, th);
+    return { body, lat: la, lon: lo, alt: alt + 0.0018 }; };
   if (near('moon', 30000)) { const sp = surfaceSpotOn('moon') || (typeof cfg.landing === 'object' ? cfg.landing : null); if (sp) return off('moon', sp.lat, sp.lon, sp.elev || 0, -0.35, -0.12); }
   if (near('mars', 50000)) { const l = (cfg.legs || []).find(x => x.body === 'mars' && x.site); const sp = surfaceSpotOn('mars') || (l && l.site); if (sp) return off('mars', sp.lat, sp.lon, sp.elev || 0, -0.6, -0.25); }
   if (near('earth', 60000)) {

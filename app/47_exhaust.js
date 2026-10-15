@@ -79,7 +79,7 @@ function initExhaust() {
   EXH.tex = new THREE.CanvasTexture(cv); EXH.tex.wrapS = EXH.tex.wrapT = THREE.RepeatWrapping; EXH.tex.generateMipmaps = true; EXH.tex.minFilter = THREE.LinearMipmapLinearFilter;
 }
 const GLSL_EXH_COMMON = `
-uniform sampler2D tNoise; uniform vec3 uSunDir; uniform vec3 uFogCol; uniform float uExpo;
+uniform sampler2D tNoise; uniform vec3 uSunDir; uniform vec3 uFogCol; uniform float uExpo; uniform float uHG;
 varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vWP; varying float vFade;
 // Smoke of optical depth tau seen at a point where its surface (a column's or a puff's) faces N. Dense smoke scatters like a
 // matt surface (light diffusing through it reaches its far side too); thin smoke glows looking toward the Sun (forward
@@ -92,7 +92,7 @@ vec4 smoke(float tau, float edge, vec3 N, float n) {
   vec3 V = normalize(cameraPosition - vWP);
   float wrap = clamp((dot(N, uSunDir) + 0.8) / 1.8, 0.0, 1.0);
   float ct = dot(-V, uSunDir), hg = 0.64 / pow(1.36 - 1.2 * ct, 1.5);
-  vec3 sunL = vSun * mix(wrap, 0.12 + 0.3 * hg, exp(-tau)) * uExpo, ambL = vAmb * (0.8 + 0.4 * n);
+  vec3 sunL = vSun * mix(wrap, 0.12 + 0.3 * hg * uHG, exp(-tau)) * uExpo, ambL = vAmb * (0.8 + 0.4 * n);
   float af = a * (1.0 - 0.7 * vFog);
   vec3 col = mix(sunL + ambL, uFogCol, vFog) * af;
   float mx = max(max(col.r, col.g), col.b); if (mx > 1.0) col /= mx; // overexposed: keep the hue
@@ -135,9 +135,9 @@ void main(){
 const GLSL_PUFF_V = `
 #include <common>
 #include <logdepthbuf_pars_vertex>
-attribute vec3 aUV; attribute float aTau; attribute vec3 aSun; attribute vec3 aAmb; attribute float aFog; attribute float aFade;
-varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vWP; varying float vFade;
-void main(){ vUV = aUV; vTau = aTau; vSun = aSun; vAmb = aAmb; vFog = aFog; vFade = aFade;
+attribute vec3 aUV; attribute float aTau; attribute vec3 aSun; attribute vec3 aAmb; attribute float aFog; attribute float aFade; attribute vec3 aN;
+varying vec3 vUV; varying float vTau; varying vec3 vSun; varying vec3 vAmb; varying float vFog; varying vec3 vWP; varying float vFade; varying vec3 vN;
+void main(){ vUV = aUV; vTau = aTau; vSun = aSun; vAmb = aAmb; vFog = aFog; vFade = aFade; vN = mat3(modelMatrix) * aN;
   vec4 wp = modelMatrix * vec4(position, 1.0); vWP = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp;
 #include <logdepthbuf_vertex>
 }`;
@@ -145,15 +145,23 @@ const GLSL_PUFF_F = `
 #include <common>
 #include <logdepthbuf_pars_fragment>
 ${GLSL_EXH_COMMON}
+varying vec3 vN;
 void main(){
   #include <logdepthbuf_fragment>
   vec2 q = vUV.xy; float n = bil(q * 0.45 + vec2(vUV.z * 0.137, vUV.z * 0.071));
+  float n2 = bil(q * 1.4 + vec2(vUV.z * 0.311, vUV.z * 0.197)); // finer billows, which eat into the outline
   float rEdge = 0.75 * (0.7 + 0.6 * n), x = length(q) / rEdge; if (x >= 1.0) discard; // the puff's radius is 0.75 of the quad's half-size
   float chord = sqrt(1.0 - x * x);
   vec3 V = normalize(cameraPosition - vWP), right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]), up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-  // a soft blob, its outline faded over most of its radius; shaded nearly flat, as the smoke it stands for (a stretch of
-  // column seen end-on, a patch of the wide cloud high up) has no round surface to catch the light
-  vec4 c = smoke(vTau * chord * (0.45 + 1.1 * n), 1.0 - smoothstep(0.25, 1.0, x), normalize(0.4 * (right * q.x + up * q.y) / rEdge + V * chord), n);
+  // the outline: faded over most of the radius and eroded by the finer billows, so no puff reads as a disc
+  float edge = (1.0 - smoothstep(0.25, 1.0, x)) * smoothstep(0.12, 0.55, n2 + 0.6 * (1.0 - x));
+  // the shading: a soft blob is nearly flat, but where the puff knows which way it bulges out of its cloud (aN, the
+  // launch cloud's rolling mass) it is lit as that surface, with the finer billows modelling it
+  vec3 Nf = normalize(0.4 * (right * q.x + up * q.y) / rEdge + V * chord);
+  float hasN = step(0.5, length(vN));
+  vec3 Nc = normalize(mix(Nf, normalize(vN + 1.1 * (right * (n2 - 0.5) + up * (n - 0.5))), 0.75 * hasN));
+  vec4 c = smoke(vTau * chord * (0.45 + 1.1 * n), edge, Nc, n);
+  c.rgb *= mix(1.0, 0.55 + 0.5 * smoothstep(0.2, 0.8, n2), hasN); // the clefts between the billows, where less light gets in
   if (max(max(c.r, c.g), c.b) < 0.0015 && c.a < 0.002) discard;
   gl_FragColor = vec4(c.rgb, 1.0);
   #include <colorspace_fragment>
@@ -208,13 +216,13 @@ function buildExhaust(md) {
   g.setAttribute('position', A(3)); g.setAttribute('aUV', A(3)); g.setAttribute('aTau', A(1)); g.setAttribute('aSun', A(3)); g.setAttribute('aAmb', A(3)); g.setAttribute('aFog', A(1)); g.setAttribute('aSide', A(3)); g.setAttribute('aFade', A(1));
   const idx = new Uint32Array(6 * (cap - 1)); for (let i = 0; i < cap - 1; i++) { const a = 2 * i; idx.set([a, a + 1, a + 2, a + 1, a + 3, a + 2], 6 * i); }
   g.setIndex(new THREE.BufferAttribute(idx, 1));
-  const U = { tNoise: { value: EXH.tex }, uSunDir: { value: new THREE.Vector3(1, 0, 0) }, uFogCol: { value: new THREE.Color(0, 0, 0) }, uExpo: { value: 1 } }; // shared by both
+  const U = { tNoise: { value: EXH.tex }, uSunDir: { value: new THREE.Vector3(1, 0, 0) }, uFogCol: { value: new THREE.Color(0, 0, 0) }, uExpo: { value: 1 }, uHG: { value: 1 } }; // shared by both
   const mk = (geo, vs, fs) => { const ms = new THREE.Mesh(geo, new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, transparent: true, premultipliedAlpha: true, depthWrite: false, side: THREE.DoubleSide, uniforms: U }));
     ms.frustumCulled = false; ms.renderOrder = 4; ms.visible = false; R.scene.add(ms); return ms; };
   EXH.mesh = mk(g, GLSL_EXH_V, GLSL_EXH_F);
   { // the puffs: as many as the trail could need (one per ribbon point at most)
     const np = NR, gp = new THREE.BufferGeometry(), B = k => new THREE.BufferAttribute(new Float32Array(4 * np * k), k).setUsage(THREE.DynamicDrawUsage);
-    gp.setAttribute('position', B(3)); gp.setAttribute('aUV', B(3)); gp.setAttribute('aTau', B(1)); gp.setAttribute('aSun', B(3)); gp.setAttribute('aAmb', B(3)); gp.setAttribute('aFog', B(1)); gp.setAttribute('aFade', B(1));
+    gp.setAttribute('position', B(3)); gp.setAttribute('aUV', B(3)); gp.setAttribute('aTau', B(1)); gp.setAttribute('aSun', B(3)); gp.setAttribute('aAmb', B(3)); gp.setAttribute('aFog', B(1)); gp.setAttribute('aFade', B(1)); gp.setAttribute('aN', B(3)); // (aN stays zero: the trail's puffs are shaded as flat blobs)
     const ix = new Uint32Array(6 * np); for (let i = 0; i < np; i++) { const a = 4 * i; ix.set([a, a + 1, a + 2, a, a + 2, a + 3], 6 * i); }
     gp.setIndex(new THREE.BufferAttribute(ix, 1));
     const uvA = gp.attributes.aUV.array; for (let i = 0; i < np; i++) [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([x, y], k) => { uvA[12 * i + 3 * k] = x; uvA[12 * i + 3 * k + 1] = y; });

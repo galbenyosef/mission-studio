@@ -374,10 +374,11 @@ function updatePlumes(c, s, t, act, model) {
       p.position.set(m.x || 0, m.y - yc + (c.yOff || 0), (m.z || 0) + (c.zOff || 0));
       if (m.d) p.quaternion.setFromUnitVectors(_vDown, _vPd.set(m.d[0], m.d[1], m.d[2])); else p.rotation.set(m.flip ? Math.PI : 0, 0, 0); // a canted engine's exhaust leaves along its axis
       const u = p.material.uniforms; u.uColor.value.set(colr); u.uCore.value.set(look[2]);
-      u.uI.value = look[0] * (0.35 + 0.65 * (1 - vac * 0.6)) * thr * Math.pow(g0 / g1, 0.7); u.uDiam.value = look[1] * (1 - vac); u.uTime.value = performance.now() / 1000;
+      u.uI.value = look[0] * (0.35 + 0.65 * (1 - vac * 0.6)) * thr * Math.pow(g0 / g1, 0.7); u.uDiam.value = look[1] * (1 - vac); u.uTime.value = clockMs() / 1000; if (!u.tNoise.value) { if (!EXH.tex) initExhaust(); u.tNoise.value = EXH.tex; }
       c.flameLen = Math.max(c.flameLen, len); c.flameLum = Math.max(c.flameLum, look[0] * thr * (1 - 0.7 * vac)); // for the smoke it lights (app/47_exhaust.js)
       const dl = 5 * m.r; u.uDF.value = 46 * len / dl; u.uDL.value = clamp(dl / len, 0.03, 1); // diamonds as before, within ~5 nozzle radii
       u.uCF.value = clamp(9 * m.r / len * (prop === 'solid' ? 1.8 : 1), 0.12, 0.45); // the white-hot core: a few nozzle diameters long
+      u.uSoot.value = prop === 'kerolox' ? 1 : prop === 'solid' ? 0.25 : /hypergolic|udmh|mmh/.test(prop) ? 0.4 : 0; // kerosene burns rich and sooty; the hypergolics a little; hydrogen and methane clean
     }
   }
   for (; i < c.plumes.length; i++) c.plumes[i].visible = false;

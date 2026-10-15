@@ -511,25 +511,40 @@ void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 wp = mod
 const GLSL_PLUME_F = `
 #include <common>
 #include <logdepthbuf_pars_fragment>
-uniform vec3 uColor; uniform vec3 uCore; uniform float uI; uniform float uTime; uniform float uDiam; uniform float uDF; uniform float uDL; uniform float uCF;
+uniform vec3 uColor; uniform vec3 uCore; uniform float uI; uniform float uTime; uniform float uDiam; uniform float uDF; uniform float uDL; uniform float uCF; uniform float uSoot; uniform sampler2D tNoise;
 varying vec2 vUv; varying vec3 vN; varying vec3 vP;
+// The flame: a cone of hot gas, white-hot at the nozzle and the propellant's colour beyond, broken up by turbulence that
+// streams down it (two noise octaves scrolling with the flow, stretched along the axis), its rim eroded by the same
+// turbulence so it does not read as a smooth cone, and the shock diamonds just behind the nozzle. Additive.
 void main(){
   #include <logdepthbuf_fragment>
   // (clamped: with multisampling, a pixel on the cone's rim can be shaded at its centre just outside the cone, where vUv
   // runs past 0…1, and pow() of a number below 0 is undefined: NaN on most GPUs, a black dot under the film look)
-  float along = clamp(1.0 - vUv.y, 0.0, 1.0);
+  float along = clamp(1.0 - vUv.y, 0.0, 1.0), around = vUv.x;
   vec3 V = normalize(cameraPosition - vP);
   float edge = abs(dot(normalize(vN), V));
-  float body = pow(edge, 1.3) * pow(1.0 - along, 1.6);
-  float flick = 0.85 + 0.15 * sin(uTime * 37.0 + along * 23.0) * sin(uTime * 11.0);
+  float t = uTime;
+  float n1 = texture2D(tNoise, vec2(around * 2.0, along * 1.6 - t * 1.7)).r, n2 = texture2D(tNoise, vec2(around * 5.0 + 0.3, along * 4.5 - t * 3.1)).r;
+  float turb = 0.55 * n1 + 0.45 * n2; // 0…1, mostly round 0.5
+  // the rim: eroded more and more down the flame (the tail breaks into wisps), and thin at the edge of the cone
+  float rim = pow(edge, 1.3) * (1.0 - smoothstep(0.35 + 0.65 * turb, 1.0, along));
+  // the body: the turbulence shows as bright eddies against darker gas, not as a wash over a flat cone
+  float body = rim * pow(1.0 - along, 1.5) * mix(0.12, 1.3, turb * turb) * 0.65;
+  float flick = 0.9 + 0.1 * sin(t * 37.0 + along * 23.0) * sin(t * 11.0);
   // shock diamonds: spaced by the nozzle size and confined to the stretch just behind it, however long the flame
-  float diam = uDiam * smoothstep(0.55, 1.0, sin(along * uDF - uTime * 3.0)) * (1.0 - smoothstep(uDL * 0.55, uDL, along)) * (1.0 - along) * edge;
+  // (bright knots down the flame's axis, so they are weighted to where the cone faces the camera and not drawn as rings
+  // round it, and broken up by the turbulence)
+  float diam = uDiam * smoothstep(0.55, 1.0, sin(along * uDF - t * 3.0)) * (1.0 - smoothstep(uDL * 0.55, uDL, along)) * (1.0 - along) * pow(edge, 3.0) * (0.5 + 0.8 * n1);
+  // the colour: white-hot core, the propellant's colour, deepening toward red-orange at the eroded tail
   vec3 col = mix(uCore, uColor, smoothstep(0.0, uCF, along));
+  col = mix(col, col * vec3(1.0, 0.55, 0.3), smoothstep(0.5, 1.0, along) * 0.6);
+  // a sooty propellant's tail: the unburnt carbon dims the flame where the gas has cooled, most between the eddies
+  col *= 1.0 - uSoot * smoothstep(0.3, 1.0, along) * (0.35 + 0.4 * (1.0 - turb));
   gl_FragColor = vec4(col * (body * flick + diam * 0.8) * uI, 1.0);
 }`;
 function makePlume() {
   const geo = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true); geo.translate(0, -0.5, 0); // top (v=1) at y=0, extends to y=-1
-  const m = new THREE.ShaderMaterial({ vertexShader: GLSL_PLUME_V, fragmentShader: GLSL_PLUME_F, uniforms: { uColor: { value: new THREE.Color() }, uCore: { value: new THREE.Color() }, uI: { value: 1 }, uTime: { value: 0 }, uDiam: { value: 0 }, uDF: { value: 46 }, uDL: { value: 1 }, uCF: { value: 0.45 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const m = new THREE.ShaderMaterial({ vertexShader: GLSL_PLUME_V, fragmentShader: GLSL_PLUME_F, uniforms: { uColor: { value: new THREE.Color() }, uCore: { value: new THREE.Color() }, uI: { value: 1 }, uTime: { value: 0 }, uDiam: { value: 0 }, uDF: { value: 46 }, uDL: { value: 1 }, uCF: { value: 0.45 }, uSoot: { value: 0 }, tNoise: { value: null } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geo, m); mesh.frustumCulled = false; mesh.renderOrder = 6; return mesh;
 }
 // shapes the open cone: radius at the nozzle r0, at the tail r1, length len
