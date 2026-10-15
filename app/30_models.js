@@ -441,7 +441,7 @@ function buildLaunchStack(lkey, scModel, c) {
   const bst = L.stages[0].parallel ? L.stages[0] : null;
   if (bst && c.boosters) {
     const n = bst.booster.count, off = bst.booster.offset;
-    for (let k = 0; k < n; k++) { const a = n === 2 ? k * Math.PI : k * Math.PI / 2 + Math.PI / 4; const b = buildStage(bst); b.group.position.set(Math.cos(a) * off, (firstCoreY || 0) + 0.5, Math.sin(a) * off); g.add(b.group); mounts.push({ y: (firstCoreY || 0) + 0.5 - b.engLen, r: Math.max(bst.geom[0][1] * 0.8, 0.6), x: Math.cos(a) * off, z: Math.sin(a) * off, tag: 'stage:' + bst.id, prop: bst.prop, idx: 0 }); }
+    for (let k = 0; k < n; k++) { const a = n === 2 ? k * Math.PI : k * Math.PI / 2 + Math.PI / 4; const b = buildStage(bst, { az: a }); b.group.position.set(Math.cos(a) * off, (firstCoreY || 0) + 0.5, Math.sin(a) * off); g.add(b.group); mounts.push({ y: (firstCoreY || 0) + 0.5 - b.engLen, r: Math.max(bst.geom[0][1] * 0.8, 0.6), x: Math.cos(a) * off, z: Math.sin(a) * off, tag: 'stage:' + bst.id, prop: bst.prop, idx: 0 }); }
   }
   const topR = core.length ? core[core.length - 1].s.geom[core[core.length - 1].s.geom.length - 1][2] : 2;
   const PF = L.payloadFairing;
@@ -457,10 +457,10 @@ function buildLaunchStack(lkey, scModel, c) {
 function buildStageOnly(lkey, idx, withAdapter, variant) {
   const L = LAUNCHERS[lkey]; let s = L.stages[idx];
   if (variant === 'sts1' && lkey === 'shuttle' && idx === 1) s = { ...s, geom: s.geom.map(p => [p[0], p[1], p[2], p[3] === '#4a4a4a' ? p[3] : '#e9e7e0', p[4]]) }; // STS-1's painted (white) tank
-  const st = buildStage(s, { ist: false, white: variant === 'sts1' && lkey === 'shuttle' && idx === 1 }); // (a spent stage's aft interstage went long before)
+  const st = buildStage(s, { ist: false, white: variant === 'sts1' && lkey === 'shuttle' && idx === 1, az: s.parallel && s.booster ? (s.booster.count === 2 ? 0 : Math.PI / 4) : undefined }); // (a spent stage's aft interstage went long before)
   if (s.parallel && s.booster) { // drop all boosters together
     const g = new THREE.Group(); const n = s.booster.count, off = s.booster.offset;
-    for (let k = 0; k < n; k++) { const a = n === 2 ? k * Math.PI : k * Math.PI / 2 + Math.PI / 4; const b = k === 0 ? st : buildStage(s); b.group.position.set(Math.cos(a) * off, 0, Math.sin(a) * off); if (n === 2 && k === 1) b.group.scale.x = -1; g.add(b.group); } // a pair: mirror images
+    for (let k = 0; k < n; k++) { const a = n === 2 ? k * Math.PI : k * Math.PI / 2 + Math.PI / 4; const b = k === 0 ? st : buildStage(s, { az: a }); b.group.position.set(Math.cos(a) * off, 0, Math.sin(a) * off); if (n === 2 && k === 1 && s.detail) b.group.scale.x = -1; g.add(b.group); } // a pair of scanned boosters: mirror images (a drawn one has its own bearing)
     g.userData = { len: st.len, mounts: [] }; return g;
   }
   if (withAdapter) { const sla = cyl(3.3, 3.3, 1.0, mat('#e7e5df')); sla.position.y = st.len; st.group.add(sla); for (let k = 0; k < 4; k++) { const p = box(2.6, 7.0, 0.1, mat('#e7e5df')); const a = k * Math.PI / 2; p.position.set(Math.cos(a) * 4.5, st.len - 1, Math.sin(a) * 4.5); p.rotation.y = -a + Math.PI / 2; p.rotation.x = 0.7; st.group.add(p); } }

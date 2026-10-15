@@ -6,7 +6,7 @@ const PROP = {
   kerolox: { label: 'RP-1 / LOX (kerosene)', plume: '#ffb347', smoke: true },
   hydrolox: { label: 'LH₂ / LOX (liquid hydrogen)', plume: '#bcd7ff', smoke: false },
   methalox: { label: 'CH₄ / LOX (liquid methane)', plume: '#8fb6ff', smoke: false },
-  solid: { label: 'Solid (PBAN / HTPB composite)', plume: '#fff1c4', smoke: true },
+  solid: { label: 'Solid (PBAN / HTPB composite)', plume: '#ffd98c', smoke: true },
   hypergolic: { label: 'Aerozine-50 / N₂O₄ (hypergolic)', plume: '#ffd0a0', smoke: false },
   udmh: { label: 'UDMH / IRFNA (hypergolic)', plume: '#ffc890', smoke: false },
   mmh: { label: 'MMH / MON (hypergolic)', plume: '#ffd8b0', smoke: false },
@@ -67,9 +67,9 @@ const LAUNCHERS = {
     stages: [
       { id: 'SRB', name: '2 × five-segment solid rocket boosters', prop: 'solid', engine: 'RSRMV', n: 2, thrustSL: 2 * 11.88e6, thrustVac: 2 * 13.20e6, ispSL: 242, ispVac: 268.8, dry: 2 * 98000, propMass: 2 * 631000, parallel: true,
         curve: [[0, 1.22], [20, 1.18], [45, 0.94], [62, 0.95], [85, 1.04], [108, 0.78], [122, 0.4], [135, 0.05]], booster: { count: 2, offset: 6.1 },
-        geom: [[2.6, 2.6, 1.86, C.white], [46.0, 1.855, 1.855, C.white, { bands: 4 }], [5.5, 1.855, 0.35, C.white]], eng: { n: 1, len: 3.6, r: 1.9, layout: 'single' } },
+        geom: [[2.6, 2.6, 1.86, C.white], [46.0, 1.855, 1.855, C.white, { bands: 4 }], [5.5, 1.855, 0.35, C.white]], eng: { n: 1, len: 3.6, r: 1.9, layout: 'single' }, look: 'slsBooster' }, // look: drawn by hand (app/3b_launchers.js)
       { id: 'Core', name: 'Core stage (4 × RS-25)', prop: 'hydrolox', engine: 'RS-25', n: 4, thrustSL: 4 * 1860e3, thrustVac: 4 * 2280e3, ispSL: 366, ispVac: 452, dry: 85000, propMass: 980000, maxG: 3.5, minThr: 0.67,
-        geom: [[4.5, 4.6, 4.2, C.white], [60.1, 4.2, 4.2, C.orange], [8.3, 4.2, 2.55, C.white]], eng: { n: 4, len: 4.3, r: 1.2, layout: 'square', spread: 2.0 } },
+        geom: [[4.5, 4.6, 4.2, C.white], [60.1, 4.2, 4.2, C.orange], [8.3, 4.2, 2.55, C.white]], eng: { n: 4, len: 4.3, r: 1.2, layout: 'square', spread: 2.0 }, look: 'slsCore' },
       { id: 'ICPS', name: 'Interim Cryogenic Propulsion Stage', prop: 'hydrolox', engine: 'RL10B-2', n: 1, thrustSL: 60e3, thrustVac: 110.1e3, ispSL: 300, ispVac: 465.5, dry: 3490, propMass: 27220, restart: true,
         geom: [[13.7, 2.55, 2.55, C.white], [1.5, 2.55, 2.05, C.white]], eng: { n: 1, len: 2.4, r: 1.1, layout: 'single' } },
     ],
@@ -82,9 +82,9 @@ const LAUNCHERS = {
     blurb: 'China’s heavy-lift launcher: hydrolox core with four kerosene boosters. Launched Chang’e 5 and Tianwen-1.',
     stages: [
       { id: 'K3-1', name: '4 × K3-1 boosters (2 × YF-100 each)', prop: 'kerolox', engine: 'YF-100', n: 8, thrustSL: 8 * 1200e3, thrustVac: 8 * 1340e3, ispSL: 300, ispVac: 335, dry: 4 * 13000, propMass: 4 * 143000, parallel: true,
-        booster: { count: 4, offset: 4.2 }, geom: [[22.6, 1.675, 1.675, C.white], [5.0, 1.675, 0.3, C.white]], eng: { n: 2, len: 2.3, r: 0.75, layout: 'pair', spread: 0.8 } },
+        booster: { count: 4, offset: 4.2 }, geom: [[22.6, 1.675, 1.675, C.white], [5.0, 1.675, 0.3, C.white]], eng: { n: 2, len: 2.3, r: 0.75, layout: 'pair', spread: 0.8 }, look: 'lm5Booster' }, // look: drawn by hand (app/3b_launchers.js)
       { id: 'Core', name: 'Core stage (2 × YF-77)', prop: 'hydrolox', engine: 'YF-77', n: 2, thrustSL: 2 * 510e3, thrustVac: 2 * 700e3, ispSL: 310, ispVac: 430, dry: 21600, propMass: 158500,
-        geom: [[33.2, 2.5, 2.5, C.white, { flag: 'cn' }]], eng: { n: 2, len: 2.8, r: 0.9, layout: 'pair', spread: 1.1 } },
+        geom: [[33.2, 2.5, 2.5, C.white, { flag: 'cn' }]], eng: { n: 2, len: 2.8, r: 0.9, layout: 'pair', spread: 1.1 }, look: 'lm5Core' },
       { id: 'Stage 2', name: 'Second stage (2 × YF-75D)', prop: 'hydrolox', engine: 'YF-75D', n: 2, thrustSL: 2 * 50e3, thrustVac: 2 * 88.36e3, ispSL: 300, ispVac: 442.6, dry: 3400, propMass: 26100, restart: true,
         geom: [[11.5, 2.5, 2.5, C.white]], eng: { n: 2, len: 1.6, r: 0.55, layout: 'pair', spread: 0.8 } },
     ],
@@ -129,9 +129,9 @@ const LAUNCHERS = {
     blurb: 'Three Falcon 9-derived cores (27 Merlin engines). Flown fully expendable for Europa Clipper.',
     stages: [
       { id: 'Side boosters', name: '2 × side boosters (9 × Merlin 1D each)', prop: 'kerolox', engine: 'Merlin 1D', n: 18, thrustSL: 18 * 845e3, thrustVac: 18 * 914e3, ispSL: 282, ispVac: 311, dry: 2 * 22200, propMass: 2 * 411000, parallel: true,
-        booster: { count: 2, offset: 3.75 }, geom: [[37.0, 1.83, 1.83, C.white], [4.2, 1.83, 1.83, C.black], [3.2, 1.83, 0.25, C.white]], eng: { n: 9, len: 1.4, r: 0.45, layout: 'octaweb', spread: 1.25 } },
+        booster: { count: 2, offset: 3.75 }, geom: [[37.0, 1.83, 1.83, C.white], [4.2, 1.83, 1.83, C.black], [3.2, 1.83, 0.25, C.white]], eng: { n: 9, len: 1.4, r: 0.45, layout: 'octaweb', spread: 1.25 }, look: 'falconSide' }, // look: drawn by hand (app/3b_launchers.js)
       { id: 'Center core', name: 'Center core (9 × Merlin 1D)', prop: 'kerolox', engine: 'Merlin 1D', n: 9, thrustSL: 9 * 845e3, thrustVac: 9 * 914e3, ispSL: 282, ispVac: 311, dry: 25000, propMass: 411000, thrWithBoosters: 0.55, maxG: 4.5, minThr: 0.4,
-        geom: [[37.0, 1.83, 1.83, C.white], [4.2, 1.83, 1.83, C.black]], eng: { n: 9, len: 1.4, r: 0.45, layout: 'octaweb', spread: 1.25 } },
+        geom: [[37.0, 1.83, 1.83, C.white], [4.2, 1.83, 1.83, C.black]], eng: { n: 9, len: 1.4, r: 0.45, layout: 'octaweb', spread: 1.25 }, look: 'falconCentre' },
       { id: 'Stage 2', name: 'Second stage (Merlin Vacuum)', prop: 'kerolox', engine: 'MVac', n: 1, thrustSL: 600e3, thrustVac: 981e3, ispSL: 200, ispVac: 348, dry: 4000, propMass: 107500, restart: true,
         geom: [[12.6, 1.83, 1.83, C.white]], eng: { n: 1, len: 3.0, r: 1.5, layout: 'single' } },
     ],
