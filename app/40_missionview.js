@@ -784,7 +784,8 @@ function updateVectors(c, t, tele) {
   const base = camD * 0.16;
   const pos = c.node.position;
   const items = [];
-  items.push({ id: 'vel', dir: tele.vRel, mag: vnorm(tele.vRel), txt: fSpeed(vnorm(tele.vRel)), scale: 1 });
+  // (not on the pad or the ground: the inertial velocity there is the planet's spin, an arrow lying sideways out of a vehicle that is standing still)
+  if (!(c.s && (c.s.pad || c.s.surface))) items.push({ id: 'vel', dir: tele.vRel, mag: vnorm(tele.vRel), txt: fSpeed(vnorm(tele.vRel)), scale: 1 });
   const gmax = Math.max(...tele.grav.map(g => g.a));
   for (const g of tele.grav) { if (!['earth', 'moon', 'sun', 'mars'].includes(g.body)) continue; if (g.a < gmax * 1e-3) continue; items.push({ id: 'g:' + g.body, dir: g.dir, mag: g.a, txt: fAcc(g.a), scale: clamp(0.45 + 0.18 * Math.log10(g.a / gmax * 1000 + 1e-9), 0.2, 1) }); }
   if (tele.thrustAcc > 0) items.push({ id: 'thrust', dir: tele.thrustDir, mag: tele.thrustAcc, txt: fAcc(tele.thrustAcc), scale: clamp(0.5 + 0.2 * Math.log10(tele.thrustAcc / 9.81 + 1e-6), 0.3, 1.1) });
