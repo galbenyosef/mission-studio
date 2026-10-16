@@ -16,7 +16,7 @@ const TERRAIN_SITES = {
   edwards: { lat: 34.93, lon: -117.85, km: 48 },
   whitesands: { lat: 32.99, lon: -106.425, km: 32 },
 };
-const TER = { groups: [], missing: {}, pending: 0 };
+const TER = { groups: [], missing: {}, pending: 0, anim: [] }; // anim: materials with a time (the flags)
 // the land's colours by NLCD class (sRGB), with how rough the scrub texture should show on each
 const TER_COVER = {
   0: ['#8d8a60', 1], 11: ['#3d6a86', 0.2], 12: ['#e8ecf0', 0.3],
@@ -52,7 +52,7 @@ function loadTerrain(id, md) {
 }
 function disposeTerrain() {
   for (const g of TER.groups) { g.parent && g.parent.remove(g); g.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material && n.material !== padGround.mat) n.material.dispose(); }); }
-  TER.groups = [];
+  TER.groups = []; TER.anim = [];
   if (MV.pad) MV.pad.traverse(n => { if (n.userData.padGround) n.visible = true; });
 }
 // ---- the build ----
@@ -201,6 +201,7 @@ const GLSL_TERRAIN_V = `
 #include <common>
 #include <logdepthbuf_pars_vertex>
 attribute vec3 aUp; attribute float aFade; varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vUp; varying float vFade; varying vec3 vCol;
+uniform float uWave; uniform float uTime;
 #ifdef USE_VC
 attribute vec3 color;
 #endif
@@ -211,7 +212,9 @@ void main() {
   #else
   vCol = vec3(1.0);
   #endif
-  vec4 wp = modelMatrix * vec4(position, 1.0); vP = wp.xyz;
+  vec3 pos = position;
+  if (uWave > 0.0) pos += normal * (sin(uv.x * 9.0 - uTime * 5.0) + 0.5 * sin(uv.x * 17.0 + uv.y * 4.0 - uTime * 8.3)) * uv.x * uWave; // a flag in the wind: waves run out from the pole and grow toward the fly
+  vec4 wp = modelMatrix * vec4(pos, 1.0); vP = wp.xyz;
   gl_Position = projectionMatrix * viewMatrix * wp;
   #include <logdepthbuf_vertex>
 }`;
@@ -265,9 +268,11 @@ function terrainMat(o) {
     polygonOffset: !!o.offset, polygonOffsetFactor: o.offset || 0, polygonOffsetUnits: o.offset || 0,
     defines: o.vertexColors ? { USE_VC: 1 } : {},
     uniforms: Object.assign({ tMap: { value: o.map || null }, uHasMap: { value: o.map ? 1 : 0 }, uColor: { value: new THREE.Color(o.color || '#ffffff') }, tScrub: { value: scrub }, uRep: { value: o.rep || 0 }, uOcean: { value: o.ocean || 0 },
-      uSunDir: EU.uSunDir, uFill: EU.uFill }, atmosUniforms('earth')) });
+      uWave: { value: o.wave || 0 }, uTime: { value: 0 }, uSunDir: EU.uSunDir, uFill: EU.uFill }, atmosUniforms('earth')) });
+  if (o.wave) TER.anim.push(m);
   return m;
 }
+function updateTerrain() { const t = clockMs() / 1000; for (const m of TER.anim) m.uniforms.uTime.value = t; } // the flags
 // the Earth map's colour at a point (sRGB), from the 4k day map: a few pixels round it averaged
 function globeColorAt(lat, lon) {
   const e = (R.texLOD || []).find(x => x.body === 'earth' && x.srgb && !x.grey), im = e && e.base && e.base.image;
