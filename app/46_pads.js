@@ -19,17 +19,38 @@ function padExactDepth(m) {
   m.onBeforeCompile = s => { s.fragmentShader = s.fragmentShader.replace('#include <logdepthbuf_fragment>', LOGDEPTH_EXACT); };
   m.customProgramCacheKey = () => 'padExactDepth'; return m;
 }
+// Weathering, in the shader from the pad's own coordinates (the kit's merged meshes carry no texture coordinates): blotches
+// and grain over concrete, with the joints between its slabs; a softer mottle over paint and steel (rust streaks under
+// the rain, dust). w: how strong, 0 … 1; seams: the slab joints.
+const GLSL_PAD_WEATHER = `
+float padHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float padNoise(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(padHash(i), padHash(i + vec3(1, 0, 0)), f.x), mix(padHash(i + vec3(0, 1, 0)), padHash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(padHash(i + vec3(0, 0, 1)), padHash(i + vec3(1, 0, 1)), f.x), mix(padHash(i + vec3(0, 1, 1)), padHash(i + vec3(1, 1, 1)), f.x), f.y), f.z); }`;
+function padWeather(m, w, seams) {
+  const base = m.onBeforeCompile;
+  m.onBeforeCompile = s => {
+    base(s);
+    s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vPadP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvPadP = position;');
+    s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vPadP;' + GLSL_PAD_WEATHER).replace('#include <map_fragment>', `#include <map_fragment>
+  { float b = 0.55 * padNoise(vPadP * 0.23) + 0.3 * padNoise(vPadP * 1.3) + 0.15 * padNoise(vPadP * 7.0);
+    float streak = padNoise(vec3(vPadP.x * 3.0, vPadP.y * 0.08, vPadP.z * 3.0)); // the rain's streaks down the faces
+    diffuseColor.rgb *= 1.0 + ${w.toFixed(2)} * (0.5 * (b - 0.5) + 0.25 * (streak - 0.5));
+    ${seams ? 'vec3 q = abs(fract(vPadP / 6.1) - 0.5); float j = smoothstep(0.478, 0.492, max(max(q.x, q.y), q.z)); diffuseColor.rgb *= 1.0 - 0.18 * j;' : ''} }`);
+  };
+  m.customProgramCacheKey = () => 'padExactDepth|weather' + w + (seams ? 's' : ''); return m;
+}
 // the material the engines light up when they fire (updatePad sets its colour): the flame deflector, or the ground under the
 // exhaust where there is no trench to look into
 const padGlow = () => padExactDepth(new THREE.MeshBasicMaterial({ color: '#141210' }));
 function padMats() {
-  const pm = (c, k) => padExactDepth(mat(c, k, { name: 'pad' })); // the pad's own materials (not shared with the vehicles)
+  const pm = (c, k, w = 0, seams = false) => { const m = padExactDepth(mat(c, k, { name: 'pad' })); return w ? padWeather(m, w, seams) : m; }; // the pad's own materials (not shared with the vehicles)
   return padMats.m || (padMats.m = {
-    concrete: pm('#aeaba3', 'fabric'), concreteD: pm('#8f8b83', 'fabric'), soot: pm('#45403a', 'fabric'), grass: pm('#6f7c57', 'fabric'),
-    sand: pm('#c9c0a7', 'fabric'), rock: pm('#bdb9ae', 'fabric'), asphalt: pm('#55575a', 'fabric'),
-    steel: pm('#8d9196', 'metal'), steelD: pm('#5a5e63', 'metal'), galv: pm('#a3a8ad', 'metal'), floor: pm('#6f7378', 'dark'),
-    red: pm('#a9381f', 'paint'), redD: pm('#7d2a18', 'paint'), white: pm('#e4e3dd', 'paint'), grey: pm('#a8acb0', 'paint'), greyL: pm('#c8cbce', 'paint'),
-    greyD: pm('#6c7075', 'paint'), black: pm('#26282b', 'paint'), orange: pm('#c9652a', 'paint'), yellow: pm('#d8b23a', 'paint'),
+    concrete: pm('#aeaba3', 'fabric', 1, true), concreteD: pm('#8f8b83', 'fabric', 1, true), soot: pm('#45403a', 'fabric', 0.8), grass: pm('#6f7c57', 'fabric', 0.6),
+    sand: pm('#c9c0a7', 'fabric', 0.7), rock: pm('#bdb9ae', 'fabric', 0.8), asphalt: pm('#55575a', 'fabric', 0.6),
+    steel: pm('#8d9196', 'metal', 0.5), steelD: pm('#5a5e63', 'metal', 0.5), galv: pm('#a3a8ad', 'metal', 0.5), floor: pm('#6f7378', 'dark', 0.5),
+    red: pm('#a9381f', 'paint', 0.5), redD: pm('#7d2a18', 'paint', 0.5), white: pm('#e4e3dd', 'paint', 0.35), grey: pm('#a8acb0', 'paint', 0.45), greyL: pm('#c8cbce', 'paint', 0.45, true),
+    greyD: pm('#6c7075', 'paint', 0.45), black: pm('#26282b', 'paint', 0.3), orange: pm('#c9652a', 'paint', 0.45), yellow: pm('#d8b23a', 'paint', 0.4),
     fibre: pm('#d9d2bd', 'paint'), glass: pm('#2f3840', 'glass'), wire: new THREE.LineBasicMaterial({ color: 0x9aa0a6, transparent: true, opacity: 0.55 }),
   });
 }
@@ -471,10 +492,22 @@ function padSLC41(md) {
 // Agena; the red service tower (about 50 m, an A-frame), rolled back 90 m on its rails; the domed blockhouse 230 m west.
 function padLC12(md) {
   const M = padMats(), k = padKit(), g = new THREE.Group(), deck = 6.1, stand = deck + 0.6 - LAUNCHERS.atlasAgena.stages[0].eng.len;
-  k.box(M.concrete, 0, 0, 0, 18.3, deck, 23.8); k.box(M.soot, 0, 0, 0, 7, 0.05, 40); k.box(M.steelD, 0, deck, 0, 6.2, 0.6, 6.2);
+  k.box(M.concrete, 0, 0, 0, 18.3, deck, 23.8); k.box(M.soot, 0, 0, 0, 7, 0.05, 40);
+  // the launcher: a steel ring stand on four legs over the deflector's opening, the hold-down arms at the tank's foot
+  k.box(M.black, 0, deck - 0.02, 0, 5.4, 0.04, 5.4); for (const [e, n] of [[-2.6, -2.6], [2.6, -2.6], [2.6, 2.6], [-2.6, 2.6]]) k.box(M.steelD, e, deck, n, 0.7, 0.6, 0.7);
+  k.cyl(M.steelD, 0, deck + 0.6, 0, 2.2, 2.2, 0.5, 32); k.cyl(M.steel, 0, deck + 1.1, 0, 1.75, 1.75, 0.25, 32, true);
+  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; k.box(M.yellow, Math.cos(a) * 2.1, deck + 1.1, Math.sin(a) * 2.1, 0.5, 1.0, 0.5, -a); }
+  // the deck: railings round its edge, the stair down its east side, cable trays and pipes from the tower to the stand
+  const rail = (a, b) => { k.beam(M.galv, a, b, 0.06, 0.06); const n = Math.max(1, Math.round(a.distanceTo(b) / 2)); for (let i = 0; i <= n; i++) { const p = a.clone().lerp(b, i / n); k.beam(M.galv, p.clone().setY(deck), p, 0.06); } };
+  const dy = deck + 1.05, E = 9.15, N = 11.9; rail(PV(-E, dy, -N), PV(-E, dy, -8.4)); rail(PV(-E, dy, -0.1), PV(-E, dy, N)); rail(PV(-E, dy, N), PV(E, dy, N)); rail(PV(E, dy, N), PV(E, dy, -N)); rail(PV(E, dy, -N), PV(-E, dy, -N));
+  for (let i = 0; i < 12; i++) k.box(M.galv, E + 1.2, deck * (i + 1) / 12 - 0.1, 2.5 - i * 0.3, 2.0, 0.1, 0.3); k.box(M.galv, E + 1.2, 0, 4.2, 2.2, deck, 0.2);
+  for (const n of [-1.2, 1.2]) k.box(M.greyD, -3.4, deck, n, 4.0, 0.3, 0.5); k.rod(M.steel, PV(-5, deck + 0.5, 1.9), PV(-1.9, deck + 0.5, 1.9), 0.18); k.rod(M.steel, PV(-5, deck + 0.8, 2.3), PV(-1.9, deck + 0.8, 2.3), 0.12);
+  for (const [e, n, w] of [[6, -8, 2.2], [6, -4.5, 1.6], [-6, 9, 2.0]]) k.box(M.grey, e, deck, n, w, 1.4, 1.0); // equipment cabinets
   k.quads(M.concrete, [[PV(-9.15, deck, -8), PV(-9.15, deck, -0.5), PV(-36, 0, -0.5), PV(-36, 0, -8)]]); // the ramp
   padLattice(k, M.red, -6.5, 0, 3.0, deck, 25, { step: 3.1, floors: false, col: 0.4, beam: 0.25 }); // umbilical tower
   for (const y of [deck + 14, deck + 23]) k.beam(M.redD, PV(-5, y, 0), PV(-1.4, y - 1, 0), 0.4);
+  for (const y of [deck + 6.2, deck + 12.4, deck + 18.6]) k.box(M.floor, -6.5, y, 0, 3.4, 0.2, 3.4); k.box(M.greyD, -6.5, deck + 25, 0, 2.0, 2.4, 2.0); // its landings and the hoist house on top
+  for (const y of [deck + 8, deck + 17]) k.rod(M.galv, PV(-5, y, 0), PV(-1.6, y, 0), 0.08); // the umbilical lines
   // the service tower, rolled 90 m north along its rails
   const sn = 95; for (const e of [-6, 6]) k.box(M.steelD, e, 0, sn / 2, 0.4, 0.3, sn + 20);
   for (const sd of [-1, 1]) for (const se of [-1, 1]) k.beam(M.red, PV(sd * 9, 0, sn + se * 8), PV(sd * 4, 50, sn + se * 5), 1.2);

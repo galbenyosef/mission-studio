@@ -55,6 +55,9 @@ function smSkinMat() {
   g.strokeStyle = 'rgba(40,44,48,0.55)'; g.lineWidth = 2; for (let k = 0; k <= 6; k++) { const x = k * 1024 / 6; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 512); g.stroke(); } // bay seams
   for (const y of [40, 470]) { g.beginPath(); g.moveTo(0, y); g.lineTo(1024, y); g.stroke(); }
   g.fillStyle = 'rgba(30,32,36,0.8)'; for (let k = 0; k < 220; k++) g.fillRect((k * 197) % 1024, 40 + ((k * 89) % 430), 2, 2); // fasteners
+  // UNITED STATES in red down bay 1, with the flag above it, and the red stripe the umbilical fairing's foot sits on
+  g.save(); g.translate(440, 120); g.rotate(Math.PI / 2); g.fillStyle = '#c8322b'; g.font = 'bold 26px Helvetica, Arial, sans-serif'; g.textBaseline = 'middle'; g.fillText('UNITED STATES', 0, 0); g.restore();
+  g.fillStyle = '#b22234'; g.fillRect(425, 60, 44, 28); g.fillStyle = '#ffffff'; for (let i = 1; i < 7; i += 2) g.fillRect(425, 60 + i * 4, 44, 4); g.fillStyle = '#3c3b6e'; g.fillRect(425, 60, 18, 15);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return (APOLLO.smSkin = new THREE.MeshStandardMaterial({ map: t, roughness: 0.42, metalness: 0.45 }));
 }
@@ -138,6 +141,9 @@ function apolloSM(damaged, stowed = false) { // stowed: on the launch pad, the h
     const h = box(0.55, 0.62, 0.16, housing); h.position.y = -0.31; q.add(h);
     for (const d of [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0]]) { const b = bell(0.24, 0.09, noz); b.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(...d)); b.position.set(d[0] * 0.28, d[1] * 0.31, 0.12); q.add(b); }
   }
+  // the two scimitar antennas, blades on the skin low on opposite sides; the CM–SM umbilical's fairing at the top
+  for (const a of [0.55, 0.55 + Math.PI]) { const bl = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.42, 0.04), mat('#d8dadd', 'metal')); bl.position.set(Math.sin(a) * 2.0, 0.9, Math.cos(a) * 2.0); bl.rotation.y = a; g.add(bl); }
+  { const a = 2.7, u = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.3), mat('#cfd2d6', 'metal')); u.position.set(Math.sin(a) * 2.05, SM_LEN - 0.4, Math.cos(a) * 2.05); u.rotation.y = a; g.add(u); }
   // the high-gain antenna on its boom at the aft end: four dishes round a wide-beam horn
   if (!stowed) { const a = Math.PI * 1.25, ux = Math.sin(a), uz = Math.cos(a), dishM = mat('#e9e9e6', 'paint', { side: THREE.DoubleSide });
     const p0 = [ux * 1.9, 0.35, uz * 1.9], p1 = [ux * 2.9, -0.55, uz * 2.9]; g.add(lmRodA(p0, p1, 0.06, mat('#9aa0a6', 'metal')));
