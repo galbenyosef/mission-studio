@@ -226,12 +226,12 @@ function planHalo(cfg, progress = () => { }) {
   const refTau = REF.map(q => q.tau); // tau = 0 at the perigee
   const refAt = tt => { const tau = (tt - tPerRef) * SE_N, i = clamp(bsearch(refTau, tau), 0, REF.length - 2), j = i + 1, f = clamp((tau - refTau[i]) / (refTau[j] - refTau[i] || 1), 0, 1); const y = REF[i].y.map((v, k) => v + (REF[j].y[k] - v) * f); return cr3bpToInertial(tt, y, fullBr.mu); };
   const plN = DS.n, tSeed = tPerRef - fullBr.per.tau / SE_N;
-  M.summary.design = { az: azKm, periodDays: T / D, seedKm: Math.pow(10, le) * AU, perigeeKm: vnorm(DS.st.r) - BODIES.earth.R, branchDays: (tSeed - tPerRef) / D };
   // ---------------- launch ----------------
   progress('Launch & ascent…');
   const LP = launchPhase(M, cfg, L, scTotalMass(SC), plN, { ship });
   if (!LP.ok) { M.warnings.push('The launch vehicle cannot reach orbit with this payload.'); M.failed = 'ascent'; M.finalize(); return M; }
   const asc = LP.asc; P.attachUpper(asc.upper, asc.upperProp);
+  M.summary.design = { az: azKm, periodDays: T / D, seedKm: Math.pow(10, le) * AU, perigeeKm: vnorm(DS.st.r) - BODIES.earth.R, branchDays: (tSeed - tPerRef) / D };
   M.notes.push(`Launch azimuth ${asc.azI.toFixed(1)}°: the plane of the stable manifold's branch to L2, which held the launch site at liftoff.`);
   ship.setConfig(asc.t, 'stack', { key: 'stack', parts: ['upper', 'sc-stowed'], launcher: cfg.launcher, stage: L.stages.length - 1, sc: SC.model });
   let t = asc.t, y = [...asc.r, ...asc.v, asc.m];
@@ -270,29 +270,31 @@ function planHalo(cfg, progress = () => { }) {
   const mUp = P.upper.dry + P.upper.propLeft;
   up.add(resToSeg(cisInt(t, [...y.slice(0, 3), ...vadd(y.slice(3, 6), vscale(vunit(y.slice(3, 6)), -0.002)), mUp], t + 7 * D, {}), 'spent stage'));
   y[6] -= mUp; P.upper.attached = false;
-  ship.setConfig(t, 'sc', { key: 'sc', sc: SC.model, parts: ['orbiter'], deployT: t0, deploy: cfg.deploy });
+  const deploy = (cfg.deploy || []).map(d => ({ ...d, at: Math.max(d.at, t + 300 - t0) })); // (nothing unfolds before the telescope is on its own: the table's early steps wait for the separation)
+  ship.setConfig(t, 'sc', { key: 'sc', sc: SC.model, parts: ['orbiter'], deployT: t0, deploy });
   M.ev(t, 'ship', 'Separation from the upper stage', 'The telescope, folded for launch, separates from the ESC-A and begins its deployments on the way to L2.', 'sep');
   // ---------------- the deployments, on the mission clock ----------------
-  for (const d of cfg.deploy || []) M.ev(t0 + d.at, 'ship', d.name, d.desc || '', 'deploy', { dur: d.dur });
+  for (const d of deploy) M.ev(t0 + d.at, 'ship', d.name, d.desc || '', 'deploy', { dur: d.dur });
   // ---------------- corrections, insertion and station-keeping: tracking the reference ----------------
   // Each burn brings the telescope to the reference's position at a waypoint ahead: the corrections on the way aim at
   // the arrival; the insertion and the station-keeping burns aim two nodes (six weeks) on — aiming at the very next node
   // over-corrects the position and the burn after pays it back, so each would cost twice what it needs. The reference is a CR3BP
   // path in a real sky, so a few metres per second are asked at every node — about what Webb spends.
-  const dvSK = [];
+  const dvSK = []; // (the station-keeping burns actually made)
   const applyBurn = (name, tB, dv, descFn) => {
     const mag = vnorm(dv) * 1000, pm = P.burn('OBS', y[6], mag / 1000);
     M.burn({ name, t: tB, dur: pm.dur, dv: mag, engine: pm.engine, isp: pm.isp, prop: pm.prop, m0: y[6], obj: 'ship', propType: pm.propType });
     M.ev(tB, 'ship', name, descFn(mag, pm.dur), 'burn', { dv: mag });
     y[3] += dv[0]; y[4] += dv[1]; y[5] += dv[2]; y[6] -= pm.prop; return mag;
   };
-  const track = (name, tB, tW, phase, maxStep, descFn, alongOnly = false) => {
+  const track = (name, tB, tW, phase, maxStep, descFn, alongOnly = false, minDv = 0) => {
     coast(tB, phase);
     const vh = vunit(y.slice(3, 6)), dvOf = x => alongOnly ? vscale(vh, x[0] * 1e-3) : vscale(x, 1e-3);
     const F = x => { const dv = dvOf(x), m = missAt(tB, [y[0], y[1], y[2], y[3] + dv[0], y[4] + dv[1], y[5] + dv[2], y[6]], tW); return alongOnly ? [vdot(m, vunit(refAt(tW).r))] : m; }; // (along the velocity only: the distance from the Earth, i.e. the energy)
     const sol = newtonSolve(F, alongOnly ? [0] : [0, 0, 0], { h: 1e-2, tol: 0.02, maxIt: 25, maxStep: maxStep * 1000, lambda: 1e-6 });
     if (globalThis.DEBUG) console.log(name, sol.it, sol.hist.map(v => +v.toFixed(2)), sol.x.map(v => +v.toFixed(2)));
     if (!sol.ok) M.warnings.push(`${name} converged only approximately (residual ${(sol.norm * 1000).toFixed(0)} km).`);
+    if (vnorm(dvOf(sol.x)) * 1000 < minDv) return 0; // (on course already: no burn to record)
     return applyBurn(name, tB, dvOf(sol.x), descFn);
   };
   progress('Mid-course corrections…');
@@ -303,7 +305,7 @@ function planHalo(cfg, progress = () => { }) {
   M.phase(fb.tIgn, tArr, 'Transfer to L2', '#9ab8ff');
   progress('Station-keeping…');
   const tEnd = tArr + (cfg.halo.circuits ?? 1.05) * T; let k = 1;
-  for (let tN = tArr + skD; tN < tEnd; tN += skD, k++) dvSK.push(track(`Station-keeping burn ${k}`, tN, Math.min(tN + 2 * skD, tEnd + 10 * D), 'halo orbit about L2', 0.01, (mag, dur) => `${EXPLAIN.mcc} An orbit about L2 is unstable — left alone the telescope would drift off it within months — so every three weeks a small burn puts it back on course: ${mag.toFixed(2)} m/s.`));
+  for (let tN = tArr + skD; tN < tEnd; tN += skD, k++) { const dv = track(`Station-keeping burn ${k}`, tN, Math.min(tN + 2 * skD, tEnd + 10 * D), 'halo orbit about L2', 0.01, (mag, dur) => `${EXPLAIN.mcc} An orbit about L2 is unstable — left alone the telescope would drift off it within months — so every three weeks a small burn puts it back on course: ${mag.toFixed(2)} m/s.`, false, 0.05); if (dv > 0) dvSK.push(dv); else k--; }
   coast(tEnd + (cfg.coastAfter ?? 10) * D, 'halo orbit about L2');
   M.phase(tArr, t, 'Halo orbit about L2', '#c3a2ff');
   M.ev(tEnd, 'ship', 'One circuit of the halo', `${(T / D).toFixed(0)} days after insertion the telescope has gone once round L2. It will keep this orbit the same way for its twenty years of observing, its sunshield always between the Sun, the Earth, the Moon and the mirror.`, 'info');

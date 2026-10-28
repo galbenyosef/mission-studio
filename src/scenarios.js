@@ -288,7 +288,7 @@ const SCENARIOS = [
     cfg: {
       name: 'James Webb Space Telescope', profile: 'l2-halo', dest: 'l2', launcher: 'ariane5ECA', spacecraft: 'jwst', crew: 0, shipName: 'Webb',
       site: 'KOUROU3', launch: '2021-12-25T12:20:00Z', parking: { hp: 170, ha: 170 }, tmiDelay: 0.4,
-      arrive: '2022-01-24T19:00:00Z', halo: { az: 350000, skDays: 21, circuits: 1.05 }, deploy: JWST_DEPLOY, coastAfter: 10,
+      arrive: '2022-01-24T19:00:00Z', halo: { az: 350000, skDays: 21, circuits: 1.05 } /* (az: where the transfer design starts looking; the size itself is solved for the launch) */, deploy: JWST_DEPLOY, coastAfter: 10,
     },
   },
 ];

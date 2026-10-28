@@ -44,6 +44,21 @@ let fail = 0;
     ['never nearer L2 than 150 000 km, never farther than 1.0 Mkm', samples.every(([, d]) => d > 1.5e5 && d < 1.0e6), samples.map(([, d]) => (d / 1e3).toFixed(0)).join(' ')],
     ['8 station-keeping burns, each under 10 m/s, 45 m/s in all', H.dvSK.length === 8 && H.dvSK.every(v => v < 10) && H.dvTotal < 45, H.dvSK.map(v => v.toFixed(1)).join(' ') + ' = ' + H.dvTotal.toFixed(1)],
     ['17 deployment events', M.events.filter(e => e.kind === 'deploy').length === 17, String(M.events.filter(e => e.kind === 'deploy').length)],
+    ['C3 at injection −1.0…−0.4 km²/s²', M.summary.design.C3 > -1.0 && M.summary.design.C3 < -0.4, M.summary.design.C3.toFixed(2)],
+    ['no deployment before separation from the upper stage', (() => { const sep = M.events.find(e => e.kind === 'sep'); return M.events.filter(e => e.kind === 'deploy').every(e => e.t > sep.t); })()],
+    ['all deployments by L+15 d', M.events.filter(e => e.kind === 'deploy').every(e => e.t < t0 + 15 * 86400)],
+  ];
+  for (const [n, ok, info] of chk) { console.log((ok ? 'PASS ' : 'FAIL ') + n + (info ? `  (${info})` : '')); if (!ok) fail++; }
+}
+// a launch that falls short, and a launch six hours late
+{
+  const sc = scenarioById('jwst');
+  const Mf = planScenario({ ...sc.cfg, launcher: 'atlasAgena' }, () => { });
+  const Ml = planScenario({ ...sc.cfg, launch: '2021-12-25T18:20:00Z' }, () => { });
+  const chk = [
+    ['a launcher that cannot lift it: the plan fails at the ascent with no design summary', Mf.failed === 'ascent' && Mf.summary.design == null],
+    ['six hours late: no warnings', Ml.warnings.length === 0, Ml.warnings.join('; ')],
+    ['six hours late: no station-keeping burn under 0.05 m/s', Ml.summary.halo.dvSK.every(v => v > 0.05), Ml.summary.halo.dvSK.map(v => v.toFixed(2)).join(' ')],
   ];
   for (const [n, ok, info] of chk) { console.log((ok ? 'PASS ' : 'FAIL ') + n + (info ? `  (${info})` : '')); if (!ok) fail++; }
 }
