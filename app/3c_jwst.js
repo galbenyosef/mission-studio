@@ -61,16 +61,43 @@ function jwCellMat() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return (JW.cell = new THREE.MeshStandardMaterial({ map: t, roughness: 0.45, metalness: 0.2 }));
 }
-// The observatory: drawn by hand while it is folded and unfolding, and, once it has finished unfolding (or when it is
-// shown deployed with no table to unfold by), the published model of the deployed telescope (assets/jwst.glb, by Paul
-// on Sketchfab, CC BY 4.0, built by tools/models) in its place — the hand drawing stays until the file arrives
+// The observatory: the published model of the deployed telescope (assets/jwst.glb, by Paul on Sketchfab, CC BY 4.0,
+// cut into its moving parts by tools/models), folded and unfolded by the same steps as the hand drawing, which is shown
+// until the file arrives (or if it cannot be loaded) and for the launch pose
+const JW_S = 21.2 / 31.08; // metres per unit of the file (tools/models/build.mjs)
+function jwstFineModel(parts) {
+  const g = new THREE.Group(), P = {}; for (const k of ['bus', 'shield', 'fwdPallet', 'aftPallet', 'solar', 'hga', 'tel', 'wingL', 'wingR', 'tripod', 'topStrut']) { P[k] = parts[k] ? parts[k].clone() : new THREE.Group(); }
+  const telG = new THREE.Group(); g.add(telG); for (const k of ['bus', 'shield', 'fwdPallet', 'aftPallet', 'solar', 'hga']) g.add(P[k]); for (const k of ['tel', 'wingL', 'wingR', 'tripod', 'topStrut']) telG.add(P[k]);
+  const lerp = (a, b, f) => a + (b - a) * f;
+  // the apex of the tripod and the foot of the third strut, in the telescope's frame (the file's units → metres)
+  const apex0 = new THREE.Vector3(0, (5.0 - 4.0) * JW_S, 13.5 * JW_S), pvT = P.tripod.position.clone(), pfS = P.topStrut.position.clone(), d0 = apex0.clone().sub(pfS), a0 = Math.atan2(d0.y, d0.z), L0 = d0.length();
+  const _ap = new THREE.Vector3(), _d = new THREE.Vector3();
+  g.userData.pose = f => {
+    telG.position.y = lerp(-0.8, 0, f('dta'));
+    P.wingL.rotation.y = -(1 - f('portWing')) * Math.PI / 2; P.wingR.rotation.y = (1 - f('stbdWing')) * Math.PI / 2; // (folded back behind the mirror)
+    const th = -1.215 * (1 - f('smss')); P.tripod.rotation.x = th; // (folded up the mirror's face)
+    _ap.copy(apex0).sub(pvT).applyAxisAngle(new THREE.Vector3(1, 0, 0), th).add(pvT); _d.copy(_ap).sub(pfS);
+    P.topStrut.rotation.x = a0 - Math.atan2(_d.y, _d.z); P.topStrut.scale.setScalar(Math.max(0.05, _d.length() / L0));
+    P.fwdPallet.rotation.x = -(1 - f('fwdPallet')) * Math.PI / 2; P.aftPallet.rotation.x = (1 - f('aftPallet')) * Math.PI / 2; // (standing up for launch)
+    const open = Math.min(f('fwdPallet'), f('aftPallet')), ten = (f('tension1') + f('tension2') + f('tension3') + f('tension4') + f('tension5')) / 5;
+    P.shield.scale.set(lerp(0.12, 1, f('booms')), lerp(0.35, 1, ten), lerp(0.12, 1, open));
+  };
+  g.userData.len = 12.0; g.userData.mounts = [{ y: 0, r: 0.3, tag: 'OBS', prop: 'mmh' }];
+  return g;
+}
 function jwstModel(flags = {}) {
-  const g = new THREE.Group(), hand = jwstHandModel(flags), fine = new THREE.Group(); g.add(hand); g.add(fine); fine.visible = false;
+  const g = new THREE.Group(), hand = jwstHandModel(flags); g.add(hand);
   g.userData = { ...hand.userData };
-  let loaded = false, done = !flags.stowed && flags.deployT == null;
-  const show = () => { const f = loaded && done; if (fine.visible !== f) { fine.visible = f; hand.visible = !f; refreshBounds(g); } };
-  if (!flags.stowed) { const put = parts => { const src = parts && parts.jwst; if (!src) return; fine.add(src.clone()); loaded = true; show(); }; if (DETAIL.ready.jwst !== undefined) put(DETAIL.ready.jwst); else detailFile('jwst').then(put); }
-  if (hand.userData.animate) g.userData.animate = t => { hand.userData.animate(t); done = hand.userData.done(t); show(); };
+  const steps = flags.deploy || [], stowed = flags.stowed || flags.deployT != null;
+  const F = t => { const Q = {}; for (const s of steps) Q[s.key] = smoothstep(clamp((t - (flags.deployT + s.at)) / Math.max(s.dur, 1), 0, 1)); return k => flags.stowed ? 0 : flags.deployT == null ? 1 : (Q[k] ?? 1); };
+  let fine = null, fPose = F(flags.deployT || 0);
+  // the hand drawing while the pallets are still up round the folded telescope (the launch pose, the first three days),
+  // the published model from the moment they are down: its parts fold the rest of the way
+  const useFine = f => fine && f('fwdPallet') >= 1 && f('aftPallet') >= 1;
+  const show = f => { const u = useFine(f); if (fine && fine.visible !== !!u) { fine.visible = !!u; hand.visible = !u; refreshBounds(g); } };
+  const put = parts => { if (!parts || !parts.bus) return; fine = jwstFineModel(parts); fine.userData.pose(fPose); fine.visible = false; g.add(fine); show(fPose); };
+  if (!flags.stowed) { if (DETAIL.ready.jwst !== undefined) put(DETAIL.ready.jwst); else detailFile('jwst').then(put); }
+  if (flags.deployT != null) g.userData.animate = t => { fPose = F(t); if (fine) fine.userData.pose(fPose); if (hand.userData.animate) hand.userData.animate(t); show(fPose); };
   return g;
 }
 function jwstHandModel(flags = {}) {
