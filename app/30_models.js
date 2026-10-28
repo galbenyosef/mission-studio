@@ -153,6 +153,7 @@ function preloadDetailedModels(md) {
     if (o.model === 'shuttle') want.add('orbiter');
     if (L.orbiter) orbiterLivery(L.orbiter); // the flight's orbiter in its markings (the stack's and the orbiter's own configurations)
     if (o.model === 'iss') want.add('iss');
+    if (o.model === 'jwst') want.add('jwst');
     if (L.launcher && LAUNCHERS[L.launcher]) for (const st of LAUNCHERS[L.launcher].stages) if (st.detail) want.add(st.detail); // launch stacks and spent stages
   }
   for (const n of want) detailFile(n);

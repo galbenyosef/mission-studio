@@ -61,7 +61,19 @@ function jwCellMat() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return (JW.cell = new THREE.MeshStandardMaterial({ map: t, roughness: 0.45, metalness: 0.2 }));
 }
+// The observatory: drawn by hand while it is folded and unfolding, and, once it has finished unfolding (or when it is
+// shown deployed with no table to unfold by), the published model of the deployed telescope (assets/jwst.glb, by Paul
+// on Sketchfab, CC BY 4.0, built by tools/models) in its place — the hand drawing stays until the file arrives
 function jwstModel(flags = {}) {
+  const g = new THREE.Group(), hand = jwstHandModel(flags), fine = new THREE.Group(); g.add(hand); g.add(fine); fine.visible = false;
+  g.userData = { ...hand.userData };
+  let loaded = false, done = !flags.stowed && flags.deployT == null;
+  const show = () => { const f = loaded && done; if (fine.visible !== f) { fine.visible = f; hand.visible = !f; refreshBounds(g); } };
+  if (!flags.stowed) { const put = parts => { const src = parts && parts.jwst; if (!src) return; fine.add(src.clone()); loaded = true; show(); }; if (DETAIL.ready.jwst !== undefined) put(DETAIL.ready.jwst); else detailFile('jwst').then(put); }
+  if (hand.userData.animate) g.userData.animate = t => { hand.userData.animate(t); done = hand.userData.done(t); show(); };
+  return g;
+}
+function jwstHandModel(flags = {}) {
   const g = new THREE.Group();
   const dark = mat('#2a2c31', 'dark'), alu = mat('#b9bec5', 'metal'), black = mat('#141518', 'dark'), truss = jwTrussMat();
   // the gold: metallic, but with a glow of its own colour so that it reads as gold in the dark of space, where a true
@@ -148,7 +160,7 @@ function jwstModel(flags = {}) {
     for (const w of wings) w.rotation.y = w.userData.s * lerp(Math.PI / 2, 0, f(w.userData.s < 0 ? 'portWing' : 'stbdWing')); // (folded back behind the mirror)
   };
   const steps = flags.deploy || [];
-  if (flags.deployT != null) g.userData.animate = t => { const P = {}; for (const s of steps) P[s.key] = smoothstep(clamp((t - (flags.deployT + s.at)) / Math.max(s.dur, 1), 0, 1)); pose(P); };
+  if (flags.deployT != null) { g.userData.animate = t => { const P = {}; for (const s of steps) P[s.key] = smoothstep(clamp((t - (flags.deployT + s.at)) / Math.max(s.dur, 1), 0, 1)); pose(P); }; g.userData.done = t => steps.length > 0 && steps.every(s => t >= flags.deployT + s.at + s.dur); }
   const stowed = flags.stowed || flags.deployT != null; const P0 = {}; if (stowed) for (const k of ['solar', 'hga', 'fwdPallet', 'aftPallet', 'dta', 'flap', 'covers', 'booms', 'tension1', 'tension2', 'tension3', 'tension4', 'tension5', 'smss', 'radiator', 'portWing', 'stbdWing']) P0[k] = 0;
   pose(P0);
   g.userData.len = 12.0; g.userData.mounts = [{ y: 0, r: 0.3, tag: 'OBS', prop: 'mmh' }];

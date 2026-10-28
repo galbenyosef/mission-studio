@@ -34,7 +34,7 @@ import fs from 'node:fs';
 const OUT = path.resolve(import.meta.dirname, '../../assets');
 
 // metalness / roughness by source material, for the gold and black foil and the aluminium skins
-const FOIL = { metal: 0.75, rough: 0.35 }, SKIN = { metal: 0.55, rough: 0.45 }, DARK = { metal: 0.35, rough: 0.5 }, BLACK = { metal: 0.1, rough: 0.6 }, PAINT = { metal: 0, rough: 0.55 }, DECAL = { metal: 0, rough: 0.7 };
+const FOIL = { metal: 0.75, rough: 0.35 }, GOLD = { metal: 0.55, rough: 0.22, emissive: [0.2, 0.13, 0.03] } /* (gold glows a little of its own colour, or in the dark of space it is black) */, KAPTON = { metal: 0.2, rough: 0.38 }, SKIN = { metal: 0.55, rough: 0.45 }, DARK = { metal: 0.35, rough: 0.5 }, BLACK = { metal: 0.1, rough: 0.6 }, PAINT = { metal: 0, rough: 0.55 }, DECAL = { metal: 0, rough: 0.7 };
 
 const RECIPES = {
   // Apollo lunar module. 7.04 m from the footpads to the tip of the antennas (0.103 → 5.115 in model units).
@@ -181,6 +181,33 @@ const RECIPES = {
     grime: { materials: ['Rocket_Material', 'Rocket_Details_Material'], amount: 0.1, tint: [0.95, 0.945, 0.93] },
     textures: { baseColor: 1024, other: 1024, named: { 'ET-foam': 2048 } },
   },
+  // James Webb Space Telescope: "JWST (james webb space telescope)" by Paul
+  // (https://sketchfab.com/3d-models/jwst-james-webb-space-telescope-6c92c08a672640afb58ee44d248fd0fe), CC BY 4.0,
+  // unzipped into jwst/. The observatory fully deployed, in the file's own frame already as the app has it: +Y up the
+  // tower, +Z the telescope's line of sight (the secondary mirror out in front), the mirror standing on edge across the
+  // sunshield. In the file's world units the Sun-side layer of the sunshield runs 31.08 along Z: scaled to its published
+  // 21.2 m. One part, `jwst`, y = 0 at the underside of the spacecraft bus (−4.0 in the file), where the app's own
+  // model has it. The app shows it once the telescope has finished unfolding; the unfolding itself is drawn by hand.
+  jwst: {
+    dl: 'jwst/scene.gltf',
+    scale: 21.2 / 31.08,
+    parts: { jwst: { from: -4.0, to: 0 } },
+    part: () => 'jwst',
+    minSize: 0.02,
+    simplify: 0.0008,
+    materials: {
+      'JWST-TopReflector': GOLD, 'JWST-TopReflector-fl': GOLD, 'JWST-gold-fl': GOLD, 'JWST-mirror-sm': PAINT, // (the file's 'TopReflector' is the primary mirror; its 'mirror' is the solar array's cells) 'JWST-gold-nofoil-sm': FOIL, 'sa_edge_gold': FOIL,
+      // (the file's layers are grey and black — its colour texture is not in the download; they are given the lavender of
+      // aluminised Kapton, the Sun-side layer pinker, the telescope-side one cooler)
+      'JWST-FoilLayer1': { ...KAPTON, color: [0.72, 0.76, 0.84] }, 'JWST-FoilLayer2': { ...KAPTON, color: [0.84, 0.74, 0.88] }, 'JWST-FoilLayer3': { ...KAPTON, color: [0.84, 0.74, 0.88] }, 'JWST-FoilLayer4': { ...KAPTON, color: [0.86, 0.72, 0.86] }, 'JWST-FoilLayer5-PURPLEY': { ...KAPTON, color: [0.88, 0.68, 0.84] },
+      'JWST-FoilBasePanel-2-PURPLEY': KAPTON, 'JWST-bottom-box-PURPLEY': KAPTON, 'JWST-bottom-box-bot-PURPLEY': KAPTON, 'JWST-bottom-box-bot-fl-PURPLEY': KAPTON,
+      'JWST-instrument-silverfoil-sm': FOIL, 'JWST-instrument-silverfoil-2-sm': FOIL, 'JWST-instrument-silverfoil-3-sm': FOIL, 'sc_rad_smli1': FOIL, 'sc_post_pmli1': FOIL, 'sc_post_pmli': FOIL,
+      'JWST-black-sm': BLACK, 'JWST-black-fl': BLACK, 'blackpaint_lambert1': BLACK,
+      'JWST-bracket1-sm': DARK, 'JWST-bracket1-fl': DARK, 'JWST-bracket2-sm': DARK, 'JWST-bracket2-fl': DARK,
+      'JWST-silver-sm': SKIN, 'JWST-silver-fl': SKIN, 'JWST-silver2-fl': SKIN, 'JWST-greyfla-fl': SKIN, 'whitepaint_lambert': PAINT, 'JWST-SolarPanel-22': PAINT, 'JWST-bronze-sm': SKIN,
+    },
+    defaultMaterial: SKIN,
+  },
 };
 
 const args = process.argv.slice(2), opt = k => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
@@ -256,7 +283,7 @@ for (const name of names.length ? names : Object.keys(RECIPES)) {
   // the source's hierarchy goes; only the parts stay in the scene
   for (const n of scene.listChildren()) if (!Object.values(groups).includes(n)) { scene.removeChild(n); }
   for (const m of root.listMaterials()) {
-    if (R.materials || R.defaultMaterial) { const t = (R.materials || {})[m.getName()] || R.defaultMaterial; if (t) m.setMetallicFactor(t.metal).setRoughnessFactor(t.rough); }
+    if (R.materials || R.defaultMaterial) { const t = (R.materials || {})[m.getName()] || R.defaultMaterial; if (t) { m.setMetallicFactor(t.metal).setRoughnessFactor(t.rough); if (t.color) m.setBaseColorFactor([...t.color, 1]); if (t.emissive) m.setEmissiveFactor(t.emissive); } }
     m.setDoubleSided(true);
   }
   // one mesh per part, one primitive per material: a few draw calls instead of one per source mesh
