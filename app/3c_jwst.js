@@ -26,8 +26,9 @@ function jwstModel(flags = {}) {
   const hga = new THREE.Group(); hga.position.set(1.2, 0.3, -1.6); g.add(hga);
   const hgaBoom = cyl(0.04, 0.04, 1.0, alu, 10); hgaBoom.rotation.x = Math.PI; hga.add(hgaBoom);
   const hgaDish = dish(0.6, '#ececec'); hgaDish.rotation.x = Math.PI; hgaDish.position.y = -1.0; hga.add(hgaDish);
-  // ---- the sunshield pallets, hinged along the bus's ±Z edges: upright round the telescope for launch, then lowered ----
-  const pallets = [-1, 1].map(s => { const p = new THREE.Group(); p.position.set(0, 1.5, s * 1.75); g.add(p); const slab = box(8.0, 0.45, 2.6, dark); slab.position.z = s * 1.3; p.add(slab); p.userData.s = s; p.userData.slab = slab; return p; });
+  // ---- the sunshield pallets, hinged along the bus's ±Z edges: standing up either side of the folded telescope for
+  // launch (the membranes folded inside them), then lowered flat under the shield ----
+  const pallets = [-1, 1].map(s => { const p = new THREE.Group(); p.position.set(0, 1.5, s * 1.75); g.add(p); const slab = box(3.4, 0.3, 5.0, dark); slab.position.z = s * 2.5; p.add(slab); p.userData.s = s; p.userData.slab = slab; return p; });
   // ---- the five layers of the sunshield: kites across the bus, stacked between it and the telescope ----
   const kite = new THREE.Shape(); kite.moveTo(-10.6, 0); kite.lineTo(0, 7.1); kite.lineTo(10.6, 0); kite.lineTo(0, -7.1); kite.closePath();
   const kiteGeo = new THREE.ShapeGeometry(kite); kiteGeo.rotateX(-Math.PI / 2);
@@ -38,27 +39,30 @@ function jwstModel(flags = {}) {
   // the momentum flap at the aft tip of the shield, trimming the push of sunlight
   const flapHinge = new THREE.Group(); flapHinge.position.set(0, 1.65, -7.0); g.add(flapHinge);
   const flap = box(1.8, 0.9, 0.04, alu); flapHinge.add(flap);
-  // ---- the deployable tower, and the telescope on it ----
+  // ---- the deployable tower, and the telescope on it: the primary mirror stands on edge across the shield's short axis,
+  // looking out along +Z over the forward pallet, 6.6 m tall and 6.1 m across with its wings out; the secondary on its
+  // tripod 7 m in front. Folded, the wings swing back behind it and the tripod lies up its face: 3.8 m across, 10.7 m tall ----
   const dta = cyl(0.3, 0.3, 1.0, alu, 20); dta.position.y = 1.5; g.add(dta);
   const tel = new THREE.Group(); g.add(tel);
-  // the backplane and the aft optics behind the mirror
-  const back = box(2.9, 0.3, 5.8, black); back.position.y = -0.3; tel.add(back);
-  const aft = box(1.2, 1.4, 1.2, black); aft.position.y = -1.7; tel.add(aft);
-  // the radiator behind the aft optics, swinging down from the backplane's aft edge
-  const radHinge = new THREE.Group(); radHinge.position.set(0, -0.3, -2.9); tel.add(radHinge);
+  const yc = 3.7; // the mirror's centre above the tower's top
+  const back = box(3.8, 6.6, 0.3, black); back.position.set(0, yc - 3.3, -0.3); tel.add(back); // the backplane
+  const aft = box(1.2, 1.4, 1.4, black); aft.position.set(0, yc - 0.7, -1.7); tel.add(aft); // the aft optics
+  const radHinge = new THREE.Group(); radHinge.position.set(0, yc - 1.0, -1.7); tel.add(radHinge); // the radiator, swinging down behind
   const rad = box(2.0, 0.04, 1.5, alu); rad.position.z = -0.75; radHinge.add(rad);
-  // the eighteen hexagons: a centre ring of six about the hole, a ring of twelve outside; the three at either side on wings
-  const hexGeo = new THREE.CylinderGeometry(0.66, 0.66, 0.05, 6); // (its flats face ±X, toward the neighbours along the rows)
+  // the eighteen hexagons, 1.32 m flat to flat, stacked across their flats in columns: a centre ring of six about the
+  // hole, a ring of twelve outside; the outer column of three on either side is a wing
+  const hexGeo = new THREE.CylinderGeometry(0.66, 0.66, 0.05, 6); hexGeo.rotateX(Math.PI / 2); hexGeo.rotateZ(Math.PI / 6); // facing +Z, flats up and down
   const R1 = 1.32, R2 = 2.286;
-  const cells = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; cells.push([R1 * Math.cos(a), R1 * Math.sin(a)]); cells.push([2 * R1 * Math.cos(a), 2 * R1 * Math.sin(a)]); const b = a + Math.PI / 6; cells.push([R2 * Math.cos(b), R2 * Math.sin(b)]); }
-  const wings = [-1, 1].map(s => { const w = new THREE.Group(); w.position.set(s * 1.65, 0, 0); tel.add(w); const bp = box(1.7, 0.3, 4.2, black); bp.position.set(s * 0.9, -0.3, 0); w.add(bp); w.userData.s = s; return w; });
-  for (const [x, z] of cells) { const h = new THREE.Mesh(hexGeo, gold); const s = Math.sign(x); if (Math.abs(x) > 1.9) { h.position.set(x - s * 1.65, 0, z); wings[s < 0 ? 0 : 1].add(h); } else { h.position.set(x, 0, z); tel.add(h); } }
-  // the secondary mirror on its tripod: folded flat over the primary for launch, raised to stand 7 m before it
-  const smHinge = new THREE.Group(); smHinge.position.set(0, 0.1, -3.0); tel.add(smHinge);
-  const apex = [0, 7.0, 3.0]; // in the hinge's frame: 7 m up and over the mirror's centre
-  for (const [bx, bz] of [[0, 0], [-2.6, 4.5], [2.6, 4.5]]) { const dx = apex[0] - bx, dy = apex[1], dz = apex[2] - bz, L = Math.hypot(dx, dy, dz); const strut = cyl(0.06, 0.06, L, black, 8); strut.position.set(bx, 0, bz); strut.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / L, dy / L, dz / L)); smHinge.add(strut); }
-  const sm = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.08, 24), gold); sm.rotation.x = Math.PI; sm.position.set(apex[0], apex[1], apex[2]); smHinge.add(sm);
-  const smBack = box(0.5, 0.5, 0.5, black); smBack.position.set(apex[0], apex[1], apex[2]); smHinge.add(smBack);
+  const cells = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 + Math.PI / 6; cells.push([R1 * Math.cos(a), R1 * Math.sin(a)]); cells.push([2 * R1 * Math.cos(a), 2 * R1 * Math.sin(a)]); const b = k * Math.PI / 3; cells.push([R2 * Math.cos(b), R2 * Math.sin(b)]); }
+  const wings = [-1, 1].map(s => { const w = new THREE.Group(); w.position.set(s * 1.7, yc, 0); tel.add(w); const bp = box(1.4, 4.0, 0.3, black); bp.position.set(s * 0.7, -2.0, -0.3); w.add(bp); w.userData.s = s; return w; });
+  for (const [x, y] of cells) { const h = new THREE.Mesh(hexGeo, gold); const s = Math.sign(x); if (Math.abs(x) > 2.2) { h.position.set(x - s * 1.7, y, 0); wings[s < 0 ? 0 : 1].add(h); } else { h.position.set(x, yc + y, 0); tel.add(h); } }
+  // the secondary mirror on its tripod, hinged at the foot of the mirror: folded up its face for launch, swung out to
+  // stand 7 m before it
+  const smHinge = new THREE.Group(); smHinge.position.set(0, yc - 3.1, 0.1); tel.add(smHinge);
+  const apex = [0, 3.1, 7.0]; // in the hinge's frame: out in front of the mirror's centre
+  for (const [bx, by, bz] of [[-2.3, 0, 0], [2.3, 0, 0], [0, 0.3, -0.5]]) { const dx = apex[0] - bx, dy = apex[1] - by, dz = apex[2] - bz, L = Math.hypot(dx, dy, dz); const strut = cyl(0.06, 0.06, L, black, 8); strut.position.set(bx, by, bz); strut.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / L, dy / L, dz / L)); smHinge.add(strut); }
+  const sm = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.08, 24), gold); sm.rotation.x = Math.PI / 2; sm.position.set(apex[0], apex[1], apex[2]); smHinge.add(sm);
+  const smBack = box(0.5, 0.5, 0.5, black); smBack.position.set(apex[0], apex[1] - 0.25, apex[2] + 0.1); smHinge.add(smBack);
   // ---- the pose: each part between its launch position (0) and its final one (1) ----
   const pose = P => {
     const f = k => P[k] ?? 1;
@@ -71,14 +75,14 @@ function jwstModel(flags = {}) {
     for (let i = 0; i < 5; i++) { const ti = f('tension' + (i + 1)); layers[i].rotation.x = (i - 2) * 0.035 * ti; layers[i].position.y = i * 0.3 + lerp(-0.1, 0, ti); }
     for (const b of booms) b.scale.y = Math.max(0.03, lerp(0.03, 1, bo));
     flapHinge.rotation.x = lerp(Math.PI / 2, 0, f('flap')); flapHinge.position.z = lerp(-1.0, -7.0, open);
-    radHinge.rotation.x = lerp(-Math.PI / 2, 0, f('radiator'));
-    smHinge.rotation.x = lerp(1.12, 0, f('smss')); // (folded, the tripod lies over the mirror)
-    for (const w of wings) w.rotation.z = -w.userData.s * lerp(Math.PI / 2, 0, f(w.userData.s < 0 ? 'portWing' : 'stbdWing')); // (folded back behind the mirror)
+    radHinge.rotation.x = lerp(Math.PI / 2, 0, f('radiator')); // (folded up against the back)
+    smHinge.rotation.x = lerp(-1.154, 0, f('smss')); // (folded, the tripod lies up the mirror's face)
+    for (const w of wings) w.rotation.y = w.userData.s * lerp(Math.PI / 2, 0, f(w.userData.s < 0 ? 'portWing' : 'stbdWing')); // (folded back behind the mirror)
   };
   const steps = flags.deploy || [];
   if (flags.deployT != null) g.userData.animate = t => { const P = {}; for (const s of steps) P[s.key] = smoothstep(clamp((t - (flags.deployT + s.at)) / Math.max(s.dur, 1), 0, 1)); pose(P); };
   const stowed = flags.stowed || flags.deployT != null; const P0 = {}; if (stowed) for (const k of ['solar', 'hga', 'fwdPallet', 'aftPallet', 'dta', 'flap', 'covers', 'booms', 'tension1', 'tension2', 'tension3', 'tension4', 'tension5', 'smss', 'radiator', 'portWing', 'stbdWing']) P0[k] = 0;
   pose(P0);
-  g.userData.len = 11.0; g.userData.mounts = [{ y: 0, r: 0.3, tag: 'OBS', prop: 'mmh' }];
+  g.userData.len = 12.0; g.userData.mounts = [{ y: 0, r: 0.3, tag: 'OBS', prop: 'mmh' }];
   return g;
 }
