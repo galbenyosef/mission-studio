@@ -17,4 +17,34 @@ let fail = 0;
   ];
   for (const [n, ok] of chk) { console.log((ok ? 'PASS ' : 'FAIL ') + n); if (!ok) fail++; }
 }
+// the stable manifold: a branch comes down to the Earth
+{
+  const br = manifoldBranch(350000, 0.02, 1e-4, -1, 0.01);
+  const chk = [
+    ['a branch of the stable manifold reaches a perigee inside 100 000 km', !!br.per && br.per.r < 1e5],
+    ['…about four months before the halo', !!br.per && -br.per.tau / SE_N / 86400 > 90 && -br.per.tau / SE_N / 86400 < 160],
+  ];
+  for (const [n, ok] of chk) { console.log((ok ? 'PASS ' : 'FAIL ') + n); if (!ok) fail++; }
+}
+// the mission
+{
+  const sc = scenarioById('jwst'), M = planScenario(sc.cfg, () => { }), t0 = M.t0, tArr = isoToT(sc.cfg.arrive), ship = M.objects.find(o => o.id === 'ship');
+  const dEarth = t => { const s = ship.stateAt(t); return vnorm(vsub(vadd(planetHelio(s.ref, t).r, s.r), planetHelio('earth', t).r)); };
+  const dL2 = t => { const s = ship.stateAt(t); return vnorm(vsub(vsub(vadd(planetHelio(s.ref, t).r, s.r), planetHelio('earth', t).r), l2Point(t))); };
+  const H = M.summary.halo, tEnd = tArr + sc.cfg.halo.circuits * H.periodDays * 86400;
+  const samples = []; for (let t = tArr; t <= tEnd; t += 5 * 86400) samples.push([dEarth(t), dL2(t)]);
+  const inj = M.burns.find(b => b.name.startsWith('Injection')), m1a = M.burns.find(b => b.name === 'MCC-1a'), m2 = M.burns.find(b => b.name.startsWith('MCC-2'));
+  const chk = [
+    ['no warnings', M.warnings.length === 0, M.warnings.join('; ')],
+    ['launch on the day, injection within two hours', inj && inj.t - t0 > 0 && inj.t - t0 < 7200],
+    ['injection 3.2–3.35 km/s', inj && inj.dv > 3200 && inj.dv < 3350],
+    ['MCC-1a under 40 m/s, MCC-2 under 25 m/s', m1a.dv < 40 && m2.dv < 25, `${m1a.dv.toFixed(1)} / ${m2.dv.toFixed(1)}`],
+    ['arrival within 0.8 Mkm of L2 on the planned day', dL2(tArr) < 8e5, (dL2(tArr) / 1e3).toFixed(0) + ' thousand km'],
+    ['1.2–1.8 Mkm from the Earth round the halo', samples.every(([dE]) => dE > 1.2e6 && dE < 1.8e6), samples.map(([dE]) => (dE / 1e6).toFixed(2)).join(' ')],
+    ['never nearer L2 than 150 000 km, never farther than 1.0 Mkm', samples.every(([, d]) => d > 1.5e5 && d < 1.0e6), samples.map(([, d]) => (d / 1e3).toFixed(0)).join(' ')],
+    ['8 station-keeping burns, each under 10 m/s, 45 m/s in all', H.dvSK.length === 8 && H.dvSK.every(v => v < 10) && H.dvTotal < 45, H.dvSK.map(v => v.toFixed(1)).join(' ') + ' = ' + H.dvTotal.toFixed(1)],
+    ['17 deployment events', M.events.filter(e => e.kind === 'deploy').length === 17, String(M.events.filter(e => e.kind === 'deploy').length)],
+  ];
+  for (const [n, ok, info] of chk) { console.log((ok ? 'PASS ' : 'FAIL ') + n + (info ? `  (${info})` : '')); if (!ok) fail++; }
+}
 process.exit(fail ? 1 : 0);

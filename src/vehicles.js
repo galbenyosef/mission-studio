@@ -178,7 +178,7 @@ const LAUNCHERS = {
         geom: [[27.0, 1.525, 1.525, C.white], [4.2, 1.525, 0.35, C.white]], eng: { n: 1, len: 3.0, r: 1.4, layout: 'single' }, look: 'ariane5EAP' }, // look: drawn by hand (app/3b_launchers.js)
       { id: 'EPC', name: 'Cryogenic core stage (EPC, Vulcain 2)', prop: 'hydrolox', engine: 'Vulcain 2', n: 1, thrustSL: 960e3, thrustVac: 1390e3, ispSL: 318, ispVac: 432, dry: 14700, propMass: 173000, maxG: 4.5, minThr: 1,
         geom: [[30.5, 2.7, 2.7, C.cream]], eng: { n: 1, len: 3.4, r: 1.0, layout: 'single' }, look: 'ariane5EPC' },
-      { id: 'ESC-A', name: 'Cryogenic upper stage (ESC-A, HM7B)', prop: 'hydrolox', engine: 'HM7B', n: 1, thrustSL: 0, thrustVac: 67e3, ispSL: 300, ispVac: 446, dry: 4540, propMass: 14900, restart: false,
+      { id: 'ESC-A', name: 'Cryogenic upper stage (ESC-A, HM7B)', prop: 'hydrolox', engine: 'HM7B', n: 1, thrustSL: 0, thrustVac: 67e3, ispSL: 300, ispVac: 446, dry: 4540, propMass: 14900, restart: true, // (the HM7B lights once; the parking orbit and injection here stand in for its single long burn)
         geom: [[4.7, 2.7, 2.7, C.white]], eng: { n: 1, len: 2.0, r: 0.5, layout: 'single' }, look: 'ariane5ESC' },
     ],
     jettison: [{ name: 'Payload fairing', mass: 2675, alt: 110, part: 'fairing' }],

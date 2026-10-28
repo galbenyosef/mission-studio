@@ -2,6 +2,27 @@
 // scenarios.js — real-mission presets (sources: NASA mission reports, Wikipedia
 // mission pages, CNSA releases). Times UTC.  MET = hours after liftoff.
 // ============================================================================
+// Webb's deployments, seconds after launch and how long each takes (NASA's deployment timeline); the planner turns them
+// into events and the model (app/3c_jwst.js) animates them
+const JWST_DEPLOY = (() => { const h = 3600, d = 86400; return [
+  { key: 'solar', name: 'Solar array deployed', at: 31 * 60, dur: 120, desc: 'Half an hour after launch the five-panel solar array unfolds on its own and the telescope is on its own power.' },
+  { key: 'hga', name: 'High-gain antenna released', at: d, dur: 600, desc: 'The gimbaled antenna swings out to point at the Earth.' },
+  { key: 'fwdPallet', name: 'Forward sunshield pallet lowered', at: 3 * d, dur: 4 * h, desc: 'The forward pallet, folded against the spacecraft bus for launch, is lowered; the folded sunshield rides on it.' },
+  { key: 'aftPallet', name: 'Aft sunshield pallet lowered', at: 3.3 * d, dur: 4 * h, desc: 'The aft pallet follows, the two now lying flat on either side of the bus.' },
+  { key: 'dta', name: 'Deployable tower extended', at: 4 * d, dur: 6.5 * h, desc: 'The tower between the bus and the telescope extends 1.2 m, to make room for the sunshield and to isolate the cold telescope from the warm bus.' },
+  { key: 'flap', name: 'Momentum flap released', at: 5 * d, dur: 600, desc: 'A small flap at the aft end balances the pressure of sunlight on the great sunshield, so the reaction wheels need less unloading.' },
+  { key: 'covers', name: 'Sunshield covers rolled up', at: 6 * d, dur: 2 * h, desc: 'The covers that protected the folded membranes during launch roll up and expose the five layers.' },
+  { key: 'booms', name: 'Mid-booms extended', at: 7 * d, dur: 6 * h, desc: 'The two mid-booms telescope out sideways, drawing the sunshield open to its full 21-m width: a kite the size of a tennis court.' },
+  { key: 'tension1', name: 'Sunshield layer 1 tensioned', at: 8 * d, dur: 2 * h, desc: 'The outermost, hottest layer is pulled taut. Each layer is aluminised Kapton thinner than a human hair.' },
+  { key: 'tension2', name: 'Sunshield layer 2 tensioned', at: 9 * d, dur: 2 * h, desc: 'Layer two. The gaps between the layers let heat radiate away sideways; each layer is cooler than the one below it.' },
+  { key: 'tension3', name: 'Sunshield layer 3 tensioned', at: 9.3 * d, dur: 2 * h, desc: 'Layer three.' },
+  { key: 'tension4', name: 'Sunshield layer 4 tensioned', at: 10 * d, dur: 2 * h, desc: 'Layer four.' },
+  { key: 'tension5', name: 'Sunshield layer 5 tensioned', at: 10.3 * d, dur: 2 * h, desc: 'The innermost layer: the telescope side of the shield will settle near −230 °C while the Sun side bakes at 85 °C.' },
+  { key: 'smss', name: 'Secondary mirror deployed', at: 11 * d, dur: 2 * h, desc: 'The tripod carrying the 0.74-m secondary mirror unfolds to stand 7 m in front of the primary.' },
+  { key: 'radiator', name: 'Aft radiator deployed', at: 12 * d, dur: 600, desc: 'The radiator that cools the instruments swings out behind the mirror.' },
+  { key: 'portWing', name: 'Port primary mirror wing unfolded', at: 13 * d, dur: 3 * h, desc: 'Three of the eighteen gold hexagons, folded back for launch, swing into place and latch.' },
+  { key: 'stbdWing', name: 'Starboard primary mirror wing unfolded', at: 14 * d, dur: 3 * h, desc: 'The last wing latches: the 6.5-m mirror is complete, and the telescope has fully unfolded, 1.2 million km from home.' },
+]; })();
 const SCENARIOS = [
   {
     id: 'apollo8', title: 'Apollo 8', year: 1968, agency: 'NASA', status: 'Flown', crewed: true, dest: 'moon', tag: 'Lunar orbit & return',
@@ -260,9 +281,20 @@ const SCENARIOS = [
       coastAfter: 150, afterPhase: 'cruise to Jupiter', endNote: { name: 'Onward to Jupiter', desc: 'After the Earth flyby the craft climbs to Jupiter’s orbit, arriving in April 2030 for 49 flybys of Europa.' }, tcmAfterFlyby: 12,
     },
   },
+  {
+    id: 'jwst', title: 'James Webb Space Telescope', year: 2021, agency: 'NASA / ESA / CSA', status: 'In operation', crewed: false, dest: 'l2', tag: 'Transfer to Sun–Earth L2 and halo orbit',
+    blurb: 'The largest space telescope ever launched rides an Ariane 5 to the Sun–Earth L2 point, 1.5 million km beyond the Earth, unfolding its tennis-court sunshield and 6.5-m gold mirror on the way; there it circles L2 on a halo orbit, nudged every three weeks.',
+    real: { 'Launch': '2021-12-25 12:20 UTC, Ariane 5 ECA (VA256), Kourou', 'MCC-1a': 'L+12.5 h, 20 m/s', 'MCC-1b': 'L+2.5 d, 2.8 m/s', 'L2 insertion (MCC-2)': '2022-01-24, 1.6 m/s', 'Halo period': '≈ 6 months', 'Mass': '6,161 kg' },
+    cfg: {
+      name: 'James Webb Space Telescope', profile: 'l2-halo', dest: 'l2', launcher: 'ariane5ECA', spacecraft: 'jwst', crew: 0, shipName: 'Webb',
+      site: 'KOUROU3', launch: '2021-12-25T12:20:00Z', parking: { hp: 170, ha: 170 }, tmiDelay: 0.4,
+      arrive: '2022-01-24T19:00:00Z', halo: { az: 350000, skDays: 21, circuits: 1.05 }, deploy: JWST_DEPLOY, coastAfter: 10,
+    },
+  },
 ];
 function scenarioById(id) { return SCENARIOS.find(s => s.id === id); }
 function planScenario(cfg, progress) {
+  if ((cfg.profile || '') === 'l2-halo') return planHalo(cfg, progress);
   if ((cfg.profile || '').startsWith('leo')) return planLEO(cfg, progress);
   if (cfg.dest === 'moon' || (cfg.profile || '').startsWith('lunar')) return planLunar(cfg, progress);
   return planInterplanetary(cfg, progress);
