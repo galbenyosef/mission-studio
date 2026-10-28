@@ -31,15 +31,19 @@ function mmViewFor(t) {
   if (MM.view !== 'auto') return MM.view;
   if ((MV.md.cfg.profile || '').startsWith('leo')) return 'track'; // Earth-orbit flights: where on Earth the craft is
   const c = activeCraft(t) || craftById('ship'); if (!c || !c.P) return 'earth';
+  if (mmL2() && vnorm(vsub(c.P, helio('earth', t).r)) < 3e6) return 'earth';
   const b = dominantBody(c.P, t); return b === 'sun' ? 'sun' : b === 'mars' ? 'mars' : 'earth';
 }
-function mmCoords(view, tr) { return view === 'sun' ? tr.P : tr.frameCoords(view); }
+// on a flight to L2 the Earth map is drawn in the Sun–Earth rotating frame, where the halo orbit stands still
+const mmL2 = () => !!(MV.md && MV.md.cfg.profile === 'l2-halo');
+function mmFrame(view) { return view === 'earth' && mmL2() ? 'serot' : view; }
+function mmCoords(view, tr) { return view === 'sun' ? tr.P : tr.frameCoords(mmFrame(view)); }
 function mmRmax(view) {
   if (MM.rmax[view]) return MM.rmax[view];
   const tr = shipTrail(); let r;
   if (view === 'sun') { r = 1.72 * AU; if (tr) for (let i = 0; i < tr.ts.length; i++) { const d = Math.hypot(tr.P[3 * i], tr.P[3 * i + 1]); if (d > r / 1.06) r = d * 1.06; } r = Math.min(r, 10.5 * AU); }
   else {
-    const cap = view === 'earth' ? 1.8e6 : 9e5; r = view === 'earth' ? 4.3e5 : 2.7e4;
+    const cap = view === 'earth' ? (mmL2() ? 2.4e6 : 1.8e6) : 9e5; r = view === 'earth' ? 4.3e5 : 2.7e4;
     if (tr) {
       const F = mmCoords(view, tr);
       // around Mars, frame the orbits once captured (or the flyby close to periapsis), not the long approach leg
@@ -70,7 +74,7 @@ function mmBurnPts(view) { // the middle of each engine burn of the primary craf
   if (MM.burnPts[view]) return MM.burnPts[view];
   const md = MV.md, out = [], ts = [], P = [];
   for (const x of md.powered) { if (x.obj !== 'ship') continue; const tm = (x.t0 + x.t1) / 2; const s = md.ship.stateAt(tm); if (!s || s.surface) continue; const H = planetHelio(s.ref, tm).r; ts.push(tm); P.push(H[0] + s.r[0], H[1] + s.r[1], H[2] + s.r[2]); out.push({ t: tm, x: 0, y: 0, name: x.name }); }
-  const F = view === 'sun' ? P : toFrameArr(view, ts, P);
+  const F = view === 'sun' ? P : toFrameArr(mmFrame(view), ts, P);
   out.forEach((o, i) => { o.x = F[3 * i]; o.y = F[3 * i + 1]; });
   MM.burnPts[view] = out; return out;
 }
@@ -99,7 +103,7 @@ function drawMinimap(t, force) {
   const center = view === 'sun' ? [0, 0, 0] : helio(view, t).r;
   const X = x => clamp(cx + x * k, -4000, 4000), Y = y => clamp(cy - y * k, -4000, 4000);
   MM.hits = [];
-  $('#mmTitle').textContent = MM_TITLES[view] + (MM.view === 'auto' ? '' : ' · fixed');
+  $('#mmTitle').textContent = (view === 'earth' && mmL2() ? 'Sun–Earth L2' : MM_TITLES[view]) + (MM.view === 'auto' ? '' : ' · fixed');
   // background
   const bg = g.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, Hh) * 0.7); bg.addColorStop(0, '#0b1220'); bg.addColorStop(1, '#05080e'); g.fillStyle = bg; g.fillRect(0, 0, W, Hh);
   g.font = '10px "IBM Plex Sans Condensed", sans-serif'; g.textBaseline = 'middle';
@@ -120,16 +124,19 @@ function drawMinimap(t, force) {
     for (const p of PLANET_LIST) { const a = planetElemsAt(p === 'earth' ? 'emb' : p, t).a; if (a > Rm * 1.05) continue; const P = helio(p, t).r; dot(X(P[0]), Y(P[1]), p === 'earth' || p === 'mars' ? 3.6 : 2.8, BODY_COLORS[p], BODIES[p].name, 'body:' + p); }
   } else if (view === 'earth') {
     if (!MM.moonOrb || Math.abs(t - MM.moonOrbT) > 0.5 * DAY) { const pts = []; for (let i = 0; i <= 160; i++) { const m = moonGeo(t - 13.7 * DAY + i / 160 * 27.4 * DAY).r; pts.push(m[0], m[1]); } MM.moonOrb = pts; MM.moonOrbT = t; }
-    g.strokeStyle = 'rgba(200,210,225,.35)'; g.beginPath(); MM.moonOrb.forEach((v, i) => { if (i % 2) return; const x = X(MM.moonOrb[i]), y = Y(MM.moonOrb[i + 1]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+    // (in the Sun–Earth frame the ecliptic points are turned with seRot; the Moon's orbit comes out the near-circle it is)
+    const Rm3 = mmL2() ? seRot(t) : null, rot = (x, y, z = 0) => Rm3 ? [Rm3[0] * x + Rm3[3] * y + Rm3[6] * z, Rm3[1] * x + Rm3[4] * y + Rm3[7] * z] : [x, y];
+    g.strokeStyle = 'rgba(200,210,225,.35)'; g.beginPath(); MM.moonOrb.forEach((v, i) => { if (i % 2) return; const q = rot(MM.moonOrb[i], MM.moonOrb[i + 1]); const x = X(q[0]), y = Y(q[1]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
     dot(cx, cy, Math.max(4.5, BODIES.earth.R * k), '#4f8dff', 'Earth', 'body:earth', '#9cc3ff');
-    const Mo = moonGeo(t).r; dot(X(Mo[0]), Y(Mo[1]), Math.max(3, BODIES.moon.R * k), '#cfd3d8', 'Moon', 'body:moon');
+    const Mo = moonGeo(t).r, Mq = rot(Mo[0], Mo[1], Mo[2]); dot(X(Mq[0]), Y(Mq[1]), Math.max(3, BODIES.moon.R * k), '#cfd3d8', 'Moon', 'body:moon');
+    if (Rm3) { const dL2 = vnorm(l2Point(t)); if (dL2 < Rm * 1.1) { g.strokeStyle = 'rgba(154,184,255,.3)'; g.setLineDash([3, 4]); g.beginPath(); g.moveTo(cx, cy); g.lineTo(X(dL2), cy); g.stroke(); g.setLineDash([]); dot(X(dL2), cy, 3, '#9ab8ff', 'L2'); } } // L2 lies on the frame's x-axis, out past the Earth
   } else {
     const pole = bodyPoleEcl('mars', t); const e1 = vperp(pole), e2 = vcross(pole, e1);
     for (const [nm, a] of [['Phobos', 9376], ['Deimos', 23463]]) { if (a > Rm * 1.1) continue; g.strokeStyle = 'rgba(200,170,150,.3)'; g.beginPath(); for (let i = 0; i <= 96; i++) { const th = i / 96 * TAU; const p = vadd(vscale(e1, a * Math.cos(th)), vscale(e2, a * Math.sin(th))); const x = X(p[0]), y = Y(p[1]); i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); g.fillStyle = 'rgba(200,170,150,.6)'; g.fillText(nm, cx + a * k * 0.72 + 3, cy + a * k * 0.72); }
     dot(cx, cy, Math.max(5, BODIES.mars.Rmean * k), '#ff8a5c', 'Mars', 'body:mars');
   }
   if (view !== 'sun') { // direction of the Sun
-    const sd = vunit(vscale(center, -1)); const ang = Math.atan2(sd[1], sd[0]); const rr = Math.min(W, Hh) / 2 - 12;
+    const sd = view === 'earth' && mmL2() ? [-1, 0, 0] : vunit(vscale(center, -1)); const ang = Math.atan2(sd[1], sd[0]); const rr = Math.min(W, Hh) / 2 - 12;
     const ax = cx + Math.cos(ang) * rr, ay = cy - Math.sin(ang) * rr; g.fillStyle = '#ffd27a'; g.beginPath(); g.arc(ax, ay, 3, 0, TAU); g.fill();
     g.strokeStyle = 'rgba(255,210,122,.45)'; g.beginPath(); g.moveTo(cx + Math.cos(ang) * (rr - 22), cy - Math.sin(ang) * (rr - 22)); g.lineTo(ax - Math.cos(ang) * 6, ay + Math.sin(ang) * 6); g.stroke();
     g.fillStyle = 'rgba(255,210,122,.8)'; g.fillText('Sun', ax + (Math.cos(ang) > 0 ? -22 : 6), ay + (Math.sin(ang) > 0 ? 10 : -10));
@@ -202,7 +209,8 @@ function drawMinimap(t, force) {
   if (c && c.P) {
     const dS = vnorm(c.P), dE = vnorm(vsub(c.P, helio('earth', t).r)), dMo = vnorm(vsub(c.P, helio('moon', t).r)), dMa = vnorm(vsub(c.P, helio('mars', t).r));
     const dom = dominantBody(c.P, t); let txt;
-    if (dom === 'sun') { const dest = nextDestination(md, t, 'sun'); txt = `Interplanetary space, ${regionText(dS)} · ${fDist(dS)} from the Sun · ${fDist(dE)} from Earth${dest && dest !== 'earth' ? ` · ${fDist(vnorm(vsub(c.P, helio(dest, t).r)))} to ${BODIES[dest].name}` : ''}`; }
+    if (mmL2() && dE > 2e5 && dE < 3e6 && dom !== 'moon') txt = `Sun–Earth L2 region · ${fDist(vnorm(vsub(vsub(c.P, helio('earth', t).r), l2Point(t))))} from L2 · ${fDist(dE)} from Earth`;
+    else if (dom === 'sun') { const dest = nextDestination(md, t, 'sun'); txt = `Interplanetary space, ${regionText(dS)} · ${fDist(dS)} from the Sun · ${fDist(dE)} from Earth${dest && dest !== 'earth' ? ` · ${fDist(vnorm(vsub(c.P, helio(dest, t).r)))} to ${BODIES[dest].name}` : ''}`; }
     else if (dom === 'moon') txt = `Inside the Moon’s sphere of influence · ${fDist(dMo - BODIES.moon.R)} above the Moon · ${fDist(dE)} from Earth`;
     else if (dom === 'earth') txt = `Earth–Moon space · ${fDist(dE)} from Earth’s centre · ${fDist(dMo)} from the Moon`;
     else txt = `Inside Mars’s sphere of influence · ${fDist(dMa - BODIES.mars.Rmean)} above Mars · ${fDist(dE)} from Earth`;

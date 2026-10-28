@@ -88,7 +88,8 @@ function buildInfoPanel() {
   const add = (k, v) => rows.push(h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
   add('Liftoff', fmtUTC(M.t0) + ' UTC');
   const a = M.summary.ascent; if (a) { add(L.sideMount ? 'Main engine cutoff' : 'Orbit insertion', `${fMET(a.tIns)} · ${fx(a.hp, 0)} × ${fx(a.ha, 0)} km`); add('Ascent max g · max q', `${a.maxG.toFixed(2)} g · ${fx(a.maxQ / 1000, 1)} kPa`); add('Launch azimuth', a.az.toFixed(1) + '°'); }
-  if (M.summary.design) add('Departure C3 · v∞', `${M.summary.design.C3.toFixed(2)} km²/s² · ${M.summary.design.vinfDep.toFixed(2)} km/s`);
+  if (M.summary.halo) { const hd = M.summary.design || {}; add('Transfer to L2', `the stable manifold of the halo · perigee ${fx(hd.perigeeKm, 0)} km · C3 ${hd.C3.toFixed(2)} km²/s²`); add('Halo orbit', `${fDist(M.summary.halo.az)} out of the ecliptic · period ${fx(M.summary.halo.periodDays, 0)} days`); add('Station-keeping', `${M.summary.halo.dvSK.length} burns · ${M.summary.halo.dvTotal.toFixed(1)} m/s in all`); }
+  else if (M.summary.design) add('Departure C3 · v∞', `${M.summary.design.C3.toFixed(2)} km²/s² · ${M.summary.design.vinfDep.toFixed(2)} km/s`);
   for (const e of md.events) if (['touchdown', 'landing'].includes(e.kind) && /touchdown|splashdown|landing/i.test(e.name)) add(e.name, fmtUTC(e.t) + ' UTC (' + fMET(e.t - M.t0) + ')');
   for (const e of md.events) if (e.kind === 'flyby') add(e.name, fmtUTC(e.t) + ' UTC');
   if (M.summary.landing && M.summary.landing.runway) add('Runway', M.summary.landing.runway);

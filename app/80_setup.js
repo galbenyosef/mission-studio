@@ -8,7 +8,7 @@ const MARS_SITES = [['Jezero Crater (Perseverance)', 18.4447, 77.4508, -2.57], [
 const RUNWAY_LIST = () => Object.entries(RUNWAYS).map(([k, r]) => [k, r.name]);
 const EARTH_SITES = [['Pacific, SW of Hawaii (Apollo)', 13.3, -169.15], ['Pacific off San Diego (Artemis)', 32.3, -117.8], ['Siziwang Banner, Inner Mongolia', 42.0, 111.5], ['Starbase, Texas', 25.99, -97.15], ['Utah Test and Training Range', 40.2, -113.5], ['Atlantic off Florida', 29.0, -79.0]];
 const isLEO = c => (c.profile || '').startsWith('leo');
-function scnGroups() { return [['Earth orbit', SCENARIOS.filter(s => isLEO(s.cfg))], ['Moon', SCENARIOS.filter(s => s.dest === 'moon')], ['Mars', SCENARIOS.filter(s => s.dest === 'mars' && s.cfg.profile !== 'multi-flyby')], ['Gravity assist', SCENARIOS.filter(s => s.cfg.profile === 'multi-flyby')]]; }
+function scnGroups() { return [['Earth orbit', SCENARIOS.filter(s => isLEO(s.cfg))], ['Moon', SCENARIOS.filter(s => s.dest === 'moon')], ['Mars', SCENARIOS.filter(s => s.dest === 'mars' && s.cfg.profile !== 'multi-flyby')], ['Gravity assist', SCENARIOS.filter(s => s.cfg.profile === 'multi-flyby')], ['Sun–Earth L2', SCENARIOS.filter(s => s.dest === 'l2')]]; }
 function buildScenarioList() {
   const nav = $('#scnList'); nav.innerHTML = '';
   for (const [g, list] of scnGroups()) {
@@ -239,6 +239,7 @@ function renderVehicleCard() {
   const lunar = (cfg.profile || '').startsWith('lunar');
   let dep = 3.13, depTxt = 'trans-lunar injection';
   if (isLEO(cfg)) { dep = 0; depTxt = ''; }
+  else if (cfg.profile === 'l2-halo') { dep = 3.2; depTxt = 'injection toward L2'; }
   else if (!lunar) { try { const tDep = isoToT(cfg.launch) + (cfg.refill ? cfg.refill.days * DAY : 0); const leg = cfg.legs[0]; const a = planetHelio('earth', tDep), b = planetHelio(leg.body, isoToT(leg.t)); const Lm = lambert(a.r, b.r, isoToT(leg.t) - tDep, BODIES.sun.mu, [0, 0, 1]); const vinf = vsub(Lm.v1, a.v); const rp = BODIES.earth.R + 200; dep = Math.sqrt(vdot(vinf, vinf) + 2 * BODIES.earth.mu / rp) - Math.sqrt(BODIES.earth.mu / rp); depTxt = `escape to ${BODIES[leg.body].name} (C3 ${vdot(vinf, vinf).toFixed(1)})`; } catch (e) { dep = 3.6; } }
   const leo = 9.3; const need = leo + (cfg.refill || (lunar && cfg.tliBy === 'sc') ? 0 : dep);
   const margin = dvCap - need;

@@ -133,6 +133,7 @@ function noseDirection(c, s, t, cfgL, act) {
     return att(nose, vcross(nose, va));
   }
   if (cfgL && cfgL.key === 'launch' && t < MV.md.M.t0 + 1) return att(up, vperp(up));
+  if (c.o.model === 'jwst' && cfgL && cfgL.key === 'sc') { const a = att(vunit(c.P), [0, 0, 1]); a.coast = true; return a; } // Webb flies sunshield to the Sun, the telescope (+Y) away from it
   const v = vnorm(vD) > 1e-6 ? vD : up; const a = att(vunit(v), upR); a.coast = true; return a;
 }
 // Where a model sits along its axis relative to the craft's position: feet on the ground when standing on a surface, the base
@@ -590,8 +591,9 @@ function toFrameArr(frame, ts, P) {
   for (let i = 0; i < n; i++) {
     const t = ts[i]; let x = P[3 * i], y = P[3 * i + 1], z = P[3 * i + 2];
     if (frame === 'sun') { F[3 * i] = x; F[3 * i + 1] = y; F[3 * i + 2] = z; continue; }
-    const ob = frame === 'emrot' ? 'earth' : frame; const B = planetHelio(ob, t).r; x -= B[0]; y -= B[1]; z -= B[2];
-    if (frame === 'emrot') { const Rm = emRot(t); F[3 * i] = Rm[0] * x + Rm[3] * y + Rm[6] * z; F[3 * i + 1] = Rm[1] * x + Rm[4] * y + Rm[7] * z; F[3 * i + 2] = Rm[2] * x + Rm[5] * y + Rm[8] * z; }
+    const B = planetHelio(frameBody(frame), t).r; x -= B[0]; y -= B[1]; z -= B[2];
+    const Rm = frameRot(frame, t);
+    if (Rm) { F[3 * i] = Rm[0] * x + Rm[3] * y + Rm[6] * z; F[3 * i + 1] = Rm[1] * x + Rm[4] * y + Rm[7] * z; F[3 * i + 2] = Rm[2] * x + Rm[5] * y + Rm[8] * z; }
     else { F[3 * i] = x; F[3 * i + 1] = y; F[3 * i + 2] = z; }
   }
   return F;
@@ -711,13 +713,17 @@ function emRot(t) {
   const m = moonGeo(t); const x = vunit(m.r), z = vunit(vcross(m.r, m.v)), y = vcross(z, x);
   return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
 }
-function frameOrigin(frame, t) { return frame === 'sun' ? [0, 0, 0] : helio(frame === 'emrot' ? 'earth' : frame, t).r; }
-function toFrame(frame, t, P) { const B = frameOrigin(frame, t); const d = vsub(P, B); if (frame !== 'emrot') return d; const Rm = emRot(t); return [Rm[0] * d[0] + Rm[3] * d[1] + Rm[6] * d[2], Rm[1] * d[0] + Rm[4] * d[1] + Rm[7] * d[2], Rm[2] * d[0] + Rm[5] * d[1] + Rm[8] * d[2]]; }
+// the rotating frames: both centred on the Earth, 'emrot' turning with the Moon, 'serot' (the Sun–Earth frame of src/halo.js) with the Sun
+function frameBody(frame) { return frame === 'emrot' || frame === 'serot' ? 'earth' : frame; }
+function frameRot(frame, t) { return frame === 'emrot' ? emRot(t) : frame === 'serot' ? seRot(t) : null; }
+function frameOrigin(frame, t) { return frame === 'sun' ? [0, 0, 0] : helio(frameBody(frame), t).r; }
+function toFrame(frame, t, P) { const B = frameOrigin(frame, t); const d = vsub(P, B); const Rm = frameRot(frame, t); if (!Rm) return d; return [Rm[0] * d[0] + Rm[3] * d[1] + Rm[6] * d[2], Rm[1] * d[0] + Rm[4] * d[1] + Rm[7] * d[2], Rm[2] * d[0] + Rm[5] * d[1] + Rm[8] * d[2]]; }
 function chooseAutoFrame(t, P) {
   const md = MV.md; if (!md) return 'earth';
   const dM = vnorm(vsub(P, helio('moon', t).r)), dE = vnorm(vsub(P, helio('earth', t).r)), dMa = vnorm(vsub(P, helio('mars', t).r));
   if (dM < BODIES.moon.soi * 1.2 && md.cfg.dest !== 'mars') return 'moon';
   if (dMa < BODIES.mars.soi * 1.5) return 'mars';
+  if (md.cfg.profile === 'l2-halo' && dE > 6e5) return 'serot'; // out toward L2 the Sun–Earth frame is the one the halo stands still in
   if (dE < BODIES.earth.soi * 1.3) return 'earth';
   return 'sun';
 }
@@ -734,7 +740,8 @@ function updateTrails(t, focusP, camDist) {
     const need = tr.frame !== frame || !tr.anchor || vnorm(vsub(f, tr.anchor)) > Math.max(2000, camDist * 2e3) || (TRAIL_U.uWinP.value < 1e11 && !(Math.abs(t - tr.builtT) < TRAIL_PAD * 0.75));
     if (need) tr.build(frame, f, t);
     const B = frameOrigin(frame, t); const O = R.O;
-    if (frame === 'emrot') { const Rm = emRot(t); const A = tr.anchor; const wa = [Rm[0] * A[0] + Rm[1] * A[1] + Rm[2] * A[2], Rm[3] * A[0] + Rm[4] * A[1] + Rm[5] * A[2], Rm[6] * A[0] + Rm[7] * A[1] + Rm[8] * A[2]];
+    const Rm = frameRot(frame, t);
+    if (Rm) { const A = tr.anchor; const wa = [Rm[0] * A[0] + Rm[1] * A[1] + Rm[2] * A[2], Rm[3] * A[0] + Rm[4] * A[1] + Rm[5] * A[2], Rm[6] * A[0] + Rm[7] * A[1] + Rm[8] * A[2]];
       tr.line.position.set(B[0] + wa[0] - O[0], B[1] + wa[1] - O[1], B[2] + wa[2] - O[2]);
       _m4.set(Rm[0], Rm[1], Rm[2], 0, Rm[3], Rm[4], Rm[5], 0, Rm[6], Rm[7], Rm[8], 0, 0, 0, 0, 1); tr.line.quaternion.setFromRotationMatrix(_m4); }
     else { tr.line.position.set(B[0] + tr.anchor[0] - O[0], B[1] + tr.anchor[1] - O[1], B[2] + tr.anchor[2] - O[2]); tr.line.quaternion.identity(); }
@@ -803,6 +810,18 @@ function updateVectors(c, t, tele) {
 // ---------------- labels ----------------
 function initBodyLabels() {
   MV.bodyLabels = BODY_LIST.map(name => { const el = h('div', { class: 'lbl body', style: `color:${BODY_COLORS[name]}` }, h('span', { class: 'dot' }), h('span', null, BODIES[name].name)); el.addEventListener('click', e => { e.stopPropagation(); setTarget('body:' + name); }); $('#labels').append(el); return { name, el }; });
+}
+// the Sun–Earth L2 point: a label with its dot, out past the Earth on the anti-Sun line, shown in the Sun–Earth frame
+// and, on a flight bound there, whenever the camera is far enough out to see the region
+const _l2v = new THREE.Vector3();
+function updateL2(t, camDist) {
+  if (!MV.l2) { const el = h('div', { class: 'lbl body', style: 'color:#9ab8ff' }, h('span', { class: 'dot' }), h('span', null, 'Sun–Earth L2')); $('#labels').append(el); MV.l2 = { el }; }
+  const md = MV.md, el = MV.l2.el;
+  const show = MV.layers.labels && md && (MV.frame === 'serot' || (md.cfg.profile === 'l2-halo' && camDist > 2e5));
+  if (!show) { el.style.transform = 'translate(-9999px,0)'; return; }
+  const E = helio('earth', t).r, L = l2Point(t), O = R.O; _l2v.set(E[0] + L[0] - O[0], E[1] + L[1] - O[1], E[2] + L[2] - O[2]);
+  if (occluded(_l2v)) { el.style.transform = 'translate(-9999px,0)'; return; }
+  placeLabel(el, _l2v, [], 3);
 }
 const _pv = new THREE.Vector3();
 function occluded(scenePos) { // is the point hidden behind a planet?

@@ -552,7 +552,7 @@ function updateOrbits(t, show, camDist, frameMode) {
     R.orbitGroup.position.set(-O[0], -O[1], -O[2]);
   }
   const mo = R.moonOrbit;
-  mo.line.visible = show && camDist > 3e4 && camDist < 5e7 && frameMode !== 'emrot';
+  mo.line.visible = show && camDist > 3e4 && camDist < 5e7 && frameMode !== 'emrot' && frameMode !== 'serot';
   if (mo.line.visible) {
     if (mo.tBuilt == null || Math.abs(t - mo.tBuilt) > 0.5 * DAY) {
       const arr = mo.line.geometry.attributes.position.array;
