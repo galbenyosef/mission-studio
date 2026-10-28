@@ -366,6 +366,7 @@ function buildSC(model, parts, flags = {}) {
       break;
     }
     case 'clipper': { inner = clipperModel(flags); mounts.push(...inner.userData.mounts); break; } // app/39_clipper.js
+    case 'jwst': { inner = jwstModel(flags); mounts.push(...inner.userData.mounts); break; } // app/3c_jwst.js
     case 'starshipPayload': {
       inner = starshipShip(flags.landed, flags.landed || flags.powered); mounts.push({ y: inner.userData.engineY, r: 3.6, tag: 'upper' }); break;
     }
@@ -411,6 +412,11 @@ function buildStowed(model, rBelow, fl = {}) {
     const ad = cyl(Math.min(rBelow, 1.6), 0.7, 0.8, mat('#bdbdbd', 'metal')); g.add(ad);
     const sc = buildSC(model, ['orbiter'], { stowed: true }); sc.position.y = 0.8; g.add(sc);
     g.userData = { len: 0.8 + sc.userData.len, mounts: sc.userData.mounts.map(m => ({ ...m, y: m.y + 0.8 })) }; return g;
+  }
+  if (model === 'jwst') { // folded on Ariane's adapter, 10.7 m tall inside the fairing (app/3c_jwst.js)
+    const ad = cyl(Math.min(rBelow, 1.3), 1.2, 1.0, mat('#bdbdbd', 'metal')); g.add(ad);
+    const sc = buildSC(model, ['orbiter'], { stowed: true }); sc.position.y = 1.0; g.add(sc);
+    g.userData = { len: 1.0 + sc.userData.len, mounts: [] }; return g;
   }
   if (model === 'mariner') { // on the Agena's adapter (app/35_atlas.js), the panels folded up
     const sc = buildSC(model, ['orbiter'], { stowed: true }); sc.position.y = 0.35; g.add(sc);
