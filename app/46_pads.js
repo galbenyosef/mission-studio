@@ -555,7 +555,7 @@ function padELA3(md) {
   padWaterTower(k, 80, 20, 90, 7, 10);
   const T = [[-90, 90], [90, 90], [90, -90], [-90, -90]].map(([e, n]) => padLightningTower(k, e, n, 70, 22, 2.8));
   k.box(M.greyL, -2800, 0, 0, 90, 90, 60); // the final-assembly building, down the rails
-  k.build(g); padGround(g, { sea: 60, shore: 1800, r: 3200, roads: [[0, -60, -2800, -60, 10], [60, 0, 2000, 0, 8]] });
+  k.build(g); padGround(g, { sea: 60, shore: 1800, r: 6500, roads: [[0, -60, -2800, -60, 10], [60, 0, 2000, 0, 8]] }); // (the disc reaches past the ground camera, 5.9 km out)
   for (let i = 0; i < 4; i++) padWire(g, T[i], T[(i + 1) % 4], 10);
   const glow = padGlow(), lit = new THREE.Mesh(new THREE.PlaneGeometry(16, 40), glow); lit.rotation.x = -Math.PI / 2; lit.position.y = 0.4; lit.position.z = 20; g.add(lit);
   return { group: g, stand, glow, deckY: top, foot: 6, trenchD: 40, block: [padBlock(0, mn, 3, 5), padBlock(-80, 20, 3.5, 5), ...T.map(p => padBlock(-p.x, p.z, 1.4, 5))] };
