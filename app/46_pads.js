@@ -539,6 +539,27 @@ function padWenchang(md) {
   const glow = padGlow(), lit = new THREE.Mesh(new THREE.PlaneGeometry(10, 40), glow); lit.rotation.x = -Math.PI / 2; lit.position.y = 0.4; g.add(lit);
   return { group: g, stand, glow, deckY: deck, foot: 7, trenchD: 40, block: [padBlock(fe, 0, 5, 5), ...T.map(p => padBlock(-p.x, p.z, 1.5, 5))] };
 }
+// ---------------- Ariane 5 on ELA-3, Kourou ----------------
+// The launch table: a 900-t steel platform rolled out on rails from the final-assembly building 2.8 km away, the 58-m
+// umbilical mast standing on it; the concrete launch zone under it with three flame trenches (one for each booster,
+// one for the core) running north; the water tower, the four lightning masts at the zone's corners; jungle round it.
+function padELA3(md) {
+  const M = padMats(), k = padKit(), g = new THREE.Group(), top = 8.0, stand = top - LAUNCHERS.ariane5ECA.stages[1].eng.len;
+  k.box(M.concrete, 0, 0, 0, 90, 0.3, 90); for (const e of [-4.3, 0, 4.3]) k.box(M.soot, e, 0.3, 30, 6, 0.05, 60); // the zone and its three trenches
+  k.box(M.greyL, 0, 1.2, 0, 25, top - 1.2, 21); for (const e of [-9, 9]) k.box(M.greyD, e, 0, 0, 4, 1.2, 18); // the table on its bogies
+  k.box(M.black, 0, top - 0.02, 0, 12, 0.04, 8); for (const e of [-4.3, 4.3]) k.cyl(M.steelD, e, top, 0, 2.0, 2.0, 0.6, 24); k.cyl(M.steelD, 0, top, 0, 2.9, 2.9, 0.6, 32); // the exhaust ducts' rims, the core's and the boosters' support rings
+  for (const e of [-10, 10]) k.box(M.steelD, e, 0, -1400, 0.5, 0.3, 2800); // the rails west to the BAF
+  const mn = 9.5; padLattice(k, M.white, 0, mn, 6, top, 58, { step: 5.8, core: 3, coreMat: M.greyL, floorEvery: 2 }); // the umbilical mast on the table's north edge
+  for (const y of [top + 24, top + 41, top + 50]) k.beam(M.greyL, PV(0, y, mn - 3), PV(0, y - 0.6, 3.2), 0.5); // the umbilical arms to the core and the upper stage
+  k.box(M.greyL, 0, top + 58, mn, 6.5, 1.5, 6.5); k.cyl(M.fibre, 0, top + 59.5, mn, 0.3, 0.1, 6, 8);
+  padWaterTower(k, 80, 20, 90, 7, 10);
+  const T = [[-90, 90], [90, 90], [90, -90], [-90, -90]].map(([e, n]) => padLightningTower(k, e, n, 70, 22, 2.8));
+  k.box(M.greyL, -2800, 0, 0, 90, 90, 60); // the final-assembly building, down the rails
+  k.build(g); padGround(g, { sea: 60, shore: 1800, r: 3200, roads: [[0, -60, -2800, -60, 10], [60, 0, 2000, 0, 8]] });
+  for (let i = 0; i < 4; i++) padWire(g, T[i], T[(i + 1) % 4], 10);
+  const glow = padGlow(), lit = new THREE.Mesh(new THREE.PlaneGeometry(16, 40), glow); lit.rotation.x = -Math.PI / 2; lit.position.y = 0.4; lit.position.z = 20; g.add(lit);
+  return { group: g, stand, glow, deckY: top, foot: 6, trenchD: 40, block: [padBlock(0, mn, 3, 5), padBlock(-80, 20, 3.5, 5), ...T.map(p => padBlock(-p.x, p.z, 1.4, 5))] };
+}
 // ---------------- Starship at Starbase, Texas ----------------
 // The orbital launch mount: a ring-shaped table on six legs, its top 20 m up, with twenty clamps for the booster; the water-
 // cooled steel plate under it; the launch and catch tower 28 m west (143 m, its chopsticks and the ship's quick-disconnect
@@ -588,6 +609,7 @@ function padModel(md) {
   if (site === 'CCSFS41') return padSLC41(md);
   if (site === 'CCSFS12') return padLC12(md);
   if (site === 'WENCHANG') return padWenchang(md);
+  if (site === 'KOUROU3') return padELA3(md);
   if (site === 'STARBASE') return padStarbase(md);
   return null;
 }

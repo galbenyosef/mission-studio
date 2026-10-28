@@ -120,7 +120,31 @@ function slantNose(r, len, lean, a, material) {
   for (let i = 0; i < P.count; i++) { const k = P.getY(i) / len; P.setX(i, P.getX(i) + Math.cos(a) * lean * k * k); P.setZ(i, P.getZ(i) + Math.sin(a) * lean * k * k); }
   geo.computeVertexNormals(); return new THREE.Mesh(geo, material);
 }
+// ---------------- Ariane 5 ECA ----------------
+// The core's foam-covered tank, off-white, with the livery's blue band and 'ariane 5' in lower case down its side; the
+// boosters white with the dark ring at the forward skirt and an ogive nose; the upper stage white over a dark skirt ring.
+function ariane5CoreMat() {
+  return lnMat('a5core', () => {
+    const t = skinTex(1024, 4096, (g, w, h) => {
+      g.fillStyle = '#ece8dc'; g.fillRect(0, 0, w, h);
+      lnSeed = 17; for (let i = 0; i < 3000; i++) { g.fillStyle = lnRnd() > 0.5 ? 'rgba(255,250,240,0.12)' : 'rgba(150,130,100,0.08)'; g.fillRect(lnRnd() * w, lnRnd() * h, 2 + lnRnd() * 4, 2 + lnRnd() * 4); } // the foam
+      g.fillStyle = '#1f4e9c'; g.fillRect(0, 0.12 * h, w, 0.04 * h); // the blue band
+      skinText(g, w, h, 'ariane 5', 0.5, 0.2, 0.46, 0.09, '#1f4e9c', 'bold');
+      g.fillStyle = 'rgba(0,0,0,0.07)'; for (const v of [0.3, 0.55, 0.8]) g.fillRect(0, v * h, w, 3); // the tank's ring seams
+    });
+    return new THREE.MeshStandardMaterial({ map: t, roughness: 0.7, metalness: 0.0 });
+  });
+}
 const STAGE_LOOK_LN = {
+  ariane5EPC(g) { const tank = g.children[0]; if (tank && tank.isMesh) tank.material = ariane5CoreMat(); },
+  ariane5EAP(g, st) {
+    const body = g.children[0]; if (body && body.isMesh) body.material = mat('#eeede8', 'paint');
+    const r = st.geom[0][1], L = st.geom[0][0];
+    const cone = g.children[1]; if (cone && cone.isMesh) { cone.visible = false; const nose = ogive(r, st.geom[1][0] + 0.4, mat('#eeede8', 'paint'), 0.1); nose.position.y = L; g.add(nose); }
+    const ring = cyl(r + 0.01, r + 0.01, 0.8, mat('#2a2b2e', 'dark'), 40, true); ring.position.y = L - 0.8; g.add(ring); // the forward skirt's dark ring
+    const skirt = cyl(r + 0.01, r + 0.01, 2.2, mat('#8d9094', 'metal'), 40, true); g.add(skirt); // the aft skirt round the nozzle
+  },
+  ariane5ESC(g, st) { const r = st.geom[0][1]; const ring = cyl(r + 0.01, r + 0.01, 0.6, mat('#2a2b2e', 'dark'), 40, true); g.add(ring); },
   falconSide(g, st, opts) { falconCore(g, st, opts, false); },
   falconCentre(g, st, opts) { falconCore(g, st, opts, true); },
   slsCore(g, st) {
