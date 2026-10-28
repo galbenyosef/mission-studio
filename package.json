@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node build.js",
     "serve": "python3 -m http.server -d dist 8000",
-    "test": "node test/t_core.js && node test/t_lunar.js && node test/t_mission.js"
+    "test": "node test/t_core.js && node test/t_lunar.js && node test/t_mission.js && node test/t_jwst_data.js"
   },
   "engines": { "node": ">=18" }
 }

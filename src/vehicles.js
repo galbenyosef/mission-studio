@@ -25,6 +25,7 @@ const LAUNCH_SITES = {
   STARBASE: { name: 'Starbase, Texas', lat: 25.9971, lon: -97.1553, azRange: [80, 115] },
   TANEGASHIMA: { name: 'Tanegashima, Japan', lat: 30.4000, lon: 130.9750, azRange: [90, 160] },
   BAIKONUR: { name: 'Baikonur 81/24, Kazakhstan', lat: 46.0700, lon: 63.6500, azRange: [35, 65] },
+  KOUROU3: { name: 'Guiana Space Centre ELA-3, Kourou', lat: 5.2392, lon: -52.7685, azRange: [-10.5, 93.5] },
 };
 
 // Shuttle landing runways: threshold of the landing end (lat, lon), true heading of the landing direction (°),
@@ -165,6 +166,25 @@ const LAUNCHERS = {
     jettison: [{ name: 'Payload fairing', mass: 2400, alt: 115, part: 'fairing' }],
     payloadFairing: { len: 10.75, r: 2.5, color: C.white }, ascent: { hp: 170, ha: 36500, vert: 10, kickGuess: 2.5 },
   },
+  ariane5ECA: {
+    // Ariane 5 ECA as it launched JWST (VA256): two solid boosters (EAP) beside the cryogenic core (EPC, one Vulcain 2) and
+    // the cryogenic upper stage (ESC-A, one HM7B) that injects the payload directly toward L2. Figures from Arianespace's
+    // user manual; the booster thrust curve is approximate.
+    name: 'Ariane 5 ECA', org: 'Arianespace / ESA (Europe)', years: '2002–2023', height: 53.0, diameter: 5.4,
+    blurb: 'Europe’s heavy launcher: two solid boosters and a hydrogen core lit together, a cryogenic upper stage for the injection. Launched the James Webb Space Telescope on its final year of service.',
+    stages: [
+      { id: 'EAP', name: '2 × solid boosters (EAP, P241)', prop: 'solid', engine: 'P241', n: 2, thrustSL: 2 * 4800e3, thrustVac: 2 * 5250e3, ispSL: 262, ispVac: 275, dry: 2 * 33000, propMass: 2 * 237000, parallel: true, // (the mean over the 130-s burn; the curve puts the 7 000-kN peak at 20 s)
+        curve: [[0, 1.0], [20, 1.08], [60, 0.95], [100, 0.9], [120, 0.55], [130, 0.1], [135, 0.02]], booster: { count: 2, offset: 4.3 },
+        geom: [[27.0, 1.525, 1.525, C.white], [4.2, 1.525, 0.35, C.white]], eng: { n: 1, len: 3.0, r: 1.4, layout: 'single' } },
+      { id: 'EPC', name: 'Cryogenic core stage (EPC, Vulcain 2)', prop: 'hydrolox', engine: 'Vulcain 2', n: 1, thrustSL: 960e3, thrustVac: 1390e3, ispSL: 318, ispVac: 432, dry: 14700, propMass: 173000, maxG: 4.5, minThr: 1,
+        geom: [[30.5, 2.7, 2.7, C.cream]], eng: { n: 1, len: 3.4, r: 1.0, layout: 'single' } },
+      { id: 'ESC-A', name: 'Cryogenic upper stage (ESC-A, HM7B)', prop: 'hydrolox', engine: 'HM7B', n: 1, thrustSL: 0, thrustVac: 67e3, ispSL: 300, ispVac: 446, dry: 4540, propMass: 14900, restart: false,
+        geom: [[4.7, 2.7, 2.7, C.white]], eng: { n: 1, len: 2.0, r: 0.5, layout: 'single' } },
+    ],
+    jettison: [{ name: 'Payload fairing', mass: 2675, alt: 110, part: 'fairing' }],
+    payloadFairing: { len: 17.0, r: 2.7, color: C.white }, ascent: { hp: 170, ha: 170, vert: 6, kickGuess: 2.0 },
+    roll: { padAz: 0, t: [10, 20] },
+  },
 };
 
 // Space Shuttle: the stack is the External Tank with two solid boosters on its sides and the orbiter on its belly.
@@ -200,6 +220,7 @@ LAUNCHERS.shuttle = {
 //   Atlas V: RD-180 ignition at T−2.7 s, solids at T−0 (ULA timelines)
 //   Falcon Heavy: 27 Merlins at about T−2 s (Spaceflight Now) · Starship: about T−3 s (press reports)
 //   Long March 5: core and boosters ignite before liftoff (time approximate) · Atlas LV-3: approximate
+//   Ariane 5: the Vulcain 2 at H0, the boosters at H0 + 7.05 s after its health check, liftoff at H0 + 7.3 s (Arianespace)
 //   LVM3: the S200 solids light at T−0 and the L110 core is air-started, so nothing burns on the pad beforehand
 const PAD_IGNITION = {
   saturnV: { t: 8.9, ramp: 4.0, stagger: 0.3, seq: 'centre engine first, then opposing pairs 0.3 s apart' },
@@ -210,6 +231,7 @@ const PAD_IGNITION = {
   lm5: { t: 3.0, ramp: 1.6, approx: true },
   starship: { t: 3.0, ramp: 1.6, approx: true },
   lvm3: { t: 0, ramp: 0 },
+  ariane5ECA: { t: 7.3, ramp: 3.0, seq: 'the Vulcain 2 lights at H0 and is checked for seven seconds; the boosters light and the vehicle leaves at H0 + 7.3 s' },
   shuttle: { t: 6.6, ramp: 3.0, stagger: 0.12, seq: 'main engines 3, 2 and 1 start 0.12 s apart' }, // NSTS News Reference Manual
 };
 for (const k in PAD_IGNITION) if (LAUNCHERS[k]) LAUNCHERS[k].ign = PAD_IGNITION[k];
@@ -298,6 +320,11 @@ const SPACECRAFT = {
     name: 'Europa Clipper', crewMax: 0,
     modules: { SC: { name: 'Europa Clipper spacecraft', dry: 3315, prop: 2750, engine: { name: '16 × 27.5 N + main thrusters', thrust: 16 * 27.5, isp: 225, prop: 'mmh' } } },
     orbiter: ['SC'], lander: null, prop: { orbiter: 'SC' }, model: 'clipper',
+  },
+  jwst: {
+    name: 'James Webb Space Telescope', crewMax: 0,
+    modules: { OBS: { name: 'Observatory', dry: 5861, prop: 300, engine: { name: 'SCAT (4 × 22 N)', thrust: 88, isp: 295, prop: 'mmh' } } }, // hydrazine for attitude, MMH/NTO for the corrections
+    orbiter: ['OBS'], lander: null, prop: { orbiter: 'OBS' }, model: 'jwst',
   },
   starshipCrew: {
     name: 'Starship (crewed Mars configuration)', crewMax: 12,

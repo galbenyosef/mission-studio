@@ -25,3 +25,4 @@ test('falconHeavy', 6065, 'KSC39A', '2024-10-14T16:06:00Z', 100);
 test('starship', 100000, 'STARBASE', '2033-01-01T00:00:00Z', 95);
 // Space Shuttle (STS-135): orbiter + payload as the 'payload'; direct insertion, MECO into a 58 × 225 km orbit
 test('shuttle', 91500 + 12900 + 11000, 'KSC39A', '2011-07-08T15:29:04Z', 41.9);
+test('ariane5ECA', 6161, 'KOUROU3', '2021-12-25T12:20:00Z', 90);
